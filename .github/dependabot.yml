@@ -1,0 +1,11 @@
+# Actions are pinned to full commit SHAs, which is immutable and therefore also
+# invisible to every other update path: nothing tells this repository that a
+# pinned SHA has a published successor. This is that notification. Python pins
+# are deliberately excluded -- requirements/locks are regenerated from the
+# verified images (see requirements/README.md), not bumped by a bot.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly

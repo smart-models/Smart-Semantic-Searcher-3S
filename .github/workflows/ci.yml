@@ -51,7 +51,7 @@ jobs:
       - name: PSScriptAnalyzer
         shell: pwsh
         run: |
-          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -AcceptLicense
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force -AcceptLicense
           $findings = Invoke-ScriptAnalyzer -Path stack.ps1 -Severity Warning, Error
           if ($findings) {
             $findings | Format-Table -AutoSize | Out-String -Width 200 | Write-Host

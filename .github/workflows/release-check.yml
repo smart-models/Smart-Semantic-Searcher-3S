@@ -75,11 +75,21 @@ jobs:
           python -m unittest discover -s tests -p "test_*.py" \
             2>&1 | tee ../release-evidence/embedder-tests.log
 
+      # The coverage gate collects the Playwright inventory with `--list`,
+      # which needs the package but no browser -- the same reason ci.yml
+      # installs before the unit tests rather than after.
+      - name: Install pinned browser test dependency
+        working-directory: middleware-qdrant-manager/frontend
+        run: npm install --ignore-scripts
+
+      # All six *.test.mjs, matching ci.yml and AGENTS.md. Running one of them
+      # under an evidence file named for the whole suite overstated what the
+      # release manifest was signing.
       - name: Run frontend unit suite
         shell: bash
         run: |
           set -o pipefail
-          node --test middleware-qdrant-manager/frontend/tests/query-models.test.mjs \
+          node --test middleware-qdrant-manager/frontend/tests/*.test.mjs \
             2>&1 | tee release-evidence/frontend-tests.log
 
       - name: Validate Dockerfile and Compose security
