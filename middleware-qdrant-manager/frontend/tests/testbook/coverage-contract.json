@@ -1,0 +1,53 @@
+{
+  "$comment": "Disposition registry for test-book-e2e.md cases that browser collection alone cannot express. It never maps a case to a test: mappings come from collected Playwright titles/annotations and executed node --test titles. `owners` name the suite whose own contract test must hold a marked test (middleware: @pytest.mark.book; embedder: @book_case). `exclusions` need a written reason of at least 40 characters and fail the gate as soon as the case gains evidence. `ratchet.maxUnassigned` may only be lowered.",
+  "ratchet": { "maxUnassigned": 0 },
+  "owners": {
+    "middleware": [
+      "TB-API-001",
+      "TB-API-002",
+      "TB-EXP-003",
+      "TB-EXP-004",
+      "TB-EXP-008",
+      "TB-EXP-009",
+      "TB-EXP-010",
+      "TB-ING-005",
+      "TB-ING-006",
+      "TB-LIFE-002",
+      "TB-LIFE-004",
+      "TB-REI-006",
+      "TB-REI-007",
+      "book:13.6/NF-X6b"
+    ],
+    "embedder": [
+      "TB-LIFE-001",
+      "TB-LIFE-003",
+      "TB-PER-001"
+    ]
+  },
+  "exclusions": [
+    {
+      "id": "book:12/Z1",
+      "reason": "Series Z is the book's manual BASIC<->ADVANCED operator roundtrip (§12: 'an operator workflow, not an automated roundtrip'). Z1 is the BASIC-side create/index/seed/query step whose automated equivalents are the live Collections/Ingest/Query suites and TB-PRO-001 (external config). It is recorded per operator run in the §16.7 addendum, never mapped to a default-run test."
+    },
+    {
+      "id": "book:12/Z3",
+      "reason": "Series Z operator step performed after a real profile switch to ADVANCED (create/seed/query while the BASIC-born collection stays locked). Requires a service restart with SMART_EMBEDDER_PROFILE=advanced; observed only through the external configuration (TB-PRO-001/z4-switch) and recorded per operator run."
+    },
+    {
+      "id": "book:12/Z5",
+      "reason": "Series Z operator step: a second real profile switch back to BASIC and re-test of both collections. Needs two service restarts in one run; the runner cannot create that state. Covered procedurally by TB-PRO-001 under the external configuration and recorded per operator run."
+    },
+    {
+      "id": "book:12/Z7",
+      "reason": "Series Z cleanup step (delete e2e_a_new*, e2e_a_victim, e2e_a_empty; keep protected fixtures). It is an operator housekeeping action on the manual roundtrip; automated runs clean their own owned targets through the campaign manifest (TB-HAR-001/002) instead."
+    },
+    {
+      "id": "TB-PRO-004",
+      "reason": "Four-cell hardware/profile matrix (CPU/GPU x BASIC/ADVANCED). Each cell is a separate stack start on specific hardware; cells without the hardware are BLOCKED with reason per the book, never mocked. Recorded as operator evidence in §16.7; no single-run test can claim it."
+    },
+    {
+      "id": "TB-PER-002",
+      "reason": "API-live performance benchmark (input length x concurrency cells, warmups, measured batches, RAM/VRAM sampling on fixed hardware) that the book itself schedules 'after admission policy exists'. It is an operator benchmark campaign, not a pass/fail suite the runner can execute; results are recorded per hardware cell in §16.7. TB-PER-001 (embedder unittest) owns the admission-budget contract."
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+ "chunks": [
+  {
+   "id": 1,
+   "text": "alpha",
+   "m_str": "a",
+   "overflow_details": {
+    "x": 1
+   },
+   "overlap_sentences_count": 2,
+   "split_metadata": {
+    "y": 2
+   }
+  },
+  {
+   "id": 2,
+   "text": "beta",
+   "m_str": "b",
+   "overflow_details": null,
+   "overlap_sentences_count": 0,
+   "split_metadata": {}
+  }
+ ]
+}

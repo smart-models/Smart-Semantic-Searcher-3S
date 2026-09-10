@@ -1,0 +1,13 @@
+# Human-maintained overrides for vulnerable transitive dependencies.
+#
+# This file is an input to scripts/security_constraints.py. Docker builds must
+# continue to consume only the generated target lock: passing this file as a
+# second ``-c`` beside a stale lock would create conflicting constraints.
+# Keep every override exact, explain why it exists, then rebuild and freeze the
+# affected image as documented in scripts/README.md.
+
+# CVE-2026-66007; required transitively by FlagEmbedding 1.4.0.
+datasets==5.0.1
+
+# CVE-2026-71554; required through qdrant-client -> httpx[http2].
+h2==4.4.1

@@ -1,0 +1,488 @@
+name: smart-semantic-searcher
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-smart-environment: &smart-environment
+  HF_HOME: /app/model_cache
+  HF_HUB_CACHE: /app/model_cache/hub
+  TORCHINDUCTOR_CACHE_DIR: /app/runtime_cache/inductor
+  TRITON_CACHE_DIR: /app/runtime_cache/triton
+  EMBEDDER_PROFILE: ${SMART_EMBEDDER_PROFILE:-basic}
+  SMART_EMBEDDER_AUTOTUNE: ${SMART_EMBEDDER_AUTOTUNE:-quick}
+  SMART_EMBEDDER_TUNING_OBJECTIVE: ${SMART_EMBEDDER_TUNING_OBJECTIVE:-balanced}
+  SMART_EMBEDDER_AUTOTUNE_FORCE: ${SMART_EMBEDDER_AUTOTUNE_FORCE:-false}
+  SMART_EMBEDDER_AUTOTUNE_PROFILE: ${SMART_EMBEDDER_AUTOTUNE_PROFILE:-/app/runtime_state/autotune/hardware-profile.json}
+  SMART_EMBEDDER_ADVANCED_AUTOTUNE_PROFILE: ${SMART_EMBEDDER_ADVANCED_AUTOTUNE_PROFILE:-/app/runtime_state/autotune/advanced-hardware-profile.json}
+  SMART_EMBEDDER_AUTOTUNE_MAX_SECONDS: ${SMART_EMBEDDER_AUTOTUNE_MAX_SECONDS:-}
+  SMART_EMBEDDER_ADVANCED_AUTOTUNE_MAX_SECONDS: ${SMART_EMBEDDER_ADVANCED_AUTOTUNE_MAX_SECONDS:-}
+  BGE_EMBED_RUNTIME: ${BGE_EMBED_RUNTIME:-auto}
+  BGE_ONNX_EXECUTION_MODE: ${BGE_ONNX_EXECUTION_MODE:-auto}
+  BGE_ONNX_SPIN_POLICY: ${BGE_ONNX_SPIN_POLICY:-auto}
+  API_TOKENS: ${SMART_EMBEDDER_API_TOKENS:-}
+  SERVICE_TOKEN: ${SMART_EMBEDDER_CLIENT_TOKEN:-}
+  SMART_EMBEDDER_ALLOW_UNAUTHENTICATED_LOCAL: ${SMART_EMBEDDER_ALLOW_UNAUTHENTICATED_LOCAL:-false}
+  EXPOSE_SMART_EMBEDDER_SWAGGER: ${EXPOSE_SMART_EMBEDDER_SWAGGER:-false}
+  REQUEST_TIMEOUT: ${SMART_EMBEDDER_REQUEST_TIMEOUT:-90}
+  EMBED_GPU_TIMEOUT: ${SMART_EMBEDDER_EMBED_GPU_TIMEOUT:-60}
+  MAX_QUEUE_SIZE: ${SMART_EMBEDDER_MAX_QUEUE_SIZE:-200}
+  MAX_INFLIGHT_TOKENS: ${SMART_EMBEDDER_MAX_INFLIGHT_TOKENS:-65536}
+  MAX_INFLIGHT_OUTPUT_BYTES: ${SMART_EMBEDDER_MAX_INFLIGHT_OUTPUT_BYTES:-268435456}
+  RERANK_MAX_QUEUE: ${SMART_EMBEDDER_RERANK_MAX_QUEUE:-32}
+  RERANK_GPU_TIMEOUT: ${SMART_EMBEDDER_RERANK_GPU_TIMEOUT:-60}
+  SMART_EMBEDDER_VRAM_RESERVE_MB: ${SMART_EMBEDDER_VRAM_RESERVE_MB:-512}
+  SMART_EMBEDDER_OOM_FALLBACK: ${SMART_EMBEDDER_OOM_FALLBACK:-true}
+  RATE_LIMIT_REQUESTS_PER_MINUTE: ${SMART_EMBEDDER_RATE_LIMIT_REQUESTS_PER_MINUTE:-3600}
+  RATE_LIMIT_BURST_SIZE: ${SMART_EMBEDDER_RATE_LIMIT_BURST_SIZE:-120}
+  EMBEDDER_NUM_THREADS:
+  EMBEDDER_INTEROP_THREADS: ${EMBEDDER_INTEROP_THREADS:-}
+  MAX_SENTENCES_PER_REQUEST: ${SMART_EMBEDDER_MAX_SENTENCES_PER_REQUEST:-2048}
+  MAX_PASSAGES_PER_REQUEST: ${SMART_EMBEDDER_MAX_PASSAGES_PER_REQUEST:-2048}
+  MAX_ITEM_BYTES: ${SMART_EMBEDDER_MAX_ITEM_BYTES:-1000000}
+  # The bytes cap applied while the body streams in, and therefore the limit a
+  # caller meets before the three above, which are checked only after the body
+  # is fully deserialized.
+  REQUEST_BODY_MAX_BYTES: ${SMART_EMBEDDER_REQUEST_BODY_MAX_BYTES:-67108864}
+  BGE_EMBED_MAX_LENGTH: ${BGE_EMBED_MAX_LENGTH:-8192}
+  BGE_EMBED_BATCH_SIZE:
+  BGE_EMBED_INFERENCE_CONCURRENCY:
+  QWEN_EMBED_MAX_LENGTH: ${QWEN_EMBED_MAX_LENGTH:-32768}
+  EMBED_LENGTH_AWARE_BATCHING: ${SMART_EMBEDDER_LENGTH_AWARE_BATCHING:-true}
+  BGE_RERANK_MAX_LENGTH: ${BGE_RERANK_MAX_LENGTH:-8192}
+  QWEN_EMBED_BATCH_SIZE:
+  QWEN_EMBED_MAX_BATCH_TOKENS:
+  QWEN_EMBED_PRECISION: ${QWEN_EMBED_PRECISION:-}
+  QWEN_EMBED_RUNTIME: ${QWEN_EMBED_RUNTIME:-}
+  SMART_EMBEDDER_ADVANCED_ONNX_CACHE: ${SMART_EMBEDDER_ADVANCED_ONNX_CACHE:-/app/runtime_state/autotune/onnx}
+  QWEN_EMBED_ATTENTION: ${QWEN_EMBED_ATTENTION:-}
+  QWEN_EMBED_TORCH_COMPILE: ${QWEN_EMBED_TORCH_COMPILE:-}
+  QWEN_EMBED_TORCH_COMPILE_MODE: ${QWEN_EMBED_TORCH_COMPILE_MODE:-}
+  QWEN_EMBED_PINNED_MEMORY: ${QWEN_EMBED_PINNED_MEMORY:-}
+  QWEN_EMBED_PREFETCH_BATCHES: ${QWEN_EMBED_PREFETCH_BATCHES:-}
+  QWEN_EMBED_BATCH_POLICY: ${QWEN_EMBED_BATCH_POLICY:-}
+  QWEN_EMBED_MAX_BATCH_TOKENS_POLICY: ${QWEN_EMBED_MAX_BATCH_TOKENS_POLICY:-}
+  MILCO_BATCH_SIZE:
+  MILCO_MAX_LENGTH: ${MILCO_MAX_LENGTH:-8192}
+  MILCO_MAX_BATCH_TOKENS: ${MILCO_MAX_BATCH_TOKENS:-8192}
+  MILCO_PROJECTION_CHUNK_TOKENS: ${MILCO_PROJECTION_CHUNK_TOKENS:-128}
+  MILCO_SOURCE_VIEW: ${MILCO_SOURCE_VIEW:-true}
+  MILCO_PRECISION: ${MILCO_PRECISION:-}
+  MILCO_RUNTIME: ${MILCO_RUNTIME:-}
+  MILCO_COMPUTE_PRECISION: ${MILCO_COMPUTE_PRECISION:-}
+  MILCO_TORCH_COMPILE: ${MILCO_TORCH_COMPILE:-}
+  MILCO_TORCH_COMPILE_MODE: ${MILCO_TORCH_COMPILE_MODE:-}
+  MILCO_PINNED_MEMORY: ${MILCO_PINNED_MEMORY:-}
+  MILCO_PREFETCH_BATCHES: ${MILCO_PREFETCH_BATCHES:-}
+  MILCO_BATCH_POLICY: ${MILCO_BATCH_POLICY:-}
+  MILCO_MAX_BATCH_TOKENS_POLICY: ${MILCO_MAX_BATCH_TOKENS_POLICY:-}
+  BGE_RERANK_BATCH_SIZE:
+  QWEN_RERANK_PRECISION: ${QWEN_RERANK_PRECISION:-}
+  QWEN_RERANK_RUNTIME: ${QWEN_RERANK_RUNTIME:-}
+  QWEN_RERANK_ATTENTION: ${QWEN_RERANK_ATTENTION:-}
+  QWEN_RERANK_TORCH_COMPILE: ${QWEN_RERANK_TORCH_COMPILE:-}
+  QWEN_RERANK_TORCH_COMPILE_MODE: ${QWEN_RERANK_TORCH_COMPILE_MODE:-}
+  QWEN_RERANK_BATCH_POLICY: ${QWEN_RERANK_BATCH_POLICY:-}
+  QWEN_RERANK_MAX_BATCH_TOKENS_POLICY: ${QWEN_RERANK_MAX_BATCH_TOKENS_POLICY:-}
+  ADVANCED_SCHEDULE_MODE: ${ADVANCED_SCHEDULE_MODE:-}
+  ADVANCED_INFERENCE_LANES: ${ADVANCED_INFERENCE_LANES:-}
+  ADVANCED_QUEUE_BATCH: ${ADVANCED_QUEUE_BATCH:-}
+  ADVANCED_FLUSH_TIMEOUT_MS: ${ADVANCED_FLUSH_TIMEOUT_MS:-}
+  ADVANCED_CPU_SPIN_POLICY: ${ADVANCED_CPU_SPIN_POLICY:-}
+  ADVANCED_CPU_AFFINITY: ${ADVANCED_CPU_AFFINITY:-}
+  ADVANCED_CPU_ALLOW_OVERSUBSCRIPTION: ${ADVANCED_CPU_ALLOW_OVERSUBSCRIPTION:-}
+  MILCO_TOP_K: ${MILCO_TOP_K:-0}
+  BGE_TORCH_COMPILE: ${BGE_TORCH_COMPILE:-auto}
+  BGE_TORCH_COMPILE_MODE: ${BGE_TORCH_COMPILE_MODE:-default}
+
+x-smart-service: &smart-service
+  init: true
+  user: "1000:1000"
+  ports:
+    - "127.0.0.1:${SMART_EMBEDDER_PORT:-8010}:8000"
+  shm_size: "2gb"
+  networks:
+    private:
+      aliases:
+        - smart-embedder
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp:size=128m,mode=1777
+    - /home/appuser/.cache:size=128m,mode=0700,uid=1000,gid=1000
+    # Triton/Inductor load generated native code from this non-persistent cache.
+    - /app/runtime_cache:size=${SMART_EMBEDDER_RUNTIME_CACHE_SIZE:-2g},mode=0700,uid=1000,gid=1000,exec
+  mem_limit: 16g
+  cpus: 4.0
+  pids_limit: 200
+  restart: unless-stopped
+  stop_grace_period: 35s
+  healthcheck:
+    test:
+      - CMD
+      - python3
+      - -c
+      - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=5).status==200 else 1)"
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 300s
+  logging: *default-logging
+
+x-smart-init: &smart-init
+  init: true
+  # Root is used only by model_bootstrap.py to chown fresh volume roots. The
+  # process drops permanently to 1000:1000 before model/network imports.
+  user: "0:0"
+  shm_size: "2gb"
+  networks:
+    - private
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  cap_add:
+    - CHOWN
+    - SETGID
+    - SETUID
+  read_only: true
+  tmpfs:
+    - /tmp:size=128m,mode=1777
+    - /home/appuser/.cache:size=128m,mode=0700,uid=1000,gid=1000
+    # Triton/Inductor load generated native code from this non-persistent cache.
+    - /app/runtime_cache:size=${SMART_EMBEDDER_RUNTIME_CACHE_SIZE:-2g},mode=0700,uid=1000,gid=1000,exec
+  mem_limit: 16g
+  cpus: 4.0
+  pids_limit: 200
+  restart: "no"
+  stop_grace_period: 35s
+  logging: *default-logging
+
+services:
+  middleware:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: middleware
+    image: hybrid-manager/middleware:local
+    pull_policy: never
+    container_name: qdrant-middleware
+    init: true
+    user: "1000:1000"
+    ports:
+      - "127.0.0.1:${MIDDLEWARE_PORT:-6336}:6336"
+    volumes:
+      - ./middleware-qdrant-manager/data:/app/middleware-qdrant-manager/data:ro
+      - ./middleware-qdrant-manager/exports:/app/middleware-qdrant-manager/exports
+    environment:
+      QDRANT_API_HOST: "0.0.0.0"
+      MIDDLEWARE_PORT: "6336"
+      MIDDLEWARE_API_TOKENS: ${MIDDLEWARE_API_TOKENS:-}
+      SERVICE_TOKEN: ${MIDDLEWARE_CLIENT_TOKEN:-}
+      MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL: ${MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL:-false}
+      EXPOSE_FRONTEND: ${EXPOSE_FRONTEND:-true}
+      EXPOSE_MIDDLEWARE_SWAGGER: ${EXPOSE_MIDDLEWARE_SWAGGER:-true}
+      QDRANT_URL: ${QDRANT_URL:-http://host.docker.internal:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-}
+      QDRANT_TIMEOUT: ${QDRANT_TIMEOUT:-30}
+      QDRANT_ON_DISK_PAYLOAD: ${QDRANT_ON_DISK_PAYLOAD:-true}
+      QDRANT_SPARSE_FLOAT16: ${QDRANT_SPARSE_FLOAT16:-true}
+      MIDDLEWARE_REQUEST_TIMEOUT: ${MIDDLEWARE_REQUEST_TIMEOUT:-30}
+      REQUEST_BODY_MAX_BYTES: ${REQUEST_BODY_MAX_BYTES:-26214400}
+      MIDDLEWARE_RATE_LIMIT_REQUESTS_PER_MINUTE: ${MIDDLEWARE_RATE_LIMIT_REQUESTS_PER_MINUTE:-300}
+      MIDDLEWARE_RATE_LIMIT_BURST_SIZE: ${MIDDLEWARE_RATE_LIMIT_BURST_SIZE:-180}
+      SMART_EMBEDDER_URL: http://smart-embedder:8000
+      SMART_EMBEDDER_CLIENT_TOKEN: ${SMART_EMBEDDER_CLIENT_TOKEN:-}
+      SMART_EMBEDDER_TIMEOUT: ${SMART_EMBEDDER_TIMEOUT:-60}
+      SMART_EMBEDDER_MAX_BATCH_SIZE: ${SMART_EMBEDDER_MAX_BATCH_SIZE:-32}
+      SMART_EMBEDDER_RERANK_BATCH_SIZE: ${SMART_EMBEDDER_RERANK_BATCH_SIZE:-32}
+      SMART_EMBEDDER_EMBED_CONCURRENCY: ${SMART_EMBEDDER_EMBED_CONCURRENCY:-4}
+      QUERY_DEFAULT_LIMIT: ${QUERY_DEFAULT_LIMIT:-10}
+      QUERY_MAX_LIMIT: ${QUERY_MAX_LIMIT:-50}
+      QUERY_DEFAULT_CANDIDATE_LIMIT: ${QUERY_DEFAULT_CANDIDATE_LIMIT:-50}
+      QUERY_MAX_CANDIDATE_LIMIT: ${QUERY_MAX_CANDIDATE_LIMIT:-200}
+      QUERY_DEFAULT_RERANK: ${QUERY_DEFAULT_RERANK:-true}
+      QUERY_DEFAULT_RERANK_TOP_K: ${QUERY_DEFAULT_RERANK_TOP_K:-20}
+      QUERY_MAX_RERANK_TOP_K: ${QUERY_MAX_RERANK_TOP_K:-200}
+      QUERY_RERANK_MAX_CHARS: ${QUERY_RERANK_MAX_CHARS:-1000}
+      QUERY_DEFAULT_FUSION: ${QUERY_DEFAULT_FUSION:-rrf}
+      QUERY_INDEXED_ONLY: ${QUERY_INDEXED_ONLY:-false}
+      QUERY_HNSW_EF:
+      QUERY_QUANTIZATION_RESCORE: ${QUERY_QUANTIZATION_RESCORE:-true}
+      QUERY_QUANTIZATION_OVERSAMPLING: ${QUERY_QUANTIZATION_OVERSAMPLING:-2.0}
+      QUERY_FILTER_FIELD_ALLOWLIST: ${QUERY_FILTER_FIELD_ALLOWLIST:-}
+      QUERY_FILTER_MAX_DEPTH: ${QUERY_FILTER_MAX_DEPTH:-20}
+      QUERY_FILTER_MAX_CONDITIONS: ${QUERY_FILTER_MAX_CONDITIONS:-100}
+      # Raising this needs mem_limit above raised with it: ingest embeds every
+      # chunk before its first write, so the whole request's vectors are
+      # resident at once (~52 KB per point at DENSE_DIM=1024).
+      INGEST_MAX_CHUNKS: ${INGEST_MAX_CHUNKS:-10000}
+      INGEST_MAX_FILE_BYTES: ${INGEST_MAX_FILE_BYTES:-67108864}
+      INGEST_DEFAULT_BATCH_SIZE: ${INGEST_DEFAULT_BATCH_SIZE:-64}
+      INGEST_MAX_BATCH_SIZE: ${INGEST_MAX_BATCH_SIZE:-256}
+      INGEST_UPLOAD_CONCURRENCY: ${INGEST_UPLOAD_CONCURRENCY:-4}
+      EXPORT_DATA_ROOT: ${EXPORT_DATA_ROOT:-/app/middleware-qdrant-manager/exports}
+      EXPORT_MAX_POINTS: ${EXPORT_MAX_POINTS:-50000}
+      EXPORT_MAX_BYTES: ${EXPORT_MAX_BYTES:-67108864}
+      EXPORT_MAX_CONCURRENT: ${EXPORT_MAX_CONCURRENT:-1}
+      HEALTH_PROBE_INTERVAL: ${HEALTH_PROBE_INTERVAL:-15}
+      EMBEDDER_PROBE_TIMEOUT: ${EMBEDDER_PROBE_TIMEOUT:-3.0}
+      RETRY_MAX_ATTEMPTS: ${RETRY_MAX_ATTEMPTS:-3}
+      RETRY_BASE_DELAY: ${RETRY_BASE_DELAY:-0.1}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - private
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /home/appuser/.cache:size=64m,mode=0700,uid=1000,gid=1000
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 100
+    restart: unless-stopped
+    stop_grace_period: 15s
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:6336/livez',timeout=5).status==200 else 1)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+
+  smart-qdrant-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: smart-qdrant-mcp
+      args:
+        SMART_QDRANT_MCP_VERSION: ${SMART_QDRANT_MCP_VERSION:-1.0.0}
+    image: hybrid-manager/smart-qdrant-mcp:local
+    pull_policy: never
+    container_name: smart-qdrant-mcp
+    init: true
+    user: "1000:1000"
+    ports:
+      - target: 6337
+        published: "${MCP_PORT:-6337}"
+        host_ip: "${MCP_BIND_HOST:-127.0.0.1}"
+        protocol: tcp
+    environment:
+      MCP_PORT: "6337"
+      MCP_BIND_HOST: ${MCP_BIND_HOST:-127.0.0.1}
+      # Deliberately 0.0.0.0, unlike MCP_BIND_HOST above: this is the
+      # address uvicorn binds *inside the container's own network
+      # namespace*, not a publicly reachable interface. The actual
+      # restriction to loopback (or a private address) is the port publish
+      # below (${MCP_BIND_HOST:-127.0.0.1}:${MCP_PORT:-6337}:6337), which
+      # scripts/verify_compose_security.py polices; binding all interfaces
+      # in here is what makes that publish work at all.
+      MCP_LISTEN_HOST: "0.0.0.0"
+      MCP_AUTH_MODE: ${MCP_AUTH_MODE:-static}
+      MCP_API_TOKENS: ${MCP_API_TOKENS:-}
+      MCP_ALLOW_UNAUTHENTICATED_LOCAL: ${MCP_ALLOW_UNAUTHENTICATED_LOCAL:-false}
+      MCP_OAUTH_ISSUER_URL: ${MCP_OAUTH_ISSUER_URL:-}
+      MCP_OAUTH_RESOURCE_SERVER_URL: ${MCP_OAUTH_RESOURCE_SERVER_URL:-}
+      MCP_OAUTH_INTROSPECTION_URL: ${MCP_OAUTH_INTROSPECTION_URL:-}
+      MCP_OAUTH_CLIENT_ID: ${MCP_OAUTH_CLIENT_ID:-}
+      MCP_OAUTH_CLIENT_SECRET: ${MCP_OAUTH_CLIENT_SECRET:-}
+      MCP_OAUTH_AUDIENCE: ${MCP_OAUTH_AUDIENCE:-}
+      MCP_OAUTH_REQUIRED_SCOPES: ${MCP_OAUTH_REQUIRED_SCOPES:-}
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-}
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
+      MCP_MIDDLEWARE_URL: http://middleware:6336
+      MIDDLEWARE_CLIENT_TOKEN: ${MIDDLEWARE_CLIENT_TOKEN:-}
+      # The MCP server never calls the embedder; this is passed through only so
+      # startup validation can refuse a token that opens two services at once.
+      SMART_EMBEDDER_CLIENT_TOKEN: ${SMART_EMBEDDER_CLIENT_TOKEN:-}
+      MCP_HTTP_TIMEOUT: ${MCP_HTTP_TIMEOUT:-120}
+      MCP_RETRY_ATTEMPTS: ${MCP_RETRY_ATTEMPTS:-3}
+      MCP_RETRY_BACKOFF_SECONDS: ${MCP_RETRY_BACKOFF_SECONDS:-0.5}
+    depends_on:
+      middleware:
+        condition: service_started
+    networks:
+      - private
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 100
+    restart: unless-stopped
+    stop_grace_period: 10s
+    healthcheck:
+      # Every MCP route requires a bearer token and a full JSON-RPC body, so
+      # an HTTP probe would either fail auth or need a token baked into this
+      # file. A bare TCP connect is the honest check available here.
+      test:
+        - CMD
+        - python3
+        - -c
+        - "import socket,sys; s=socket.create_connection(('localhost',6337),timeout=5); s.close(); sys.exit(0)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+
+  smart-embedder-init-cpu:
+    <<: *smart-init
+    profiles: [cpu]
+    image: hybrid-manager/smart-embedder:cpu-local
+    pull_policy: never
+    container_name: embedder-server-init-cpu
+    command: ["python3", "model_bootstrap.py"]
+    volumes:
+      - hf-model-cache:/app/model_cache
+      - embedder-state-cpu:/app/runtime_state
+    environment:
+      <<: *smart-environment
+      API_TOKENS: ""
+      SERVICE_TOKEN: ""
+      HF_HUB_OFFLINE: "0"
+      TRANSFORMERS_OFFLINE: "0"
+      CUDA_VISIBLE_DEVICES: "-1"
+      BGE_EMBED_MAX_LENGTH: ${BGE_EMBED_CPU_MAX_LENGTH:-2048}
+      QWEN_EMBED_MAX_LENGTH: ${QWEN_EMBED_CPU_MAX_LENGTH:-2048}
+      QWEN_RERANK_MAX_LENGTH: ${QWEN_RERANK_MAX_LENGTH:-2048}
+      QWEN_RERANK_BATCH_SIZE: ${QWEN_RERANK_BATCH_SIZE:-1}
+
+  smart-embedder-cpu:
+    <<: *smart-service
+    profiles: [cpu]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: smart-embedder-cpu
+    image: hybrid-manager/smart-embedder:cpu-local
+    pull_policy: never
+    container_name: embedder-server-cpu
+    command:
+      - uvicorn
+      - smart-embedder:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --workers
+      - "1"
+    depends_on:
+      smart-embedder-init-cpu:
+        condition: service_completed_successfully
+        restart: true
+    volumes:
+      - hf-model-cache:/app/model_cache:ro
+      - embedder-state-cpu:/app/runtime_state:ro
+    environment:
+      <<: *smart-environment
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      CUDA_VISIBLE_DEVICES: "-1"
+      # With all three ADVANCED models resident under the 16 GiB service
+      # limit, physical calibration accepts 2048 and rejects dense 8192 at the
+      # 90% RSS gate. Operators assigning more RAM can raise this explicitly;
+      # the changed value invalidates and reruns the hardware profile.
+      BGE_EMBED_MAX_LENGTH: ${BGE_EMBED_CPU_MAX_LENGTH:-2048}
+      QWEN_EMBED_MAX_LENGTH: ${QWEN_EMBED_CPU_MAX_LENGTH:-2048}
+      QWEN_RERANK_MAX_LENGTH: ${QWEN_RERANK_MAX_LENGTH:-2048}
+      QWEN_RERANK_BATCH_SIZE: ${QWEN_RERANK_BATCH_SIZE:-1}
+
+  smart-embedder-init-gpu:
+    <<: *smart-init
+    profiles: [gpu]
+    image: hybrid-manager/smart-embedder:gpu-local
+    pull_policy: never
+    container_name: embedder-server-init-gpu
+    command: ["python3", "model_bootstrap.py"]
+    volumes:
+      - hf-model-cache:/app/model_cache
+      - embedder-state-gpu:/app/runtime_state
+    environment:
+      <<: *smart-environment
+      API_TOKENS: ""
+      SERVICE_TOKEN: ""
+      HF_HUB_OFFLINE: "0"
+      TRANSFORMERS_OFFLINE: "0"
+      PYTORCH_CUDA_ALLOC_CONF: ${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True,throw_on_cudamalloc_oom:True}
+      QWEN_RERANK_MAX_LENGTH: ${QWEN_RERANK_MAX_LENGTH:-32768}
+      QWEN_RERANK_BATCH_SIZE: ${QWEN_RERANK_BATCH_SIZE:-8}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  smart-embedder-gpu:
+    <<: *smart-service
+    profiles: [gpu]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: smart-embedder-gpu
+    image: hybrid-manager/smart-embedder:gpu-local
+    pull_policy: never
+    container_name: embedder-server-gpu
+    command:
+      - uvicorn
+      - smart-embedder:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --workers
+      - "1"
+    depends_on:
+      smart-embedder-init-gpu:
+        condition: service_completed_successfully
+        restart: true
+    volumes:
+      - hf-model-cache:/app/model_cache:ro
+      - embedder-state-gpu:/app/runtime_state:ro
+    environment:
+      <<: *smart-environment
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      PYTORCH_CUDA_ALLOC_CONF: ${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True,throw_on_cudamalloc_oom:True}
+      QWEN_RERANK_MAX_LENGTH: ${QWEN_RERANK_MAX_LENGTH:-32768}
+      QWEN_RERANK_BATCH_SIZE: ${QWEN_RERANK_BATCH_SIZE:-8}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  hf-model-cache:
+    name: ${HF_MODEL_CACHE_VOLUME:-smart-embedder-hf-cache}
+  embedder-state-cpu:
+    name: ${SMART_EMBEDDER_CPU_STATE_VOLUME:-smart-embedder-state-cpu}
+  embedder-state-gpu:
+    name: ${SMART_EMBEDDER_GPU_STATE_VOLUME:-smart-embedder-state-gpu}
+
+networks:
+  private:
+    name: smart-semantic-searcher-private
+    driver: bridge

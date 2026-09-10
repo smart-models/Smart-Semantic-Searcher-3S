@@ -1,0 +1,25 @@
+# What CI installs to run the offline suites. Not shipped in any image.
+#
+# The three service files are included as they are, so CI tests the versions
+# the images build with. The embedder is the exception: its unit tests fake
+# every model backend, and installing embedder-cpu.txt to run them would pull
+# transformers, sentence-transformers, FlagEmbedding and onnxruntime -- gigabytes
+# of wheels for code the tests never call. Only the third-party imports those
+# tests actually reach are listed below.
+#
+# Those four pins duplicate embedder-base.txt and embedder-cpu.txt, which is the
+# one drift risk in this file: when a version moves there, move it here too, or
+# CI stops testing what the image ships.
+
+-r dev.txt
+-r middleware.txt
+-r mcp.txt
+
+# Reached by server-embedder-reranker/tests: torch by test_advanced_milco_runtime
+# and test_basic_onnx_backend, numpy by six suites, orjson by the response-model
+# tests. Versions mirror embedder-base.txt and embedder-cpu.txt. httpx is also
+# reached, and already arrives through shared.txt, so it is not repeated here.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.13.0+cpu
+numpy==1.26.4
+orjson==3.11.6

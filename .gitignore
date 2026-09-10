@@ -1,0 +1,110 @@
+# Local configuration and secrets
+**/.env
+**/.env.*
+!**/.env.example
+
+# Python environments and caches
+.venv/
+venv/
+env/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Models and generated caches
+model_cache/
+models/
+**/.cache/
+*.safetensors
+*.pt
+*.pth
+
+# Runtime and generated data
+*.log
+logs/
+benchmark-results/
+benchmarks/results/
+release-evidence/
+# Staged ingest corpora are local input, but the directory itself must exist
+# for the same reason exports/ does: compose.yml bind-mounts it (read-only), and
+# a bind mount whose source is missing is created root-owned by the daemon --
+# which then needs sudo to stage a file into.
+middleware-qdrant-manager/data/*
+!middleware-qdrant-manager/data/.gitkeep
+middleware-qdrant-manager/docs/
+# Export artifacts are local output, but the directory itself must exist: a
+# bind mount whose source is missing is created root-owned by the daemon, and
+# the middleware container runs as UID/GID 1000.
+middleware-qdrant-manager/exports/*
+!middleware-qdrant-manager/exports/.gitkeep
+smart-qdrant-mcp-server/evals/report.md
+# Explicit safeguard for local audit artifacts if docs/ is narrowed later.
+middleware-qdrant-manager/docs/superpowers/**/*audit*
+middleware-qdrant-manager/docs/superpowers/**/*Audit*
+middleware-qdrant-manager/docs/superpowers/**/*AUDIT*
+
+# Build and packaging output
+/build/
+/dist/
+*.egg-info/
+tmp/
+temp/
+*.tmp
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local agent state and working documents
+.codex/
+.agents/
+server-embedder-reranker/docs/
+# Everything under the root docs/ is local working material -- agent scratch and
+# PRDs alike. Nothing in it is tracked, no exceptions.
+docs/
+# smart_qdrant_mcp ships its teaching/reference documents as real source under
+# resources/docs/ (Task 19) -- the bare docs/ rule above is for local agent
+# scratch documentation, not this shipped content. Unignoring the directory
+# alone would also silently untrack any *other* file dropped in there later
+# (a stray .pyc, a screenshot, ...), since nothing would re-ignore it -- so
+# the directory is unignored only so git will look inside it, everything in
+# it is re-ignored by default, and only *.md is allowed back through.
+!smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/
+smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/*
+!smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/*.md
+# The application's own documentation is copied under resources/docs/guide/
+# (the guide pages, HTML) and resources/docs/reference/ (the component
+# READMEs those pages link to, Markdown). The rule above stops at the
+# directory, so git never looks inside either one -- each needs the same
+# three lines: unignore the directory, re-ignore its contents, allow back
+# only the one extension that directory is meant to hold.
+!smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/guide/
+smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/guide/*
+!smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/guide/*.html
+!smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/reference/
+smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/reference/*
+!smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/reference/*.md
+# smart-qdrant-mcp-server/docs/ is likewise shipped content, not scratch: it
+# carries the architectural rationale for the server's MCP tool surface, and
+# tracked docs (README.md, AGENTS.md) point readers at it. Same pattern as
+# resources/docs/ above -- unignore the directory so git looks inside it,
+# re-ignore everything in it by default, and only *.md is allowed back through.
+!smart-qdrant-mcp-server/docs/
+smart-qdrant-mcp-server/docs/*
+!smart-qdrant-mcp-server/docs/*.md
+**/superpowers/
+
+# Node / Playwright (frontend E2E suite)
+node_modules/
+package-lock.json
+test-results/
+playwright-report/
+blob-report/
+.playwright/

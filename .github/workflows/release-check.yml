@@ -1,0 +1,132 @@
+name: Release check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-check-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-gate:
+    name: Offline release gate and evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements/*.txt
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements/ci.txt
+
+      - name: Record candidate metadata
+        shell: bash
+        run: |
+          mkdir -p release-evidence/sbom
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "generated_at=$(date --utc --iso-8601=seconds)"
+            python --version
+            node --version
+            docker --version
+          } | tee release-evidence/metadata.txt
+
+      - name: Verify security constraints
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/security_constraints.py \
+            2>&1 | tee release-evidence/security-constraints.log
+
+      - name: Lint Python
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m ruff check . 2>&1 | tee release-evidence/ruff-check.log
+          python -m ruff format --check . 2>&1 | tee release-evidence/ruff-format.log
+
+      - name: Run Python service and launcher suites
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest middleware-qdrant-manager/tests \
+            smart-qdrant-mcp-server/tests scripts -q \
+            2>&1 | tee release-evidence/python-tests.log
+
+      - name: Run Smart Embedder suite
+        shell: bash
+        working-directory: server-embedder-reranker
+        run: |
+          set -o pipefail
+          python -m unittest discover -s tests -p "test_*.py" \
+            2>&1 | tee ../release-evidence/embedder-tests.log
+
+      - name: Run frontend unit suite
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test middleware-qdrant-manager/frontend/tests/query-models.test.mjs \
+            2>&1 | tee release-evidence/frontend-tests.log
+
+      - name: Validate Dockerfile and Compose security
+        shell: bash
+        run: |
+          set -o pipefail
+          docker build --check . 2>&1 | tee release-evidence/docker-check.log
+          {
+            docker compose --env-file .env.example --profile cpu config --quiet
+            docker compose --env-file .env.example --profile gpu config --quiet
+            python scripts/verify_compose_security.py --env-file .env.example
+          } 2>&1 | tee release-evidence/compose-config.log
+
+      - name: Audit dependencies and generate SBOMs
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/verify_dependencies.py \
+            --sbom release-evidence/sbom \
+            --json-output release-evidence/dependency-audit.json \
+            2>&1 | tee release-evidence/dependency-audit.log
+
+      - name: Build evidence manifest
+        if: always()
+        run: >-
+          python scripts/release_evidence.py release-evidence
+          --require metadata.txt
+          --require security-constraints.log
+          --require ruff-check.log
+          --require ruff-format.log
+          --require python-tests.log
+          --require embedder-tests.log
+          --require frontend-tests.log
+          --require docker-check.log
+          --require compose-config.log
+          --require dependency-audit.log
+          --require dependency-audit.json
+          --require sbom/middleware-py311-linux.cdx.json
+          --require sbom/embedder-cpu-py311-linux.cdx.json
+          --require sbom/embedder-gpu-py310-linux.cdx.json
+          --require sbom/mcp-py311-linux.cdx.json
+
+      - name: Upload release evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-evidence-${{ github.sha }}-${{ github.run_id }}
+          path: release-evidence/
+          if-no-files-found: error
+          retention-days: 90

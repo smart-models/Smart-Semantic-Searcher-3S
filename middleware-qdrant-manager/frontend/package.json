@@ -1,0 +1,22 @@
+{
+  "name": "qdrant-hybrid-manager-frontend-tests",
+  "private": true,
+  "type": "module",
+  "description": "Playwright E2E suite for the Smart Semantic Searcher console. No build step: the console itself is plain static assets under dist/.",
+  "scripts": {
+    "pretest": "node tests/tools/rate-limit-cooldown.mjs",
+    "test": "playwright test",
+    "test:query": "playwright test tests/d-query.spec.js tests/d-filters.spec.js tests/nf-newfeatures.spec.js",
+    "seed": "node tests/tools/seed.mjs",
+    "init:run": "node tests/tools/init-run.mjs",
+    "test:unit": "node --test tests/*.test.mjs",
+    "reset:collections": "node tests/tools/reset-a.mjs",
+    "reset:points": "node tests/tools/reset-c.mjs",
+    "seed:query": "node tests/tools/seed-d.mjs",
+    "seed:reindex": "node tests/tools/seed-reg.mjs",
+    "seed:book": "node tests/tools/seed-book.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  }
+}

@@ -1,0 +1,28 @@
+{
+ "chunks": [
+  {
+   "id": 1,
+   "text": "auto index chunk number 1 about payload indexes after ingest",
+   "prezzo": 10,
+   "attivo": true,
+   "tag": "alpha",
+   "autore": "ada"
+  },
+  {
+   "id": 2,
+   "text": "auto index chunk number 2 about payload indexes after ingest",
+   "prezzo": 20,
+   "attivo": false,
+   "tag": "beta",
+   "autore": "bob"
+  },
+  {
+   "id": 3,
+   "text": "auto index chunk number 3 about payload indexes after ingest",
+   "prezzo": 30,
+   "attivo": true,
+   "tag": "gamma",
+   "autore": "cleo"
+  }
+ ]
+}

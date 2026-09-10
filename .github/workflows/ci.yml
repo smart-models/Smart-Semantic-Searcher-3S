@@ -1,0 +1,210 @@
+# The verification pass AGENTS.md documents, run by a machine instead of by
+# whoever remembered. Every third-party action is pinned to a full commit SHA
+# rather than a tag, which is the only immutable reference GitHub offers, and
+# the workflow token is read-only: nothing here needs to write to the repo.
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+# A new push to the same branch makes the previous run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements/*.txt
+
+      - run: python -m pip install -r requirements/dev.txt
+
+      - name: ruff check
+        run: python -m ruff check .
+
+      - name: ruff format --check
+        run: python -m ruff format --check .
+
+      - name: shellcheck
+        run: shellcheck stack.sh
+
+      # PSScriptAnalyzer reports findings by printing them and still exits 0,
+      # which AGENTS.md calls out. Reading the result is the whole point of
+      # running it, so this step turns findings into a failure itself.
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -AcceptLicense
+          $findings = Invoke-ScriptAnalyzer -Path stack.ps1 -Severity Warning, Error
+          if ($findings) {
+            $findings | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
+            throw "PSScriptAnalyzer reported $($findings.Count) finding(s)"
+          }
+          Write-Host "PSScriptAnalyzer: no findings"
+
+  unit:
+    name: Unit suites (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # One version failing should not hide the other's result.
+      fail-fast: false
+      matrix:
+        # The versions the images actually ship: 3.11 for the middleware, the
+        # MCP server and the CPU embedder, 3.10 for the GPU embedder.
+        python: ["3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements/*.txt
+
+      - run: python -m pip install -r requirements/ci.txt
+
+      - name: Middleware and MCP suites
+        run: python -m pytest middleware-qdrant-manager/tests smart-qdrant-mcp-server/tests -q
+
+      - name: Smart Embedder suite
+        working-directory: server-embedder-reranker
+        run: python -m unittest discover -s tests -p "test_*.py"
+
+  frontend-unit:
+    name: Frontend unit and intercepted browser suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Install pinned browser test dependency
+        working-directory: middleware-qdrant-manager/frontend
+        run: npm install --ignore-scripts
+
+      # The coverage gate (coverage-gate.test.mjs) collects the Playwright
+      # inventory with `--list`, which needs the package but no browser; that
+      # is why the install step now precedes the unit tests.
+      - name: Models, harness and test-book coverage gate
+        working-directory: middleware-qdrant-manager/frontend
+        run: node --test tests/*.test.mjs
+
+      - name: Install Chromium
+        working-directory: middleware-qdrant-manager/frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Intercepted application regressions
+        working-directory: middleware-qdrant-manager/frontend
+        run: npx playwright test tests/application-state.spec.js tests/application-reindex.spec.js tests/application-accessibility.spec.js tests/harness-browser.spec.js tests/tb-monitoring.spec.js tests/tb-filter-validation.spec.js tests/tb-ui.spec.js --workers=1
+
+      - name: Intercepted monitoring history
+        working-directory: middleware-qdrant-manager/frontend
+        run: npx playwright test tests/e-monitoring.spec.js --grep 'M-G —' --workers=1
+
+  launchers:
+    name: Launcher suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements/*.txt
+
+      - run: python -m pip install -r requirements/dev.txt
+
+      # test_stack_parity skips itself when either shell is missing, so an image
+      # that quietly dropped one would leave the parity checks unrun and the job
+      # still green. Fail loudly instead.
+      - name: Both shells must be present
+        run: |
+          command -v bash
+          command -v pwsh
+
+      # Roughly seven minutes: a large subprocess matrix driving both launchers.
+      - name: Launcher and verifier suite
+        run: python -m pytest scripts -q
+
+  compose:
+    name: Compose and image checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Dockerfile check
+        run: docker build --check .
+
+      - name: Compose resolves for both hardware profiles
+        run: |
+          docker compose --env-file .env.example --profile cpu config --quiet
+          docker compose --env-file .env.example --profile gpu config --quiet
+
+      - name: Compose security invariants
+        run: python scripts/verify_compose_security.py --env-file .env.example
+
+      # The shipped template has to stay launchable. This is the check that was
+      # passing on a configuration no container could start from.
+      - name: Token preflight on the shipped template
+        shell: bash
+        run: grep -E '^[A-Z][A-Z0-9_]*=' .env.example | python scripts/verify_token_config.py
+
+  # One check to require in the branch ruleset. Jobs can be added above without
+  # anyone having to remember to add them to the protection rule as well.
+  ci:
+    name: CI
+    if: always()
+    needs: [lint, unit, frontend-unit, launchers, compose]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report each job's result
+        run: |
+          echo "lint=${{ needs.lint.result }}"
+          echo "unit=${{ needs.unit.result }}"
+          echo "frontend-unit=${{ needs.frontend-unit.result }}"
+          echo "launchers=${{ needs.launchers.result }}"
+          echo "compose=${{ needs.compose.result }}"
+
+      - name: Fail unless every job succeeded
+        if: >-
+          contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled') ||
+          contains(needs.*.result, 'skipped')
+        run: exit 1

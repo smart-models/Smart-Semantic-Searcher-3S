@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Console for Smart Semantic Searcher: hybrid search, collection lifecycle, point operations, and live telemetry." />
+  <meta name="color-scheme" content="dark" />
+  <title>Smart Semantic Searcher</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2307080e'/%3E%3Cpath d='M4 12V4h2.2l3.6 5V4H12v8H9.8L6.2 7v5z' fill='%234a9eff'/%3E%3C/svg%3E" />
+  <!-- Bump ?v= together with any assets/ change: the middleware serves these
+       statically without content hashes, so this is the cache-buster. -->
+  <link rel="stylesheet" href="/assets/style.css?v=83" />
+  <script src="/assets/config.js"></script>
+  <script type="module" src="/assets/app.js?v=123" defer></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-dot" aria-hidden="true"></span>
+    SMART SEMANTIC SEARCHER
+  </div>
+  <div class="topbar-actions">
+    <nav class="tabs" role="tablist" aria-label="Console sections">
+      <button type="button" role="tab" id="tab-query" aria-controls="panel-query" aria-selected="true" data-tab="query">Query</button>
+      <button type="button" role="tab" id="tab-collections" aria-controls="panel-collections" aria-selected="false" data-tab="collections">Collections</button>
+      <button type="button" role="tab" id="tab-points" aria-controls="panel-points" aria-selected="false" data-tab="points">Points</button>
+      <button type="button" role="tab" id="tab-monitoring" aria-controls="panel-monitoring" aria-selected="false" data-tab="monitoring">Monitoring</button>
+    </nav>
+    <!-- API key entry: icon-only button (sibling of the tablist — a dialog
+         trigger is not a tab, so it must stay outside role="tablist").
+         The key is stored only for this tab's session and sent as a bearer
+         token to this page origin on API requests. -->
+    <div class="apikey-wrap">
+      <button type="button" class="apikey-btn" id="apikey-btn"
+              aria-haspopup="dialog" aria-expanded="false" aria-controls="apikey-popover"
+              title="Register API key">API key</button>
+      <div class="apikey-popover" id="apikey-popover" role="dialog" aria-labelledby="apikey-title" hidden>
+        <h3 class="subhead" id="apikey-title">API key<span class="cursor" aria-hidden="true">_</span></h3>
+        <form id="apikey-form" novalidate>
+          <div class="field">
+            <input type="password" id="apikey-input" aria-label="API key"
+                   autocomplete="off" spellcheck="false" />
+            <p class="caption apikey-status" id="apikey-status" role="status"></p>
+          </div>
+          <div class="apikey-actions">
+            <button type="button" class="btn btn-ghost" id="apikey-clear" hidden>Clear</button>
+            <button type="submit" class="btn btn-primary" id="apikey-save">Register</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="connbar" aria-label="Connection">
+  <div class="conn-field">
+    <label for="conn-collection">Active collection</label>
+    <select id="conn-collection"></select>
+    <p class="caption warn conn-hint" id="conn-collection-hint" role="alert" hidden></p>
+  </div>
+  <div class="conn-health" id="conn-health" role="status">
+    <span class="health-dot" id="conn-health-dot" aria-hidden="true"></span>
+    <span class="health-status" id="conn-health-status">PROBING…</span>
+    <span class="health-detail" id="conn-health-detail"></span>
+  </div>
+  <button type="button" class="btn btn-ghost" id="conn-retest">Re-test</button>
+</section>
+<div class="service-gate" id="service-gate" aria-live="assertive"></div>
+
+<main>
+
+<!-- ═══════════════════ QUERY ═══════════════════ -->
+<section id="panel-query" role="tabpanel" aria-labelledby="tab-query">
+  <div class="hero">
+    <h1 class="hero-title">QUERY<span class="cursor" aria-hidden="true">_</span></h1>
+    <p class="hero-subtitle">Advanced hybrid search</p>
+  </div>
+
+  <details class="reference">
+    <summary>Parameter reference</summary>
+    <div class="param-grid" id="query-reference"></div>
+  </details>
+
+  <h2 class="section"><span class="section-num">01</span><span class="section-label">Hybrid Search</span></h2>
+  <div class="field">
+    <label for="ql-query">query</label>
+    <textarea id="ql-query" rows="4" spellcheck="false"></textarea>
+    <p class="caption" id="ql-query-mode">HYBRID SEARCH IS DISABLED - PAYLOAD-ONLY MODE FILTERING</p>
+    <div id="ql-embedding-guard" aria-live="polite"></div>
+  </div>
+  <div class="grid-3">
+    <div class="field">
+      <label for="ql-collection">collection_name</label>
+      <input type="text" id="ql-collection" disabled />
+    </div>
+    <div class="field">
+      <label for="ql-limit">limit</label>
+      <input type="number" id="ql-limit" min="1" max="50" step="1" value="10" required />
+    </div>
+    <div class="field">
+      <label for="ql-cand">candidate_limit</label>
+      <input type="number" id="ql-cand" min="1" max="200" step="1" value="50" required />
+    </div>
+  </div>
+  <div class="grid-3">
+    <fieldset class="field">
+      <legend>fusion</legend>
+      <div class="radio-row">
+        <label class="check"><input type="radio" name="ql-fusion" value="rrf" checked /> rrf</label>
+        <label class="check"><input type="radio" name="ql-fusion" value="dbsf" /> dbsf</label>
+      </div>
+    </fieldset>
+    <div class="field" id="ql-rrfk-field">
+      <label class="check"><input type="checkbox" id="ql-rrfk-en" /> Set rrf_k</label>
+      <label for="ql-rrfk">rrf_k</label>
+      <input type="number" id="ql-rrfk" min="1" max="10000" step="1" value="2" disabled required />
+    </div>
+    <div class="field" id="ql-weights-field">
+      <label class="check"><input type="checkbox" id="ql-weights-en" /> Set rrf_weights</label>
+      <label for="ql-weight-scale">absolute weight scale</label>
+      <input type="number" id="ql-weight-scale" min="0.01" max="1000000" step="0.01" value="1" disabled required />
+      <label for="ql-balance" class="gap-top">sparse ◄──► dense</label>
+      <input type="range" id="ql-balance" min="0" max="1" step="0.01" value="0.5" disabled />
+      <p class="caption" id="ql-balance-caption">Qdrant weights [1.00, 1.00]</p>
+    </div>
+  </div>
+  <!-- Fusion stage output: score_threshold and offset act on the FUSED result,
+       so they sit with the fusion controls above and before the rerank block —
+       the row order mirrors the pipeline (retrieve → fuse → cut/page → rerank).
+       order_by is NOT here: it only applies to the payload-only scroll, so it
+       lives in section 03 next to the other result-shaping controls. -->
+  <!-- grid-3 with two cells, not grid-2-1: 2fr/1fr would make two peer fields
+       unequal, while three equal columns keep this row aligned with the fusion
+       and rerank rows around it. -->
+  <div class="grid-3">
+    <div class="field" id="ql-threshold-field">
+      <label class="check"><input type="checkbox" id="ql-threshold-en" /> Set score_threshold</label>
+      <label for="ql-threshold">score_threshold</label>
+      <input type="number" id="ql-threshold" min="0" max="1" step="0.01" value="0.3" disabled required />
+    </div>
+    <div class="field" id="ql-offset-field">
+      <label class="check"><input type="checkbox" id="ql-offset-en" /> Set offset</label>
+      <label for="ql-offset">offset</label>
+      <input type="number" id="ql-offset" min="0" max="100000" step="1" value="0" disabled required />
+    </div>
+  </div>
+  <div class="grid-3">
+    <div class="field">
+      <label class="check"><input type="checkbox" id="ql-rerank" checked /> rerank</label>
+    </div>
+    <div class="field">
+      <label class="check"><input type="checkbox" id="ql-topk-en" /> Set rerank_top_k</label>
+      <label for="ql-topk">rerank_top_k</label>
+      <input type="number" id="ql-topk" min="1" max="200" step="1" value="20" disabled required />
+    </div>
+    <div class="field">
+      <label class="check"><input type="checkbox" id="ql-normalize" checked /> rerank_normalize</label>
+    </div>
+  </div>
+
+  <h2 class="section"><span class="section-num">02</span><span class="section-label">Payload Filters</span></h2>
+  <div id="ql-filter-rows"></div>
+  <div class="filter-root-actions">
+    <button type="button" class="btn" id="ql-filter-add">+ Condition</button>
+    <button type="button" class="btn" id="ql-filter-group-add">+ Logical group</button>
+    <button type="button" class="btn" id="ql-filter-nested-add" disabled>+ Same-element group</button>
+    <div class="field" id="ql-minshould-field" hidden>
+      <label for="ql-minshould">min should matches</label>
+      <input type="number" id="ql-minshould" min="1" step="1" value="1"
+             title="With 2+ SHOULD rows, require at least this many to match (Qdrant min_should). 1 = plain should." />
+    </div>
+  </div>
+
+  <h2 class="section"><span class="section-num">03</span><span class="section-label">Returned Payload</span></h2>
+  <fieldset class="field">
+    <legend id="ql-payload-legend">with_payload</legend>
+    <div class="check-row" id="ql-payload-fields"></div>
+  </fieldset>
+
+  <hr class="divider" />
+  <!-- Result order belongs to the payload-only scroll, not to hybrid search:
+       kept here (which fields / in which order the results come back) rather
+       than in 01, where it would be dead whenever a query is typed. -->
+  <h3 class="subhead">Result order</h3>
+  <fieldset class="field" id="ql-order-field">
+    <legend>order_by</legend>
+    <label class="check"><input type="checkbox" id="ql-order-en" /> Set order_by</label>
+    <div class="grid-3">
+      <div class="field">
+        <label for="ql-order-key">key</label>
+        <select id="ql-order-key" disabled></select>
+      </div>
+      <fieldset class="field">
+        <legend>direction</legend>
+        <div class="radio-row">
+          <label class="check"><input type="radio" name="ql-order-dir" value="asc" checked disabled /> asc</label>
+          <label class="check"><input type="radio" name="ql-order-dir" value="desc" disabled /> desc</label>
+        </div>
+      </fieldset>
+      <div class="field">
+        <label for="ql-order-start">start_from (optional)</label>
+        <input type="text" id="ql-order-start" spellcheck="false" disabled />
+      </div>
+    </div>
+  </fieldset>
+
+  <h2 class="section"><span class="section-num">04</span><span class="section-label">Run Query</span></h2>
+  <pre class="codeblock"><code id="ql-request-json"></code></pre>
+  <label class="check"><input type="checkbox" id="ql-download" /> Download results as JSON</label>
+  <div id="ql-errors" role="alert"></div>
+  <button type="button" class="btn btn-primary btn-block" id="ql-run">Run query</button>
+
+  <div id="ql-results"></div>
+</section>
+
+<!-- ═══════════════════ COLLECTIONS ═══════════════════ -->
+<section id="panel-collections" role="tabpanel" aria-labelledby="tab-collections" hidden>
+  <div class="hero">
+    <h1 class="hero-title">COLLECTIONS<span class="cursor" aria-hidden="true">_</span></h1>
+    <p class="hero-subtitle">Schema and lifecycle management</p>
+  </div>
+
+  <details class="reference">
+    <summary>Feature reference</summary>
+    <div class="param-grid" id="collections-reference"></div>
+  </details>
+
+  <h2 class="section"><span class="section-num">01</span><span class="section-label">Report</span></h2>
+  <div id="cc-report"></div>
+
+  <h2 class="section"><span class="section-num">02</span><span class="section-label">Re-embed Vectors</span></h2>
+  <div id="cr-wrap">
+    <div class="reindex-actions">
+      <button type="button" class="btn" id="cr-preflight" disabled>Run read-only preflight</button>
+      <button type="button" class="btn" id="cr-pause" hidden>Pause</button>
+      <button type="button" class="btn" id="cr-resume" hidden>Resume</button>
+      <button type="button" class="btn btn-danger" id="cr-cancel" hidden>Cancel job</button>
+    </div>
+    <div id="cr-preflight-result" aria-live="polite"></div>
+    <div class="field" id="cr-confirm-wrap" hidden>
+      <label for="cr-confirm" id="cr-confirm-label">Type the collection name to start vector regeneration</label>
+      <input type="text" id="cr-confirm" autocomplete="off" spellcheck="false" />
+      <p class="caption warn" id="cr-confirm-hint" hidden>Does not match — regeneration stays disabled</p>
+    </div>
+    <button type="button" class="btn btn-primary" id="cr-start" hidden disabled>Start vector regeneration</button>
+    <div id="cr-result" aria-live="polite"></div>
+    <div id="cr-status" aria-live="polite"></div>
+  </div>
+
+  <h2 class="section"><span class="section-num">03</span><span class="section-label">Create / Recreate</span></h2>
+  <div id="cc-wrap">
+  <div class="field">
+    <label for="cc-name">collection_name</label>
+    <input type="text" id="cc-name" spellcheck="false" />
+  </div>
+  <div class="grid-5">
+    <div class="field">
+      <label for="cc-dense">dense_on_disk</label>
+      <select id="cc-dense"><option>true</option><option>false</option></select>
+    </div>
+    <div class="field">
+      <label for="cc-sparse-disk">sparse_on_disk</label>
+      <select id="cc-sparse-disk"><option>true</option><option>false</option></select>
+    </div>
+    <div class="field">
+      <label for="cc-payload-disk">payload_on_disk</label>
+      <select id="cc-payload-disk"><option>true</option><option>false</option></select>
+    </div>
+    <div class="field">
+      <label for="cc-quant">quantization</label>
+      <select id="cc-quant"><option>true</option><option>false</option></select>
+    </div>
+    <div class="field">
+      <label for="cc-idf">sparse_idf</label>
+      <select id="cc-idf"><option>true</option><option>false</option></select>
+    </div>
+  </div>
+  <!-- The recreate half lives in its own region so an embedder-mismatched active
+       collection can lock it alone, leaving creation of a NEW collection live. -->
+  <div id="cc-recreate-control">
+    <label class="check danger"><input type="checkbox" id="cc-recreate" /> recreate (DESTRUCTIVE)</label>
+  </div>
+  <div class="field" id="cc-confirm-wrap" hidden>
+    <label for="cc-confirm" id="cc-confirm-label">Type the collection name to confirm recreate</label>
+    <input type="text" id="cc-confirm" autocomplete="off" spellcheck="false" />
+    <p class="caption warn" id="cc-confirm-hint" hidden>Does not match — destructive action stays disabled</p>
+  </div>
+  <!-- Outside the locked region on purpose: an inert node is dropped from the
+       accessibility tree, and the reason for a lockdown must stay readable. -->
+  <p class="caption warn" id="cc-recreate-note" hidden>Recreate is disabled while the active collection does not match the Smart Embedder — create a new collection instead</p>
+  <button type="button" class="btn btn-primary" id="cc-submit" disabled>Submit create/recreate</button>
+  <div id="cc-create-result"></div>
+  </div>
+
+  <h2 class="section"><span class="section-num">04</span><span class="section-label">Schema Toggles</span></h2>
+  <div id="cu-wrap">
+    <div class="grid-5">
+      <div class="field">
+        <label for="cu-dense">dense_on_disk</label>
+        <select id="cu-dense"><option>true</option><option>false</option></select>
+      </div>
+      <div class="field">
+        <label for="cu-sparse-disk">sparse_on_disk</label>
+        <select id="cu-sparse-disk"><option>true</option><option>false</option></select>
+      </div>
+      <div class="field">
+        <label for="cu-payload-disk">payload_on_disk</label>
+        <select id="cu-payload-disk"><option>true</option><option>false</option></select>
+      </div>
+      <div class="field">
+        <label for="cu-quant">quantization</label>
+        <select id="cu-quant"><option>true</option><option>false</option></select>
+      </div>
+      <div class="field">
+        <label for="cu-idf">sparse_idf</label>
+        <select id="cu-idf"><option>true</option><option>false</option></select>
+      </div>
+    </div>
+    <button type="button" class="btn" id="cu-submit">Update schema toggles</button>
+    <div id="cu-result"></div>
+  </div>
+
+  <h2 class="section"><span class="section-num">05</span><span class="section-label">Payload Indexes</span></h2>
+  <div id="pi-wrap">
+    <div id="pi-table"></div>
+    <div class="grid-2-1">
+      <div class="field">
+        <label for="pi-field">payload field</label>
+        <input type="text" id="pi-field" spellcheck="false" />
+      </div>
+      <div class="field">
+        <label for="pi-schema">field schema</label>
+        <select id="pi-schema">
+          <option>keyword</option><option>text</option><option>integer</option>
+          <option>float</option><option>bool</option><option>geo</option>
+          <option>datetime</option><option>uuid</option>
+        </select>
+      </div>
+    </div>
+    <div class="field" id="pi-phrase-wrap" hidden>
+      <label class="check"><input type="checkbox" id="pi-phrase" />
+        phrase matching (enables 'exact phrase' filters on this field)</label>
+    </div>
+    <button type="button" class="btn" id="pi-create" disabled>Create/Update payload index</button>
+    <div id="pi-create-result"></div>
+    <div class="field">
+      <label for="pi-del-field">payload index field to delete</label>
+      <input type="text" id="pi-del-field" spellcheck="false" />
+    </div>
+    <button type="button" class="btn" id="pi-delete" disabled>Delete payload index</button>
+    <div id="pi-del-result"></div>
+  </div>
+
+  <h2 class="section"><span class="section-num">06</span><span class="section-label">Export Collection</span></h2>
+  <div id="ce-wrap">
+    <button type="button" class="btn" id="ce-export">Export collection to JSON</button>
+    <div id="ce-result" aria-live="polite"></div>
+  </div>
+
+  <h2 class="section"><span class="section-num">07</span><span class="section-label">Delete (DESTRUCTIVE)</span></h2>
+  <div id="cd-wrap">
+  <div class="field">
+    <label for="cd-name">collection to delete</label>
+    <input type="text" id="cd-name" spellcheck="false" />
+  </div>
+  <div class="field">
+    <label for="cd-confirm" id="cd-confirm-label">Type the collection name to confirm delete</label>
+    <input type="text" id="cd-confirm" autocomplete="off" spellcheck="false" />
+    <p class="caption warn" id="cd-confirm-hint" hidden>Does not match — destructive action stays disabled</p>
+  </div>
+  <button type="button" class="btn btn-danger" id="cd-submit" disabled>Delete collection</button>
+  <div id="cd-result"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════ POINTS ═══════════════════ -->
+<section id="panel-points" role="tabpanel" aria-labelledby="tab-points" hidden>
+  <div class="hero">
+    <h1 class="hero-title">POINTS<span class="cursor" aria-hidden="true">_</span></h1>
+    <p class="hero-subtitle">Point ingestion and management</p>
+  </div>
+
+  <details class="reference">
+    <summary>Feature reference</summary>
+    <div class="param-grid" id="points-reference"></div>
+  </details>
+
+  <div id="pt-embedding-guard" aria-live="polite"></div>
+
+  <!-- Each subtab points at its panel with aria-controls, and each panel names
+       its subtab back with aria-labelledby: data-pt-tab drives the JS, the ARIA
+       pair is what maps tab → panel for assistive tech. -->
+  <nav class="subtabs" role="tablist" aria-label="Point operations">
+    <button type="button" role="tab" id="subtab-ingest" aria-controls="pt-ingest" aria-selected="true" data-pt-tab="ingest">Ingest</button>
+    <button type="button" role="tab" id="subtab-upsert" aria-controls="pt-upsert" aria-selected="false" data-pt-tab="upsert">Upsert</button>
+    <button type="button" role="tab" id="subtab-batch" aria-controls="pt-batch" aria-selected="false" data-pt-tab="batch">Batch</button>
+    <button type="button" role="tab" id="subtab-get" aria-controls="pt-get" aria-selected="false" data-pt-tab="get">Get</button>
+    <button type="button" role="tab" id="subtab-delete" aria-controls="pt-delete" aria-selected="false" data-pt-tab="delete">Delete</button>
+    <button type="button" role="tab" id="subtab-payload" aria-controls="pt-payload" aria-selected="false" data-pt-tab="payload">Payload</button>
+    <button type="button" role="tab" id="subtab-count" aria-controls="pt-count" aria-selected="false" data-pt-tab="count">Count</button>
+  </nav>
+
+  <div id="pt-ingest" role="tabpanel" aria-labelledby="subtab-ingest">
+    <div class="field">
+      <label for="ing-file">chunks JSON file</label>
+      <input type="file" id="ing-file" accept="application/json,.json" class="visually-hidden" />
+      <button type="button" class="btn" id="ing-file-btn">Upload file</button>
+    </div>
+    <div id="ing-result" aria-live="polite"></div>
+    <div id="ing-preflight-result"></div>
+    <!-- Runs only after every batch landed; a field the collection already
+         indexes is left alone (its type is locked in the mapping table). -->
+    <label class="check gap-top">
+      <input type="checkbox" id="ing-create-indexes" checked />
+      Create payload indexes for typed fields after ingest
+    </label>
+    <button type="button" class="btn btn-primary" id="ing-confirm-submit" hidden>Confirm &amp; ingest</button>
+  </div>
+
+  <div id="pt-upsert" role="tabpanel" aria-labelledby="subtab-upsert" hidden>
+    <div class="field">
+      <label for="up-id">point_id (uuid or int)</label>
+      <input type="text" id="up-id" spellcheck="false" />
+    </div>
+    <div class="field">
+      <label for="up-text">text</label>
+      <textarea id="up-text" rows="5" spellcheck="false"></textarea>
+    </div>
+    <div class="field">
+      <label for="up-payload">payload JSON</label>
+      <textarea id="up-payload" rows="5" spellcheck="false">{}</textarea>
+    </div>
+    <fieldset class="field" id="up-mode-field">
+      <legend>update_mode</legend>
+      <div class="radio-row">
+        <label class="check"><input type="radio" name="up-mode" value="upsert" checked /> UPSERT</label>
+        <label class="check"><input type="radio" name="up-mode" value="insert_only" /> INSERT ONLY</label>
+        <label class="check"><input type="radio" name="up-mode" value="update_only" /> UPDATE ONLY</label>
+      </div>
+    </fieldset>
+    <button type="button" class="btn btn-primary" id="up-submit" disabled>Upsert point</button>
+    <div id="up-result"></div>
+  </div>
+
+  <div id="pt-batch" role="tabpanel" aria-labelledby="subtab-batch" hidden>
+    <div class="field">
+      <label for="bt-json">points JSON array</label>
+      <textarea id="bt-json" rows="9" spellcheck="false">[]</textarea>
+    </div>
+    <fieldset class="field" id="bt-mode-field">
+      <legend>update_mode</legend>
+      <div class="radio-row">
+        <label class="check"><input type="radio" name="bt-mode" value="upsert" checked /> UPSERT</label>
+        <label class="check"><input type="radio" name="bt-mode" value="insert_only" /> INSERT ONLY</label>
+        <label class="check"><input type="radio" name="bt-mode" value="update_only" /> UPDATE ONLY</label>
+      </div>
+    </fieldset>
+    <button type="button" class="btn btn-primary" id="bt-submit">Upsert batch</button>
+    <div id="bt-result"></div>
+  </div>
+
+  <div id="pt-get" role="tabpanel" aria-labelledby="subtab-get" hidden>
+    <h3 class="subhead">Single get</h3>
+    <div class="field">
+      <label for="get-id">point_id</label>
+      <input type="text" id="get-id" spellcheck="false" />
+    </div>
+    <label class="check"><input type="checkbox" id="get-with-vectors" /> with_vectors</label>
+    <button type="button" class="btn" id="get-submit" disabled>Get point</button>
+    <div id="get-result"></div>
+    <hr class="divider" />
+    <h3 class="subhead">Get many by ids</h3>
+    <div class="field">
+      <label for="get-ids">ids (one per line or comma-separated)</label>
+      <textarea id="get-ids" rows="5" spellcheck="false"></textarea>
+    </div>
+    <p class="caption" id="get-many-count" hidden></p>
+    <label class="check"><input type="checkbox" id="get-many-with-vectors" /> with_vectors</label>
+    <button type="button" class="btn" id="get-many-submit" disabled>Get points</button>
+    <div id="get-many-result"></div>
+  </div>
+
+  <div id="pt-delete" role="tabpanel" aria-labelledby="subtab-delete" hidden>
+    <h3 class="subhead">Single delete</h3>
+    <div class="field">
+      <label for="del-id">point_id to delete</label>
+      <input type="text" id="del-id" spellcheck="false" />
+    </div>
+    <button type="button" class="btn" id="del-submit" disabled>Delete point</button>
+    <div id="del-result"></div>
+    <hr class="divider" />
+    <h3 class="subhead">Bulk delete by ids (DESTRUCTIVE)</h3>
+    <div class="field">
+      <label for="del-ids">ids (one per line or comma-separated)</label>
+      <textarea id="del-ids" rows="5" spellcheck="false"></textarea>
+    </div>
+    <p class="caption" id="del-count" hidden></p>
+    <div class="field">
+      <label for="del-confirm" id="del-confirm-label">Type the collection name to confirm bulk delete</label>
+      <input type="text" id="del-confirm" autocomplete="off" spellcheck="false" />
+      <p class="caption warn" id="del-confirm-hint" hidden>Does not match — destructive action stays disabled</p>
+    </div>
+    <button type="button" class="btn btn-danger" id="del-bulk-submit" disabled>Bulk delete</button>
+    <div id="del-bulk-result"></div>
+    <hr class="divider" />
+    <h3 class="subhead">Delete by filter (DESTRUCTIVE)</h3>
+    <div class="field">
+      <label for="delf-json">filter JSON</label>
+      <textarea id="delf-json" rows="6" spellcheck="false">{}</textarea>
+    </div>
+    <button type="button" class="btn" id="delf-count-submit" disabled>Count matches</button>
+    <p class="caption" id="delf-count" hidden></p>
+    <div class="field">
+      <label for="delf-confirm" id="delf-confirm-label">Type the collection name to confirm delete by filter</label>
+      <input type="text" id="delf-confirm" autocomplete="off" spellcheck="false" />
+      <p class="caption warn" id="delf-confirm-hint" hidden>Does not match — destructive action stays disabled</p>
+    </div>
+    <button type="button" class="btn btn-danger" id="delf-submit" disabled>Delete by filter</button>
+    <div id="delf-result"></div>
+  </div>
+
+  <div id="pt-payload" role="tabpanel" aria-labelledby="subtab-payload" hidden>
+    <fieldset class="field">
+      <legend>scope</legend>
+      <div class="radio-row">
+        <label class="check"><input type="radio" name="pl-scope" value="point" checked /> POINT ID</label>
+        <label class="check"><input type="radio" name="pl-scope" value="filter" /> FILTER</label>
+      </div>
+    </fieldset>
+    <div class="field" id="pl-id-field">
+      <label for="pl-id">point_id</label>
+      <input type="text" id="pl-id" spellcheck="false" />
+    </div>
+    <div class="field" id="pl-filter-field" hidden>
+      <label for="pl-filter-json">filter JSON</label>
+      <textarea id="pl-filter-json" rows="6" spellcheck="false">{}</textarea>
+      <button type="button" class="btn" id="pl-filter-count-submit" disabled>Count matches</button>
+      <p class="caption" id="pl-filter-count" hidden></p>
+    </div>
+    <fieldset class="field">
+      <legend>mode</legend>
+      <div class="radio-row">
+        <label class="check"><input type="radio" name="pl-mode" value="PATCH" checked /> MERGE</label>
+        <label class="check"><input type="radio" name="pl-mode" value="PUT" /> REPLACE</label>
+      </div>
+    </fieldset>
+    <div class="field">
+      <label for="pl-json">payload JSON</label>
+      <textarea id="pl-json" rows="6" spellcheck="false">{}</textarea>
+    </div>
+    <button type="button" class="btn btn-primary" id="pl-submit" disabled>Update payload</button>
+    <div id="pl-result"></div>
+    <hr class="divider" />
+    <h3 class="subhead">Delete payload fields</h3>
+    <div class="field">
+      <label for="pl-keys">keys (one per line or comma-separated)</label>
+      <textarea id="pl-keys" rows="4" spellcheck="false"></textarea>
+    </div>
+    <p class="caption" id="pl-keys-count" hidden></p>
+    <button type="button" class="btn" id="pl-del-keys-submit" disabled>Delete keys</button>
+    <div id="pl-keys-result"></div>
+    <hr class="divider" />
+    <h3 class="subhead">Clear payload (DESTRUCTIVE)</h3>
+    <div class="field">
+      <label for="pl-clear-confirm" id="pl-clear-confirm-label">Type the collection name to confirm clear payload</label>
+      <input type="text" id="pl-clear-confirm" autocomplete="off" spellcheck="false" />
+      <p class="caption warn" id="pl-clear-confirm-hint" hidden>Does not match — destructive action stays disabled</p>
+    </div>
+    <button type="button" class="btn btn-danger" id="pl-clear-submit" disabled>Clear payload</button>
+    <div id="pl-clear-result"></div>
+  </div>
+
+  <div id="pt-count" role="tabpanel" aria-labelledby="subtab-count" hidden>
+    <div class="field">
+      <label for="cnt-json">filter JSON</label>
+      <textarea id="cnt-json" rows="6" spellcheck="false">{}</textarea>
+    </div>
+    <label class="check"><input type="checkbox" id="cnt-exact" checked /> exact</label>
+    <button type="button" class="btn btn-primary" id="cnt-submit">Count points</button>
+    <div id="cnt-result" aria-live="polite"></div>
+    <hr class="divider" />
+    <h3 class="subhead">Facet</h3>
+    <div class="field">
+      <label for="cnt-facet-key">key</label>
+      <select id="cnt-facet-key" disabled><option value="">no facetable field</option></select>
+    </div>
+    <div class="field">
+      <label for="cnt-facet-limit">limit</label>
+      <input type="number" id="cnt-facet-limit" min="1" max="1000" value="20" />
+    </div>
+    <label class="check"><input type="checkbox" id="cnt-facet-exact" checked /> exact</label>
+    <button type="button" class="btn" id="cnt-facet-submit" disabled>Get facet</button>
+    <div id="cnt-facet-result" aria-live="polite"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════ MONITORING ═══════════════════ -->
+<section id="panel-monitoring" role="tabpanel" aria-labelledby="tab-monitoring" hidden>
+  <div class="hero">
+    <h1 class="hero-title">MONITORING<span class="cursor" aria-hidden="true">_</span></h1>
+    <p class="hero-subtitle">Live health and telemetry</p>
+  </div>
+
+  <details class="reference">
+    <summary>Feature reference</summary>
+    <div class="param-grid" id="monitoring-reference"></div>
+  </details>
+
+  <h2 class="section"><span class="section-num">01</span><span class="section-label">Status</span></h2>
+  <div id="mon-badges"></div>
+
+  <h2 class="section"><span class="section-num">02</span><span class="section-label">Embedder Models</span></h2>
+  <div id="mon-models"></div>
+
+  <h2 class="section"><span class="section-num">03</span><span class="section-label">Stats</span></h2>
+  <button type="button" class="btn" id="mon-reset">Reset counters</button>
+  <div id="mon-stats"></div>
+  <div id="mon-chart" class="chart-wrap">
+    <div id="mon-chart-plot"></div>
+    <div id="mon-chart-cross" aria-hidden="true" hidden></div>
+    <div id="mon-chart-tip" role="status" hidden></div>
+  </div>
+
+  <h2 class="section"><span class="section-num">04</span><span class="section-label">Per-endpoint Metrics</span></h2>
+  <div id="mon-table"></div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <span>POWERED BY SMARTMODELS</span>
+</footer>
+
+</body>
+</html>

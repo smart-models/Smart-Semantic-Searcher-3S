@@ -1,0 +1,111 @@
+name: Dependency audit
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dependency-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: OSV audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Prepare evidence directory
+        run: mkdir -p dependency-audit/sbom
+
+      - name: Verify transitive security constraints
+        run: python scripts/security_constraints.py
+
+      - name: Query OSV and generate SBOMs
+        id: osv
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          python scripts/verify_dependencies.py \
+            --sbom dependency-audit/sbom \
+            --json-output dependency-audit/audit.json \
+            2>&1 | tee dependency-audit/audit.log
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Render vulnerability issue
+        if: steps.osv.outputs.code == '1'
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          python scripts/render_dependency_audit_issue.py
+          dependency-audit/audit.json dependency-audit/issue.md
+          --run-url "$RUN_URL"
+
+      - name: Create, update or close the deduplicated issue
+        if: steps.osv.outputs.code == '0' || steps.osv.outputs.code == '1'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUDIT_CODE: ${{ steps.osv.outputs.code }}
+        run: |
+          title="Dependency audit found vulnerable locks"
+          gh label create dependency-audit \
+            --color B60205 \
+            --description "Automated OSV findings in committed dependency locks" \
+            --force
+          issue_number=$(gh issue list \
+            --state open \
+            --label dependency-audit \
+            --json number \
+            --jq '.[0].number // empty')
+          if [[ "$AUDIT_CODE" == "1" ]]; then
+            if [[ -n "$issue_number" ]]; then
+              gh issue edit "$issue_number" --title "$title" \
+                --body-file dependency-audit/issue.md
+            else
+              gh issue create --title "$title" \
+                --label dependency-audit \
+                --body-file dependency-audit/issue.md
+            fi
+          elif [[ -n "$issue_number" ]]; then
+            gh issue close "$issue_number" \
+              --comment "The latest scheduled OSV audit is clean; closing automatically."
+          fi
+
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-audit-${{ github.run_id }}
+          path: dependency-audit/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce audit result
+        shell: bash
+        env:
+          AUDIT_CODE: ${{ steps.osv.outputs.code }}
+        run: |
+          case "$AUDIT_CODE" in
+            0) exit 0 ;;
+            1) echo "Known vulnerabilities found; deduplicated issue updated." >&2 ;;
+            2) echo "Dependency verifier failed internally." >&2 ;;
+            3) echo "OSV was unavailable; no vulnerability issue was created." >&2 ;;
+            *) echo "Unexpected dependency verifier exit: $AUDIT_CODE" >&2 ;;
+          esac
+          exit 1

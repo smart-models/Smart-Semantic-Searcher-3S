@@ -1,0 +1,42 @@
+<evaluation>
+   <qa_pair>
+      <question>Every chunk in the seeded evaluation collection is tagged with exactly one system component it discusses, such as an indexer or a query engine. Considering every chunk in the whole collection, which single component value is attached to the largest number of chunks? Answer with that component's exact value and nothing else.</question>
+      <answer>indexer</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Restrict consideration to chunks whose document type is a design note and whose publication date falls between July 1, 2022 and September 30, 2022 inclusive. Exactly one author is represented among chunks in that window. State that author's name exactly as it is recorded in the author field.</question>
+      <answer>L. Chen</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>In June 2023, the ingestion pipeline stopped accepting nearly all incoming write requests for a little over two hours before an automated fix restored normal service. Find the report describing this outage, then find the separate operational guide written afterward to help responders recover from the same failure pattern, phrased using different terminology than the report itself. Give that guide's title only, leaving off its leading document-type label.</question>
+      <answer>Ingestion Pipeline Backpressure Recovery</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Exactly one chunk in the collection names a specific configuration key that governs the ingestion pipeline's backpressure watermark, expressed in kilobytes. Find that single chunk and report the version value recorded in its payload. Answer with the version number only.</question>
+      <answer>4.6</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Across the entire seeded collection, how many chunks carry no severity value at all in their payload? Answer with the number only.</question>
+      <answer>58</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>One release note explains why the indexer's default number of parallel segment-build threads was raised on hosts with several cores, a change validated by an internal bulk-load benchmark spanning many millions of points. Locate that specific chunk, retrieve it directly by its point id, and report the publication date recorded in its payload. Use YYYY-MM-DD format.</question>
+      <answer>2022-10-20</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>The evaluation collection seeded for this exercise has a fixed set of payload fields configured with dedicated indexes for exact-match and range lookups. How many distinct payload indexes are currently configured on that collection? Answer with the number only.</question>
+      <answer>8</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Considering every author credited anywhere in the collection, most have contributed chunks classified under at least two different document types. Exactly one author's contributions are all classified under a single, identical document type throughout. Name that author using their surname only.</question>
+      <answer>Haddad</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Restrict to chunks tagged with the indexer component. There are more of these than a single default page of results can hold, so you will need to continue past the first page to see the complete set. Across that complete set, whose name is recorded as the author on the chunk or chunks carrying the very earliest publication date? Give the name exactly as it is recorded in the author field.</question>
+      <answer>R. Vasquez</answer>
+   </qa_pair>
+   <qa_pair>
+      <question>Considering only chunks classified as incident reports about the indexer component, is there any such chunk with a publication date earlier than February 1, 2023? Respond with True or False and nothing else.</question>
+      <answer>False</answer>
+   </qa_pair>
+</evaluation>

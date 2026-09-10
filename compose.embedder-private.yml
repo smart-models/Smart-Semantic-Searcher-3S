@@ -1,0 +1,24 @@
+# Overlay applied by scripts/stack.* when EXPOSE_SMART_EMBEDDER_PORT=false.
+#
+# It withdraws the Smart Embedder's published host port. Nothing in the stack
+# needs it: the middleware reaches the embedder over the private Compose network
+# at http://smart-embedder:8000, which compose.yml sets explicitly. The published
+# port exists only so that tests/test_server.py and benchmark.py can be pointed
+# at a running container from the host, and so that a human can curl it.
+#
+# Withdrawing it closes the one path that reaches the embedder without passing
+# through the middleware -- and therefore without its bearer auth, its rate
+# limiting, and the QUERY_RERANK_MAX_CHARS truncation. That path is still bearer
+# protected by SMART_EMBEDDER_API_TOKENS, unless
+# SMART_EMBEDDER_ALLOW_UNAUTHENTICATED_LOCAL=true has been set, in which case
+# this overlay is the only thing closing it.
+#
+# `!reset` is required here: Compose *concatenates* list-valued keys such as
+# `ports` when merging files, so a plain `ports: []` would leave the original
+# publish in place. `!reset` drops the inherited value instead. It needs Compose
+# v2.24 or newer.
+services:
+  smart-embedder-cpu:
+    ports: !reset []
+  smart-embedder-gpu:
+    ports: !reset []

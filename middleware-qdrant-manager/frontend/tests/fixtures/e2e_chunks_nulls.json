@@ -1,0 +1,27 @@
+{
+ "chunks": [
+  {
+   "id": 1,
+   "text": "n1",
+   "m_null": null,
+   "m_mixed": 1
+  },
+  {
+   "id": 2,
+   "text": "n2",
+   "m_null": null,
+   "m_mixed": "two"
+  },
+  {
+   "id": 3,
+   "text": "n3",
+   "m_arr": [
+    1,
+    2
+   ],
+   "m_obj": {
+    "k": "v"
+   }
+  }
+ ]
+}

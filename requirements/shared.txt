@@ -1,0 +1,3 @@
+# Pins validated identically by both services.
+prometheus-client==0.25.0
+httpx==0.28.1

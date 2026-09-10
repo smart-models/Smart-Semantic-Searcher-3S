@@ -1,0 +1,24 @@
+.git
+.gitignore
+**/.env
+**/.env.*
+**/.venv
+**/venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/*.log
+**/model_cache
+**/.cache
+**/tests
+# Anchored to the context root: the repo's own notes/specs tree, not
+# smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/, which the MCP docs resources
+# read at runtime and must ship in the image.
+/docs
+**/benchmark*
+middleware-qdrant-manager/data/*
+middleware-qdrant-manager/frontend/node_modules/
+# Repository guidance is not needed in the image build context.
+README.md
+AGENTS.md

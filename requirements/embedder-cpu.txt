@@ -1,0 +1,8 @@
+-r embedder-base.txt
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.13.0+cpu
+onnxruntime==1.23.2 ; python_version < "3.11"
+onnxruntime==1.27.0 ; python_version >= "3.11"
+onnx==1.22.0
+onnxscript==0.7.1

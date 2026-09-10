@@ -1,0 +1,17 @@
+services:
+  smart-embedder-init-gpu:
+    deploy:
+      resources:
+        reservations:
+          devices: !override
+            - driver: nvidia
+              device_ids: ["${STACK_GPU_DEVICE:?A resolved GPU UUID is required}"]
+              capabilities: [gpu]
+  smart-embedder-gpu:
+    deploy:
+      resources:
+        reservations:
+          devices: !override
+            - driver: nvidia
+              device_ids: ["${STACK_GPU_DEVICE:?A resolved GPU UUID is required}"]
+              capabilities: [gpu]

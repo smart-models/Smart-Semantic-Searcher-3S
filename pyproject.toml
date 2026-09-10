@@ -1,0 +1,38 @@
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+# Vendored third-party code, kept faithful to its upstream source (see
+# smart-qdrant-mcp-server/evals/harness/README.md) rather than reformatted to this
+# repo's house style.
+extend-exclude = ["smart-qdrant-mcp-server/evals/harness"]
+
+[tool.ruff.lint]
+# E/W = pycodestyle (PEP 8 itself), F = pyflakes, D = pydocstyle. E501 is
+# enforced rather than ignored: `ruff format` already wraps everything it can,
+# so a leftover long line is a string or comment that needs a human decision.
+select = ["E", "W", "F", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Test names are the documentation for the behaviour under test; a docstring on
+# each of the 1000+ test functions and methods would restate the name rather
+# than add to it. Modules, classes and helpers still need one - only the
+# per-callable rules are waived, and a docstring that *is* written must still
+# satisfy every formatting rule above.
+"**/tests/**" = ["D102", "D103", "D105", "D107"]
+"scripts/test_*.py" = ["D102", "D103", "D105", "D107"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["middleware-qdrant-manager", "smart-qdrant-mcp-server"]
+markers = [
+  "book(*case_ids): the test is Backend-layer evidence for these test-book cases (see middleware-qdrant-manager/frontend/tests/testbook/coverage-contract.json)",
+]
