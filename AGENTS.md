@@ -43,14 +43,16 @@ Client ────────────────────────�
 | `server-embedder-reranker/` | "Smart Embedder": self-hosted embedding + reranking server with two fixed model profiles (`basic` = BGE-M3 family, `advanced` = Qwen/MILCO). No cloud dependency. |
 | `smart-qdrant-mcp-server/` | **Optional** MCP server exposing the middleware's REST API as 28 tools plus documentation/live-state resources and workflow prompts. The stack functions without it (`MCP_SERVER_ENABLED=false`; `EMBEDDER_ONLY=true` removes it too). |
 | `smart-skill/` | Client-side agent skill for the MCP server. Prompt-side documentation only — no runtime role; the stack runs identically without it. |
-| `scripts/` | What the launchers call: the shared planner `stack_core.py`, `verify_token_config.py`, `verify_compose_security.py`, `verify_dependencies.py` (network-dependent OSV/SBOM audit), and their tests. |
+| `guide/` | Five standalone HTML field guides — `getting-started`, `cli`, `environment`, `architecture`, `hybrid-search-rerank` — plus their README. Each page embeds its own CSS, classic JS and WOFF2 fonts, so it opens over `file://` with no server, build step or network. **Copied verbatim into the MCP server — see [Copied documents](#copied-documents).** |
+| `scripts/` | What the launchers and CI call: the shared planner `stack_core.py` with its host GPU probe `stack_gpu_probe.py`; the preflight verifiers `verify_token_config.py` and `verify_compose_security.py`; `verify_dependencies.py` (network-dependent OSV/SBOM audit) with `security_constraints.py` and `render_dependency_audit_issue.py` beside it; the release gate `release_evidence.py`; the shared fixture helper `stack_test_support.py`; and their tests. |
 | `stack.ps1` / `stack.sh` | **At the repository root.** The only supported way to build/start/stop the stack. |
-| `requirements/` | Human-maintained direct pins (`middleware.txt`, `embedder-cpu.txt`, `embedder-gpu.txt`, `embedder-base.txt`, `shared.txt`, `mcp.txt`, `dev.txt`, `ci.txt`) plus `locks/` transitive constraints applied only inside Docker builds. |
-| `.github/workflows/ci.yml` | The verification pass below, run on every push to `main` and every pull request. Add a job here when you add a suite. |
-| `compose.yml` / `Dockerfile` | Multi-target build (`middleware`, `smart-embedder-cpu`, `smart-embedder-gpu`, plus non-network-facing `*-init-*` prep containers per hardware profile). |
+| `requirements/` | Human-maintained direct pins (`middleware.txt`, `embedder-cpu.txt`, `embedder-gpu.txt`, `embedder-base.txt`, `shared.txt`, `mcp.txt`, `dev.txt`, `ci.txt`), the `security-constraints.txt` floor applied over them, and `locks/` transitive constraints applied only inside Docker builds. [`requirements/README.md`](requirements/README.md) is its reference. |
+| `.github/` | Three workflows plus the operator release checklist, documented in [`.github/README.md`](.github/README.md): `workflows/ci.yml` (every push to `main` and every PR), `workflows/dependency-audit.yml` (weekly OSV/SBOM cron that opens, updates and closes one deduplicated issue), `workflows/release-check.yml` (`workflow_dispatch` offline release gate that emits an evidence manifest), and `RELEASE_CHECKLIST.md`. Add a job to `ci.yml` when you add a suite. |
+| `compose.yml` / `Dockerfile` | Multi-target build (`middleware`, `smart-qdrant-mcp`, `smart-embedder-cpu`, `smart-embedder-gpu`, plus non-network-facing `*-init-*` prep containers per hardware profile). |
 | `compose.embedder-private.yml` | One-purpose overlay the launchers add when `EXPOSE_SMART_EMBEDDER_PORT=false`; withdraws the host port publish with `ports: !reset []` (a plain `ports: []` would concatenate, not replace). |
 | `compose.gpu-device.yml` | Single physical GPU overlay; both GPU init and serving reservations use the UUID resolved by the launcher planner. |
-| `docs/` | **Root-only, gitignored working material.** Untracked specs and agent notes live here; never `git add -f` them. Versioned service documentation under `smart-qdrant-mcp-server/docs/` and `smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/` is different and must be maintained when its behaviour changes. |
+| `docs/` | **Gitignored working material** — at the root and under `middleware-qdrant-manager/` and `server-embedder-reranker/`. Untracked specs and agent notes live there; never `git add -f` them, and do not assume the directory exists. `smart-qdrant-mcp-server/docs/` is the one exception: it is **versioned** (`ingest-patterns.md`), as is `smart_qdrant_mcp/resources/docs/`. Both must be maintained when their behaviour changes. |
+| `smart-qdrant-mcp-server/evals/` | Evaluation corpus, `seed_evals.py` and the eval definition `smart_qdrant_mcp_eval.xml`, run against a **live** MCP server. `evals/harness/` is vendored third-party code — excluded from lint and deliberately not reformatted; read [`evals/harness/README.md`](smart-qdrant-mcp-server/evals/harness/README.md) before editing anything there. |
 
 ## Where to look first
 
@@ -63,8 +65,12 @@ truth for its subject; none repeats another.
 | What can the REST API do? Endpoints, filters, ingest, export, config. | [`middleware-qdrant-manager/README.md`](middleware-qdrant-manager/README.md) |
 | Embedding/reranking behaviour, model profiles, autotuner, metrics. | [`server-embedder-reranker/README.md`](server-embedder-reranker/README.md) |
 | MCP tools, confirmation gates, resources, prompts. | [`smart-qdrant-mcp-server/README.md`](smart-qdrant-mcp-server/README.md) |
-| Educational browser guides: console workflow, architecture and hybrid search. | [`guide/README.md`](guide/README.md) |
-| The console E2E suite (destructive — read before running). | [`middleware-qdrant-manager/frontend/tests/README.md`](middleware-qdrant-manager/frontend/tests/README.md) |
+| The client-side skill: what an agent is told about those tools. | [`smart-skill/README.md`](smart-skill/README.md), with [`SKILL.md`](smart-skill/smart-qdrant-mcp/SKILL.md), [`references/reference.md`](smart-skill/smart-qdrant-mcp/references/reference.md) and [`references/playbooks.md`](smart-skill/smart-qdrant-mcp/references/playbooks.md) |
+| Educational browser guides: startup, `.env`, console workflow, architecture, hybrid search. | [`guide/README.md`](guide/README.md) |
+| The console test suites — which need a stack, which are intercepted, which are destructive. | [`middleware-qdrant-manager/frontend/tests/README.md`](middleware-qdrant-manager/frontend/tests/README.md) |
+| Dependency pins, lock regeneration, which image target a package affects. | [`requirements/README.md`](requirements/README.md) |
+| CI, the scheduled dependency audit, the release gate and its evidence. | [`.github/README.md`](.github/README.md) and [`.github/RELEASE_CHECKLIST.md`](.github/RELEASE_CHECKLIST.md) |
+| Staging a corpus file for ingest (an operator step, not an MCP one). | [`smart-qdrant-mcp-server/docs/ingest-patterns.md`](smart-qdrant-mcp-server/docs/ingest-patterns.md) |
 | Every environment variable, with its shipped default. | `.env.example` (versioned, exhaustive) |
 
 Each service README follows one fixed skeleton — `Purpose and boundaries`,
@@ -76,6 +82,29 @@ and limits` answers "can it do X?"; `Invariants` answers "may I change this?".
 
 The root `README.md` is written for the human operator and is **owned by the
 repository owner** — do not rewrite it unless asked directly.
+
+### Copied documents
+
+The container image ships `smart_qdrant_mcp/` alone, so the MCP server carries
+its own **byte-for-byte copies** of eleven repository documents and serves them
+as `docs://` resources. `smart-qdrant-mcp-server/tests/test_resources_docs.py`
+compares every copy against its original on every run: editing an original
+without re-copying it **fails CI**.
+
+| Original | Copy under `smart_qdrant_mcp/resources/docs/` |
+|---|---|
+| `guide/getting-started.html`, `cli.html`, `environment.html`, `architecture.html`, `hybrid-search-rerank.html` | `guide/` — same five filenames |
+| `middleware-qdrant-manager/README.md` | `reference/middleware-api.md` |
+| `scripts/README.md` | `reference/launcher-scripts.md` |
+| `server-embedder-reranker/README.md` | `reference/smart-embedder.md` |
+| `smart-qdrant-mcp-server/README.md` | `reference/mcp-server.md` |
+| `smart-skill/README.md` | `reference/agent-skills.md` |
+| `smart-skill/smart-qdrant-mcp/SKILL.md` | `reference/smart-qdrant-skill.md` |
+
+Re-copy in the **same commit** as the edit, then confirm with
+`py -m pytest smart-qdrant-mcp-server/tests/test_resources_docs.py -q`. This is
+the one place where "each fact lives in exactly one document" does not apply:
+the duplication is deliberate and mechanically enforced, not drift.
 
 ## Common commands
 
@@ -137,17 +166,30 @@ $env:QHM_E2E_TOKEN = '<token>'; npm test
 Pop-Location
 ```
 
-The frontend's pure model tests do not need the stack:
-`node --test middleware-qdrant-manager/frontend/tests/query-models.test.mjs`.
+The MCP evaluations under `smart-qdrant-mcp-server/evals/` likewise need a live
+MCP server; they are not part of any offline pass.
 
-The Playwright suite is **destructive** against `e2e_`-prefixed Qdrant
-collections — read its README first.
+Not every browser test needs a stack. Three families live under
+`middleware-qdrant-manager/frontend/tests/`:
+
+| Family | Needs a stack? | How to run |
+|---|---|---|
+| `*.test.mjs` — pure model, harness, coverage-gate and telemetry tests (six files) | No | `npm run test:unit`, i.e. `node --test tests/*.test.mjs` |
+| Intercepted Playwright specs — `application-state`, `application-reindex`, `application-accessibility`, `harness-browser`, and the UI-mock `tb-ui`, `tb-monitoring`, `tb-filter-validation` | No — a browser, no token, no Qdrant. They intercept the page, local assets and every API request, and abort unknown routes | `npx playwright test tests/application-state.spec.js tests/application-reindex.spec.js tests/application-accessibility.spec.js tests/harness-browser.spec.js --workers=1` |
+| The remaining live specs of the 32 (`a-*`, `b-*`, `c-*`, `d-*`, `e-*`, `tb-*-live`, `tb-payload-ids`, `tb-export-query`, `z*`, `*.e2e.spec.js`) | **Yes** | `npm test` — see below |
+
+The first two families are exactly what CI's `frontend-unit` job runs, so they
+are ordinary pre-change checks, not live integration.
+
+`npm test` runs the whole suite and is **destructive** against `e2e_`-prefixed
+Qdrant collections. Read its README before running it: three specs are excluded
+from the default configuration, and destructive series consume their fixtures.
 
 ### Full verification pass
 
-The check to run before opening a change. `.github/workflows/ci.yml` runs the
-same set on every push to `main` and every pull request, so this is what CI
-will say — running it locally only tells you sooner:
+The check to run before opening a change. `.github/workflows/ci.yml` runs this
+on every push to `main` and every pull request, across five jobs — `lint`,
+`unit` (a Python 3.10/3.11 matrix), `frontend-unit`, `launchers`, `compose`:
 
 ```powershell
 py -m pytest middleware-qdrant-manager/tests -q
@@ -160,10 +202,24 @@ py -m ruff check .
 py -m ruff format --check .
 shellcheck stack.sh
 Invoke-ScriptAnalyzer -Path stack.ps1 -Severity Warning,Error
+Push-Location middleware-qdrant-manager/frontend
+npm run test:unit
+npx playwright test tests/application-state.spec.js tests/application-reindex.spec.js tests/application-accessibility.spec.js tests/harness-browser.spec.js tests/tb-monitoring.spec.js tests/tb-filter-validation.spec.js tests/tb-ui.spec.js --workers=1
+Pop-Location
 docker build --check .
 docker compose --env-file .env.example --profile cpu config --quiet
 docker compose --env-file .env.example --profile gpu config --quiet
+py scripts\verify_compose_security.py --env-file .env.example
+Select-String -Path .env.example -Pattern '^[A-Z][A-Z0-9_]*=' | ForEach-Object { $_.Line } | py scripts\verify_token_config.py
 ```
+
+Two CI-only differences remain, by design: CI runs the Python suites on **both**
+3.10 and 3.11, and adds one `e-monitoring` history slice
+(`--grep 'M-G —'`). Neither changes what a local pass proves.
+
+`workflow_dispatch` also offers `release-check.yml`: the same offline set plus
+`security_constraints.py`, the OSV audit and an evidence manifest. Run it when
+cutting a release, not per change — see [`.github/README.md`](.github/README.md).
 
 The two launcher linters are the only tools here that are not already a
 dependency of a service. Install them once: `winget install koalaman.shellcheck`
@@ -176,15 +232,24 @@ an exit code, so read its output rather than `$LASTEXITCODE`.
 ### Middleware (`middleware-qdrant-manager/qdrant_middleware/`)
 
 - **App factory:** `main.create_app()` builds an independent FastAPI app per
-  `Settings` instance (tests use it for isolated apps); `main.app` is the
-  module-level instance Uvicorn serves.
+  `Settings` instance (tests use it for isolated apps). `main.app` is what
+  Uvicorn serves, but it is **built lazily on first attribute access** via a
+  module-level `__getattr__` (PEP 562). Do not "simplify" that into
+  `app = create_app()`: eager construction would run token validation at import
+  time and break every test that imports the module only for `create_app`.
 - **Middleware stack, outermost → innermost:** `timeout+metrics` →
-  `shutdown guard` → `rate limit` → `body-size` → [`console headers`] →
-  `route`. `FastAPI.add_middleware` inserts at position 0, so the *last*
-  registration in `main.py` (`TimeoutMetricsMiddleware`) ends up outermost.
-  The console-headers layer is present only when `EXPOSE_FRONTEND=true` and is
-  innermost by design: it decorates the response for `/` and `/assets/*` on the
-  way out instead of deciding whether to produce one.
+  `shutdown guard` → `rate limit` → `body-size` → [`hide disabled swagger`] →
+  [`console headers`] → `route`. Registration inserts at position 0, so the
+  *last* registration in `main.py` (`TimeoutMetricsMiddleware`) ends up
+  outermost — whether it used `add_middleware` or the `app.middleware("http")`
+  decorator form, which this file mixes.
+  Two layers are conditional. The console-headers layer is present only when
+  `EXPOSE_FRONTEND=true` and is innermost by design: it decorates the response
+  for `/` and `/assets/*` on the way out instead of deciding whether to produce
+  one. The swagger layer is present only when
+  `EXPOSE_MIDDLEWARE_SWAGGER=false`, and 404s `/docs`, `/redoc` and
+  `/openapi.json` — without it the frontend SPA fallback would turn those
+  disabled paths into UI responses.
   Bearer auth (`require_bearer_auth`) is **not** one of those layers: it is a
   route-level dependency attached via
   `app.include_router(..., dependencies=protected)`, so it runs during route
@@ -233,7 +298,10 @@ an exit code, so read its output rather than `$LASTEXITCODE`.
   belongs only to the BGE profile, `advanced_*` only to the Qwen/MILCO profile;
   unprefixed modules (`smart-embedder.py`, `autotune_entrypoint.py`,
   `benchmark.py`, `model_bootstrap.py`, `model_prepare.py`,
-  `model_revisions.py`, `vram_budget.py`) are shared.
+  `model_revisions.py`, `request_budget.py`, `vram_budget.py`) are shared.
+  `request_budget.py` bounds accepted token units and estimated JSON output at
+  admission — an estimate, not a physical-memory reservation; `vram_budget.py`
+  is the one that reasons about device memory.
 - `smart-embedder.py` (5k+ lines) is the whole FastAPI app: profile selection,
   dynamic/length-aware batching, both model wrappers, schemas, Prometheus
   metrics, auth and lifecycle. **Read the relevant section, never the whole
@@ -261,8 +329,10 @@ an exit code, so read its output rather than `$LASTEXITCODE`.
 
 - A thin, stateless translation layer: every tool call becomes one or more HTTP
   requests to the middleware. It never talks to Qdrant or Smart Embedder
-  directly, and holds no data of its own. It exposes 28 tools, 9 static
-  documentation resources, 3 live-state resources, and 3 workflow prompts.
+  directly, and holds no data of its own. It exposes 28 tools, 23 resources —
+  20 static `docs://` documents (9 teaching documents written for the server,
+  plus 11 copies covered by [Copied documents](#copied-documents)) and 3
+  `qhm://` live-state proxies — and 3 workflow prompts.
 - `tools/*.py` define each tool's input model, confirmation gate and limits —
   the client's tool list is generated from these. `tool_map.py` maps tool →
   middleware endpoint, and tests compare it against the middleware's actually
@@ -279,8 +349,10 @@ an exit code, so read its output rather than `$LASTEXITCODE`.
   at a filename the middleware derives itself.
 - A tool rename or re-parameterisation must also update
   `smart-skill/smart-qdrant-mcp/references/reference.md` in the same change.
-  The link is documented but not mechanically tested; update the skill's
-  playbooks when the recommended workflow changes as well.
+  That link is documented but not mechanically tested; update
+  `references/playbooks.md` when the recommended workflow changes as well.
+  `smart-skill/README.md` and `smart-skill/smart-qdrant-mcp/SKILL.md` *are*
+  mechanically tested — they are [copied documents](#copied-documents).
 
 ### Cross-cutting
 
@@ -345,8 +417,15 @@ Add focused regression coverage beside the affected service. Prefer unit tests
 that isolate network and model dependencies with fakes or mocks — every offline
 suite in this repo already does. Run the relevant suite plus Ruff. Changes to
 Compose, ports, volumes or security settings must also pass `py -m pytest
-scripts -q` and Compose config validation. Run the Playwright suite from
+scripts -q` and Compose config validation. Run the Playwright specs from
 `middleware-qdrant-manager/frontend/` when changing console behaviour.
+
+`pyproject.toml` registers one marker: `book(*case_ids)` declares a Python test
+as Backend-layer evidence for the listed test-book cases. Its contract lives in
+`middleware-qdrant-manager/frontend/tests/testbook/coverage-contract.json`, the
+cases in `testbook/test-book-e2e.md`, and CI enforces the mapping through the
+frontend coverage gate. Adding backend coverage for a case means marking it —
+an unmarked test does not count toward that gate.
 
 ### Documentation
 
@@ -361,8 +440,10 @@ scripts -q` and Compose config validation. Run the Playwright suite from
 - Agent-facing content is written in English. Italian rationale documents under
   the untracked `docs/` are deliberate, not a bug.
 - Each fact belongs in exactly one document. When two files would say the same
-  thing, one of them links instead.
-- The one deliberate exception is [Architecture notes](#architecture-notes)
+  thing, one of them links instead. The exception is verbatim duplication that
+  a test enforces — see [Copied documents](#copied-documents), which is a
+  packaging constraint rather than a second source of truth.
+- The other deliberate exception is [Architecture notes](#architecture-notes)
   below: this file is loaded into every session, so it restates the small set
   of load-bearing facts an agent must hold *before* deciding which README to
   open. **Where this file and a service README disagree, the README wins** —
@@ -380,7 +461,8 @@ the change crosses a boundary:
 | REST endpoint, schema, auth, ingest, query, or retry | Middleware tests plus the MCP suite if `tool_map.py` or a shared contract is affected. |
 | MCP tool, resource, prompt, or parameter | MCP tests and the matching `smart-skill/` reference/playbook update. |
 | Launcher, `.env.example`, Compose, port, volume, profile, or security | `py -m pytest scripts -q`, both CPU/GPU Compose config checks, and the relevant Docker validation. |
-| Frontend source or console behaviour | Rebuild the middleware image, run the focused Node test, and run the destructive Playwright suite only after reading its README. |
+| Frontend source or console behaviour | Rebuild the middleware image, run `npm run test:unit` and the intercepted Playwright specs, and run the destructive live suite only after reading its README. |
+| Any of the eleven [copied documents](#copied-documents) | Re-copy into `smart_qdrant_mcp/resources/docs/` in the same commit, then `py -m pytest smart-qdrant-mcp-server/tests/test_resources_docs.py -q`. |
 | Dependency pin or model revision | Rebuild the affected image, regenerate the matching lock from the verified image, run `py scripts\verify_dependencies.py` (network; audits the lock against OSV), and repeat both CPU and GPU smoke coverage where applicable. |
 
 Do not call the live embedder or Playwright suite an offline test. Live checks need
@@ -391,9 +473,11 @@ it queries the OSV database, so it needs network access.
 
 ## Commit and pull request conventions
 
-Git history **is** available; the remote is
-`https://github.com/smart-models/Personal-Smart-Embedder`. Follow the existing
-convention rather than inventing one — read `git log` when in doubt.
+**Check what this clone actually has before relying on either.** `git log` may
+be a squashed initial commit, and `git remote -v` may be empty — the upstream
+project lives at `https://github.com/smart-models/Personal-Smart-Embedder`, but
+that remote is not necessarily configured here. When history is too short to
+read a convention from, use the examples below rather than inventing one.
 
 Commits use **Conventional Commits** with an optional scope, and a lowercase,
 imperative subject that says what changed and, where it fits, why:
@@ -452,6 +536,7 @@ Things that have already cost time here.
 
 | Trap | Reality |
 |---|---|
+| Editing a README or a `guide/` page and stopping there | Eleven documents have byte-for-byte copies inside the MCP package and a test that compares them. Re-copy in the same commit — see [Copied documents](#copied-documents). |
 | Editing a launcher flag in one shell only | `stack.ps1` and `stack.sh` are held at parity by `scripts/test_stack_parity.py`, and both must match `scripts/README.md`. |
 | Putting launcher logic in the shell scripts | Everything deciding *what Compose is asked to do* lives in `scripts/stack_core.py`, once, for both. |
 | "Simplifying" `down`, `logs`, `status`, `version`, `help` | They deliberately bypass the planner so stopping a stack works with `.env` absent or malformed and no Python on `PATH`. `scripts/test_stack_recovery.py` enforces it. |
@@ -468,4 +553,9 @@ Things that have already cost time here.
 | `README.md` | The human operator's entry point. Owned by the repository owner. |
 | `.env.example` | The exhaustive, versioned configuration template. |
 | `scripts/README.md` | The launcher reference. |
+| `requirements/README.md` | The dependency-pin and lock reference. |
+| `.github/README.md` | CI, the scheduled dependency audit, and the release gate. |
+| `.mcp.json` | Client-side MCP registration for this repo, pointing at `http://127.0.0.1:6337/mcp` with `${MCP_TOKEN}`. Ships **disabled**; it configures a client, not the server. |
+| `.gitattributes` | The line-ending contract. Everything is LF in the index, then forced per type in the working tree — `stack.sh` with CRLF fails at the shebang. Do not weaken it to fix a local diff. |
+| `.dockerignore` | Keeps caches, `.env` and test material out of every build context. |
 | `LICENSE` | GNU Affero General Public License v3.0, verbatim. Never edit it, and never add a per-file licence header without being asked — the repository states its terms in this one file. |

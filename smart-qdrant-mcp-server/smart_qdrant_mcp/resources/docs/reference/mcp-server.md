@@ -30,8 +30,8 @@ Client / MCP client → smart-qdrant-mcp (MCP, 6337) → middleware-qdrant-manag
 - A thin, stateless translation layer. Its complete surface covers every
   middleware operation: **28 MCP tools** map all tool-eligible routes, while
   `GET /metrics` is intentionally exposed only through a live resource. It
-  also exposes **12 documentation/live-state resources** and **3 workflow
-  prompts**.
+  also exposes **23 resources** — 20 static `docs://` documents and 3 `qhm://`
+  live-state proxies — and **3 workflow prompts**.
 - Optional. The stack works without it; it only adds an agent-facing surface
   over the same REST contract any HTTP client can already use.
 
