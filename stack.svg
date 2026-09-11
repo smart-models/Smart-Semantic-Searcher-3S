@@ -1,0 +1,229 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="850" viewBox="0 0 1200 850" fill="none" role="img" aria-labelledby="stack2-title stack2-desc">
+  <title id="stack2-title">Smart Semantic Searcher — stack architecture</title>
+  <desc id="stack2-desc">Applications call the Qdrant middleware over REST. AI agents reach the same middleware through the optional MCP server, which exposes 28 tools, resources and prompts. The middleware calls Smart Embedder for local embedding and reranking, and a separately provided Qdrant instance for vector storage and dense plus sparse retrieval. Qdrant may run locally or remotely. Smart Embedder supports CPU or NVIDIA GPU hardware and the basic or advanced model profile. A search embeds the query, retrieves and fuses candidates in Qdrant, reranks them, and returns ranked hits. Arrows show calls; responses follow the same connections back.</desc>
+
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1200" y2="850" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0d182a"/>
+      <stop offset="1" stop-color="#070e1a"/>
+    </linearGradient>
+    <radialGradient id="ambient" cx="0" cy="0" r="1" gradientTransform="translate(510 466) rotate(90) scale(330 550)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2468b6" stop-opacity=".15"/>
+      <stop offset="1" stop-color="#2468b6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="middleware-fill" x1="76" y1="442" x2="744" y2="550" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#163f71"/>
+      <stop offset="1" stop-color="#102944"/>
+    </linearGradient>
+    <linearGradient id="middleware-stroke" x1="76" y1="442" x2="744" y2="550" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6cb5ff"/>
+      <stop offset=".55" stop-color="#3581ce"/>
+      <stop offset="1" stop-color="#264e76"/>
+    </linearGradient>
+    <linearGradient id="mcp-fill" x1="434" y1="318" x2="744" y2="398" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#17375d"/>
+    <stop offset="1" stop-color="#11223a"/>
+  </linearGradient>
+  <linearGradient id="mcp-stroke" x1="434" y1="318" x2="744" y2="398" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#5ea6f2"/>
+    <stop offset=".6" stop-color="#3a76b4"/>
+    <stop offset="1" stop-color="#2a4f78"/>
+  </linearGradient>
+  <linearGradient id="emb-fill" x1="76" y1="602" x2="744" y2="708" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#17375d"/>
+    <stop offset="1" stop-color="#0f2135"/>
+  </linearGradient>
+  <linearGradient id="emb-stroke" x1="76" y1="602" x2="744" y2="708" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#5ea6f2"/>
+    <stop offset=".6" stop-color="#3a76b4"/>
+    <stop offset="1" stop-color="#294a70"/>
+  </linearGradient>
+  <linearGradient id="entry-fill" x1="0" y1="0" x2="1" y2="1">
+    <stop stop-color="#144c4b"/>
+    <stop offset="1" stop-color="#0e2630"/>
+  </linearGradient>
+  <linearGradient id="entry-stroke" x1="0" y1="0" x2="1" y2="1">
+    <stop stop-color="#4fd3c4"/>
+    <stop offset=".6" stop-color="#2f8f88"/>
+    <stop offset="1" stop-color="#24605e"/>
+  </linearGradient>
+  <linearGradient id="qdrant-fill" x1="846" y1="442" x2="1160" y2="662" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#331624"/>
+      <stop offset="1" stop-color="#1b0e17"/>
+    </linearGradient>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r=".75" fill="#a0badc" fill-opacity=".10"/>
+    </pattern>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="m1 1 5 3-5 3" stroke="#7bb9fb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <g id="browser-icon" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="4" width="24" height="20" rx="4"/>
+      <path d="M2 10h24m-19-3h.01m4 0h.01m0 8-3 3 3 3m6-6 3 3-3 3"/>
+    </g>
+    <g id="agent-icon" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="4" y="8" width="20" height="16" rx="5"/>
+      <path d="M14 4v4M1 14v5m26-5v5M10 19h8"/>
+      <circle cx="10" cy="14" r="1" fill="currentColor" stroke="none"/>
+      <circle cx="18" cy="14" r="1" fill="currentColor" stroke="none"/>
+      <circle cx="14" cy="3" r="1.5"/>
+    </g>
+    <g id="bridge-icon" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m9 7-6 7 6 7m10-14 6 7-6 7m-3-16-4 20"/>
+    </g>
+    <g id="middleware-icon" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m14 3 12 7-12 7L2 10l12-7ZM2 16l12 7 12-7M2 22l12 7 12-7"/>
+    </g>
+    <g id="chip-icon" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="6" y="6" width="18" height="18" rx="4"/>
+      <rect x="11" y="11" width="8" height="8" rx="2"/>
+      <path d="M10 2v4m10-4v4M10 24v4m10-4v4M2 10h4m-4 10h4m18-10h4m-4 10h4"/>
+    </g>
+    <g id="database-icon" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <ellipse cx="15" cy="7" rx="12" ry="5"/>
+      <path d="M3 7v16c0 2.8 5.4 5 12 5s12-2.2 12-5V7M3 15c0 2.8 5.4 5 12 5s12-2.2 12-5"/>
+    </g>
+    <g id="step-arrow" stroke="#55708f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M0 0h21m-5-5 5 5-5 5"/>
+    </g>
+  </defs>
+
+  <style>
+    text { font-family: "Segoe UI", Helvetica, Arial, sans-serif; }
+    .heading { fill: #f0f6ff; font-weight: 600; }
+    .body { fill: #b4c6de; font-size: 15px; }
+    .small { fill: #94acc8; font-size: 13px; }
+    .eyebrow { fill: #91abc9; font-size: 11px; font-weight: 600; letter-spacing: 1.6px; }
+    .mono { font-family: Consolas, "Liberation Mono", monospace; font-size: 12px; }
+    .blue { fill: #8bc5ff; }
+    .qdrant { fill: #ff8fa3; }
+    .connector { stroke: #7bb9fb; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+
+  <!-- Self-contained artwork: no remote assets, fonts, or scripts. -->
+  <rect x=".5" y=".5" width="1199" height="849" rx="24" fill="url(#background)" stroke="#24364e"/>
+  <rect x="24" y="156" width="1152" height="580" rx="20" fill="url(#dots)"/>
+  <rect x="24" y="156" width="1152" height="580" rx="20" fill="url(#ambient)"/>
+
+  <!-- Product identity. -->
+  <text x="410" y="44" text-anchor="middle" class="eyebrow" style="fill: #8bc5ff">SMART SEMANTIC SEARCHER</text>
+  <text x="410" y="96" text-anchor="middle" class="heading" font-size="40" letter-spacing="-.9">One stack. Smarter retrieval.</text>
+  <text x="410" y="128" text-anchor="middle" class="body" style="font-size: 17px">Local models, hybrid search, and a direct path for apps and agents.</text>
+  <g transform="translate(1100 36) scale(.46)">
+    <circle cx="64" cy="64" r="64" fill="#050a12" stroke="#29405b" stroke-width="2"/>
+    <g stroke-width="12.73" stroke-linecap="round">
+      <path d="M31.24 38.31A15.0492 15.0492 0 1 1 41.88 64A15.0492 15.0492 0 1 1 31.24 89.69" stroke="#2e6db4"/>
+      <path d="M92.35 38.31A15.0492 15.0492 0 1 0 81.71 64A15.0492 15.0492 0 1 1 71.07 89.69" stroke="#5aa9ff"/>
+    </g>
+  </g>
+
+  <!-- The boundary contains only services managed by this project. -->
+  <rect x="40" y="286" width="740" height="450" rx="20" fill="#101e31" fill-opacity=".62" stroke="#344c69" stroke-dasharray="4 7"/>
+  <text x="64" y="312" class="eyebrow">3S DOCKER STACK</text>
+
+  <!-- Calls flow downward; Qdrant remains a separate dependency. -->
+  <path d="M231 252V435" class="connector" marker-end="url(#arrow-blue)"/>
+  <path d="M589 252V311" class="connector" marker-end="url(#arrow-blue)"/>
+  <path d="M589 398V435" class="connector" marker-end="url(#arrow-blue)"/>
+  <path d="M410 550V595" class="connector" marker-end="url(#arrow-blue)"/>
+  <path d="M744 496H839" class="connector" marker-end="url(#arrow-blue)"/>
+
+  <rect x="245" y="350" width="51" height="25" rx="7" fill="#13263d"/>
+  <text x="270.5" y="367" text-anchor="middle" class="mono blue">REST</text>
+  <rect x="599" y="273.5" width="116" height="25" rx="7" fill="#13263d"/>
+  <text x="657" y="291" text-anchor="middle" class="small blue">MCP over HTTP</text>
+  <rect x="599" y="408" width="51" height="25" rx="7" fill="#13263d"/>
+  <text x="624.5" y="425" text-anchor="middle" class="mono blue">REST</text>
+  <rect x="421" y="564" width="114" height="25" rx="7" fill="#13263d"/>
+  <text x="478" y="581" text-anchor="middle" class="small blue">embed + rerank</text>
+  <rect x="766" y="464" width="58" height="25" rx="7" fill="#13263d"/>
+  <text x="795" y="481" text-anchor="middle" class="mono blue">query</text>
+  <rect x="755" y="501" width="80" height="25" rx="7" fill="#13263d"/>
+  <text x="795" y="518" text-anchor="middle" class="mono blue">+ upsert</text>
+
+  <!-- Entry points. -->
+  <rect x="76" y="174" width="310" height="78" rx="14" fill="url(#entry-fill)" stroke="url(#entry-stroke)" stroke-width="1.2"/>
+  <rect x="92" y="191" width="44" height="44" rx="12" fill="#1b5753"/>
+  <use href="#browser-icon" x="100" y="199" color="#b9f2e8"/>
+  <text x="151" y="206" class="heading" font-size="21">Your application</text>
+  <text x="151" y="230" class="small" style="fill: #9fc9c5">Any language + HTTP client</text>
+
+  <rect x="434" y="174" width="310" height="78" rx="14" fill="url(#entry-fill)" stroke="url(#entry-stroke)" stroke-width="1.2"/>
+  <rect x="450" y="191" width="44" height="44" rx="12" fill="#1b5753"/>
+  <use href="#agent-icon" x="458" y="198" color="#b9f2e8"/>
+  <text x="509" y="206" class="heading" font-size="21">Your AI agent</text>
+  <text x="509" y="230" class="small" style="fill: #9fc9c5">MCP client + Smart-Skill</text>
+
+  <!-- Optional translation layer. -->
+  <rect x="430" y="314" width="318" height="88" rx="18" stroke="#4b9af0" stroke-opacity=".10" stroke-width="7"/>
+  <rect x="434" y="318" width="310" height="80" rx="14" fill="url(#mcp-fill)" stroke="url(#mcp-stroke)" stroke-width="1.2"/>
+  <use href="#bridge-icon" x="452" y="331" color="#bcd9ff"/>
+  <text x="492" y="352" class="heading" font-size="21">MCP server</text>
+  <rect x="650" y="332" width="78" height="22" rx="11" fill="#2b4a6c"/>
+  <text x="689" y="347" text-anchor="middle" fill="#c1d8f4" font-size="10" font-weight="600" letter-spacing=".8">OPTIONAL</text>
+  <text x="454" y="380" class="small">28 tools · resources · prompts</text>
+  <rect x="656" y="362" width="68" height="26" rx="8" fill="#0b2038" stroke="#315b84"/>
+  <text x="690" y="380" text-anchor="middle" class="mono blue">:6337</text>
+
+  <!-- Primary API and orchestration. -->
+  <rect x="72" y="438" width="676" height="116" rx="20" stroke="#4b9af0" stroke-opacity=".10" stroke-width="7"/>
+  <rect x="76" y="442" width="668" height="108" rx="16" fill="url(#middleware-fill)" stroke="url(#middleware-stroke)" stroke-width="1.2"/>
+  <rect x="94" y="461" width="42" height="42" rx="12" fill="#255a91"/>
+  <use href="#middleware-icon" x="101" y="466" color="#d8edff"/>
+  <text x="152" y="480" class="heading" font-size="27" letter-spacing="-.4">Qdrant middleware</text>
+  <text x="152" y="503" class="mono" fill="#9cc7f1">middleware-qdrant-manager</text>
+  <text x="152" y="530" class="body" style="fill: #c5daf0; font-size: 14px">Ingest · hybrid search · reranking · collection lifecycle</text>
+  <rect x="656" y="460" width="68" height="26" rx="8" fill="#0b2038" stroke="#315b84"/>
+  <text x="690" y="478" text-anchor="middle" class="mono blue">:6336</text>
+
+  <!-- Local model execution. -->
+  <rect x="72" y="598" width="676" height="114" rx="20" stroke="#4b9af0" stroke-opacity=".10" stroke-width="7"/>
+  <rect x="76" y="602" width="668" height="106" rx="16" fill="url(#emb-fill)" stroke="url(#emb-stroke)" stroke-width="1.2"/>
+  <rect x="94" y="621" width="42" height="42" rx="12" fill="#24527f"/>
+  <use href="#chip-icon" x="100" y="627" color="#cfe6ff"/>
+  <text x="152" y="639" class="heading" font-size="26" letter-spacing="-.4">Smart Embedder</text>
+  <text x="152" y="662" class="mono" fill="#a4c6e6">server-embedder-reranker</text>
+  <text x="152" y="688" class="body" style="font-size: 14px">Local models · dense + sparse vectors · cross-encoder reranking</text>
+  <rect x="656" y="620" width="68" height="26" rx="8" fill="#0b2038" stroke="#3a628c"/>
+  <text x="690" y="638" text-anchor="middle" class="mono blue">:8010</text>
+  <text x="724" y="662" text-anchor="end" class="small">basic / advanced</text>
+
+  <text x="64" y="728" class="eyebrow" style="font-size: 10px; letter-spacing: 1px">ONE COMPOSE · EVERY PORT ON 127.0.0.1</text>
+  <text x="756" y="728" text-anchor="end" class="eyebrow" style="font-size: 10px; letter-spacing: 1px">CPU OR NVIDIA GPU</text>
+
+  <!-- Qdrant is provided by the operator, outside the managed stack. -->
+  <text x="846" y="418" class="eyebrow" style="fill: #c4818f">EXTERNAL DEPENDENCY</text>
+  <rect x="846" y="442" width="314" height="220" rx="16" fill="url(#qdrant-fill)" stroke="#7a3247"/>
+  <rect x="864" y="461" width="42" height="42" rx="12" fill="#4d1628"/>
+  <use href="#database-icon" x="870" y="467" color="#ff9aab"/>
+  <text x="921" y="489" class="heading" font-size="28" letter-spacing="-.4">Qdrant</text>
+  <text x="870" y="532" class="body">Vector storage</text>
+  <text x="870" y="558" class="body">Dense + sparse fusion</text>
+  <line x1="870" y1="579" x2="1136" y2="579" stroke="#4a2029"/>
+  <text x="870" y="606" class="qdrant" font-size="14" font-weight="600">Your instance</text>
+  <rect x="1068" y="588" width="68" height="26" rx="8" fill="#241019" stroke="#7a3247"/>
+  <text x="1102" y="606" text-anchor="middle" class="mono qdrant">:6333</text>
+  <text x="870" y="637" class="small" style="fill: #bf94a0">Local or remote · QDRANT_URL</text>
+  <text x="846" y="689" class="small">Connected by 3S.</text>
+  <text x="846" y="710" class="small">Deployed separately by you.</text>
+
+  <!-- A compact reading guide for the retrieval sequence. -->
+  <rect x="40" y="762" width="1120" height="62" rx="14" fill="#111f31" stroke="#263a52"/>
+  <text x="62" y="798" class="eyebrow" style="fill: #b0c4dc">ONE SEARCH</text>
+  <line x1="168" y1="780" x2="168" y2="806" stroke="#31475f"/>
+  <circle cx="198" cy="793" r="12" fill="#203d60"/>
+  <text x="198" y="797" text-anchor="middle" font-size="11" font-weight="600" fill="#a8d4ff">1</text>
+  <text x="220" y="798" class="body" style="fill: #d4e1f2">Embed query</text>
+  <use href="#step-arrow" x="345" y="793"/>
+  <circle cx="408" cy="793" r="12" fill="#203d60"/>
+  <text x="408" y="797" text-anchor="middle" font-size="11" font-weight="600" fill="#a8d4ff">2</text>
+  <text x="430" y="798" class="body" style="fill: #d4e1f2">Retrieve + fuse</text>
+  <use href="#step-arrow" x="575" y="793"/>
+  <circle cx="638" cy="793" r="12" fill="#203d60"/>
+  <text x="638" y="797" text-anchor="middle" font-size="11" font-weight="600" fill="#a8d4ff">3</text>
+  <text x="660" y="798" class="body" style="fill: #d4e1f2">Rerank candidates</text>
+  <use href="#step-arrow" x="831" y="793"/>
+  <circle cx="894" cy="793" r="12" fill="#203d60"/>
+  <text x="894" y="797" text-anchor="middle" font-size="11" font-weight="600" fill="#a8d4ff">4</text>
+  <text x="916" y="798" class="body" style="fill: #d4e1f2">Return ranked hits</text>
+</svg>

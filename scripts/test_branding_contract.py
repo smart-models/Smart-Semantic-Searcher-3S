@@ -30,9 +30,10 @@ def _read(relative_path: str) -> str:
 
 
 def test_root_markdown_title_uses_the_approved_product_name():
-    first_line = _read("README.md").splitlines()[0]
+    lines = _read("README.md").splitlines()
+    heading = next(line for line in lines if line.startswith("# "))
 
-    assert first_line == f"# {MARKDOWN_PRODUCT_NAME}"
+    assert heading == f"# {MARKDOWN_PRODUCT_NAME}"
 
 
 def test_compose_uses_new_project_and_network_without_renaming_volumes():
