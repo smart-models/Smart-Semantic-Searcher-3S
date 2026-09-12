@@ -69,42 +69,19 @@ make a cloud-hosted agent private.
   respects the confirmation gates around destructive operations, follows
   tested sequences for ingest and reindex, and knows how to recover when a
   call fails. Same agent, same tools — noticeably better with both.
-* **Drive it from a browser instead of a terminal.** The built-in console
+* **Drive it from a browser instead of a terminal.** The built-in web console
   exposes the whole API as a point-and-click surface — run searches with every
   parameter on the table, create and manage collections, ingest points, watch
   live service telemetry. It is the quickest way to feel what the stack can do
   before you automate any of it.
 * **Tailor the deployment to your needs.** The stack is composable — the MCP
-  server, the browser console, the API docs and the embedder's own network
+  server, the web console, the API docs and the embedder's own network
   port are each a switch, so you run only the modules you use and nothing
   unused stays reachable. Even the models are swappable: two profiles — basic
   and advanced — replace the whole embedding and reranking set behind the same
   API, a restart rather than a client rewrite. Collections remember the
   profile that created them and refuse to mix two vector spaces silently; a
   reindex job carries them across.
-
-## 🖥️ How do I interact with it?
-
-The **web console** (`http://127.0.0.1:6336`) is the fastest way to see all
-of that at once. Its query panel lays out the whole search surface — fusion
-mode and its weights, how deep to go for candidates, whether to rerank and
-how far down the list, payload filters — so you tune a search by changing a
-field and running it again, then carry the settings that worked into your
-own client.
-
-<p align="center">
-  <img src="console-query.png" alt="The Smart Semantic Searcher console running a hybrid search with reranking" width="900">
-</p>
-
-The second way is to skip the screen entirely. With the **MCP server** enabled
-and the **skill** installed, an agent — Claude Code here — drives the whole
-stack in plain language: not just searching, but creating collections,
-ingesting, reindexing, checking health. You say what you want, it picks the
-tool, fills in the parameters and reports back.
-
-<p align="center">
-  <img src="agent-query.png" alt="An agent running the same search through the MCP server and reporting the ranked hits" width="900">
-</p>
 
 ## 🚀 How do I start?
 
@@ -118,11 +95,32 @@ the stack does not start one for you — and an `.env` copied from
 `auto` picks the hardware profile itself — GPU when one is usable, CPU
 otherwise — and the first run downloads the models, so it is slower than
 every run after. When it finishes, the middleware answers on
-`http://127.0.0.1:6336` with the browser console already on it.
+`http://127.0.0.1:6336` with the web console already on it.
 
-For everything after, the `guide/` directory is a complete field guide you
-read in the browser — five standalone pages that open straight from disk, no
-server or network needed:
+## 🖥️ How do I interact with it?
+
+Open that address and every knob is on the page at once, so tuning a search is
+editing a field and running it again — then you carry the settings that worked
+into your own client.
+
+<p align="center">
+  <img src="console-query.png" alt="The Smart Semantic Searcher web console running a hybrid search with reranking" width="900">
+</p>
+
+The second surface is an agent, and it needs no screen at all: with the MCP
+server enabled and the skill installed, the same operations happen in
+conversation. You say what you want, it picks the tool and fills in the
+parameters.
+
+<p align="center">
+  <img src="agent-query.png" alt="An agent running a search through the MCP server and reporting the ranked hits" width="900">
+</p>
+
+## 📚 Where do I learn more?
+
+The `guide/` directory is a complete field guide you read in the browser —
+five standalone pages that open straight from disk, no server or network
+needed:
 
 * [`getting-started.html`](guide/getting-started.html) — the first run end to
   end: the `.env`, a local or cloud Qdrant, `up auto`, connecting an agent,
