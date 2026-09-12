@@ -3,6 +3,9 @@
 **/.env.*
 !**/.env.example
 
+# MCP client config: holds a live bearer token for the local MCP server.
+.mcp.json
+
 # Python environments and caches
 .venv/
 venv/
