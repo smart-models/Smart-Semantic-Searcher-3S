@@ -15,60 +15,25 @@ the exact term the dense model glossed over, Qdrant fuses the two into one
 candidate list, and a cross-encoder — which reads query and passage together
 instead of comparing two finished vectors — re-scores the top of that list.
 That combination is what separates a search that finds the right paragraph from
-one that finds a vaguely related page, and the point of this project is that
-running it should cost you one command rather than a cloud contract. One
-command *after* the setup, to be exact: a reachable Qdrant, an `.env` you
-reviewed, and a first start that downloads the models.
+one that finds a vaguely related page — and running it should cost you one
+command rather than a cloud contract.
 
-Resource use is a design constraint, not a side effect. The models are small on
-purpose — 0.6B-class embedders and rerankers, not 7B ones — only one of the
-three services loads a model at all, and a pre-start autotuner calibrates batch
-sizes and precision to the machine it actually finds instead of assuming a
-datacenter.
+**Running well on consumer-grade hardware is a design constraint, not a side
+effect.** The models are small on purpose — 0.6B-class embedders and rerankers,
+not 7B ones — and only one service in the stack loads a model at all. A
+pre-start autotuner then probes the machine it actually finds and calibrates
+batch sizes and precision to it, so the stack tunes itself to your hardware
+instead of assuming a datacenter.
 
-**Where your data goes is your decision.** No inference call leaves your machine: the models run in your own
-container. Everything else depends on how you wire it. Point `QDRANT_URL` at a
-Qdrant on this host and the whole pipeline stays here; point it at a remote
-cluster and your vectors and payloads live there. And an agent reaching the
-stack through MCP is only as local as its own model — this project keeps its
-own work on your machine, it cannot make a cloud-hosted agent private.
-
-## So, what can I do with this software?
-
-* **Search your own documents semantically.** One call ingests a batch of text
-  chunks (`POST /points/ingest-chunks`, or `POST /points/ingest` for a JSON file
-  you staged beforehand), one searches them (`POST /query/search`): the stack
-  embeds, lets Qdrant fuse dense and lexical results server-side, reranks the
-  top candidates with a cross-encoder, and returns ranked hits. Point IDs are
-  derived from `source_id:chunk_id`, so re-sending a chunk overwrites it instead
-  of duplicating it; when the revised document has *fewer* chunks than before,
-  `replace_source=true` clears the leftovers, which it does not do by default.
-* **Give a coding agent a private, searchable memory.** With the MCP server
-  enabled, Claude Code or any other MCP client gets 28 typed tools over the same
-  API — create a collection, ingest into it, search it, inspect it — with no
-  search vendor anywhere in the path. What the agent's own model then does with
-  the passages it read is between you and that agent.
-* **Build a RAG backend without gluing three services together yourself.** You
-  keep the decisions that are yours — how to chunk, what to store, when to
-  re-ingest — and the stack owns everything between a chunk of text and a
-  ranked hit.
-* **Use it as nothing but a local embedding endpoint.** `EMBEDDER_ONLY=true`
-  starts Smart Embedder alone: a `POST /embeddings/` and `POST /rerank` service
-  on `127.0.0.1`, in place of a hosted embedding API, for anyone who already has
-  their own retrieval stack.
-* **Run the same stack on a laptop and on a workstation.** The `cpu` and `gpu`
-  profiles serve the same API, the same models and the same collections. The GPU
-  buys throughput, not capability — nothing is unavailable without one.
-* **Drive it from a browser instead of curl.** With `EXPOSE_FRONTEND=true` the
-  middleware serves a static console for creating collections, ingesting, and
-  running searches by hand.
-* **Change the model profile without changing your client.** `basic` and
-  `advanced` swap the entire embedding and reranking set behind the same
-  middleware API. The switch is a restart, and a client calling Smart Embedder
-  directly should know that `advanced` serves no ColBERT vectors. Collections
-  carry a fingerprint of the profile that created them, so an existing
-  collection reports as incompatible instead of silently mixing two vector
-  spaces — regenerate its vectors with the reindex job to bring it across.
+**Your data stays on your machine — that is the reason this project exists.**
+No inference call goes out to a hosted AI API, the way AI features are usually
+wired: the models run in your own containers, so nothing leaves your machine
+or your VPN. Storage follows the same rule — Qdrant is an open-source vector
+database you run yourself, on this host or on a remote cluster; either way
+your vectors and payloads live on infrastructure you chose, and ownership
+stays with you. The one boundary the stack cannot police is the agent on the
+other side of MCP: this project keeps its own work on your machine, it cannot
+make a cloud-hosted agent private.
 
 ## The stack
 
@@ -76,26 +41,72 @@ own work on your machine, it cannot make a cloud-hosted agent private.
   <img src="stack.svg" alt="How the Smart Semantic Searcher stack fits together" width="900">
 </p>
 
-Three services, one root Compose file, one `.env`:
+## What can I do with this software?
 
-* **middleware-qdrant-manager** (`:6336`) is the only API you need to call. It
-  checks the caller's bearer token — once you have configured tokens, since the
-  shipped `.env.example` starts with local authentication switched off — embeds
-  what has to be embedded, asks Qdrant for a fused candidate list, sends the top
-  of it through the reranker, and returns ranked hits. It also owns collection
-  creation, payload indexes and the durable vector-reindex job.
-* **server-embedder-reranker** — Smart Embedder (`:8010`) — is the only
-  component in the stack that loads a model. It serves dense, sparse and (on the
-  `basic` profile) ColBERT vectors from one endpoint, plus a cross-encoder
-  reranking endpoint. Model repositories are pinned to immutable Hugging Face
-  commits, so a rebuild cannot silently move to different weights.
-* **smart-qdrant-mcp** (`:6337`) is optional. It translates the same REST
-  contract into MCP tools, resources and prompts for agents, and adds no
-  capability the HTTP API does not already have.
-* **Qdrant** stores the vectors and runs the fusion server-side. The stack does
-  not start one — you point `QDRANT_URL` at yours.
+* **Search your own documents semantically.** You hand it text chunks — pages
+  from your manuals, notes or reports — and it indexes them by meaning and by
+  exact wording. Ask a question in plain language and you get back the
+  passages that answer it, ranked best-first.
+* **Build a RAG backend without gluing three services together yourself.** The
+  retrieval pipeline is fully automated — text chunks in, ranked passages out
+  — and every stage of it is a setting to flip, not code to write. You keep
+  the decisions that are yours — how to chunk, what to store, when to
+  re-ingest.
+* **Give a coding agent a private, searchable memory — and let it drive.**
+  With the MCP server enabled, Claude Code or any other MCP client operates
+  the whole stack in natural language: 28 tools cover everything the API can
+  do — create a collection, ingest a folder of text, search it — with no
+  search vendor in the path. The server also ships its own documentation, so
+  the same agent can read the docs and explain back to you how it all works.
+  What the agent's own model does with the passages it reads is between you
+  and that agent.
+* **Give that agent the playbook, not just the tools.** The bundled
+  `smart-skill/` directory is a drop-in Agent Skill: copy it into your agent
+  host's skills folder and the same agent stops improvising — it picks the
+  right tool for each task, respects the confirmation gates around
+  destructive operations, follows tested sequences for ingest and reindex,
+  and knows how to recover when a call fails. Same agent, same tools —
+  noticeably better with both.
+* **Drive it from a browser instead of a terminal.** The built-in console
+  exposes the whole API as a point-and-click surface — run searches with every
+  parameter on the table, create and manage collections, ingest points, watch
+  live service telemetry. It is the quickest way to feel what the stack can do
+  before you automate any of it.
+* **Tailor the deployment to your needs.** The stack is composable — the MCP
+  server, the browser console, the API docs and the embedder's own network
+  port are each a switch, so you run only the modules you use and nothing
+  unused stays reachable. Even the models are swappable: two profiles — basic
+  and advanced — replace the whole embedding and reranking set behind the same
+  API, a restart rather than a client rewrite. Collections remember the
+  profile that created them and refuse to mix two vector spaces silently; a
+  reindex job carries them across.
 
-Nothing here is exposed to the network by default: every published port binds to
-`127.0.0.1`, the serving containers run unprivileged with read-only root
-filesystems and bounded memory, CPU and PIDs, and the embedder can be taken off
-the host network entirely so that the middleware is the only way in.
+## How do I start?
+
+Two things first: a Qdrant the stack can reach — a local container is enough;
+the stack does not start one for you — and an `.env` copied from
+`.env.example` and reviewed. Then one command:
+
+    pwsh stack.ps1 up auto      # Windows (PowerShell)
+    bash stack.sh up auto       # Linux / macOS
+
+`auto` picks the hardware profile itself — GPU when one is usable, CPU
+otherwise — and the first run downloads the models, so it is slower than
+every run after. When it finishes, the middleware answers on
+`http://127.0.0.1:6336` with the browser console already on it.
+
+For everything after, the `guide/` directory is a complete field guide you
+read in the browser — five standalone pages that open straight from disk, no
+server or network needed:
+
+* [`getting-started.html`](guide/getting-started.html) — the first run end to
+  end: the `.env`, a local or cloud Qdrant, `up auto`, connecting an agent,
+  installing the skill, your first search.
+* [`cli.html`](guide/cli.html) — the launcher commands: start, stop, logs,
+  choosing CPU or GPU, applying settings.
+* [`environment.html`](guide/environment.html) — the `.env` file explained:
+  every parameter, searchable, with the values worth changing first.
+* [`architecture.html`](guide/architecture.html) — how the pieces fit
+  together: middleware, Smart Embedder, Qdrant, MCP and the agent skill.
+* [`hybrid-search-rerank.html`](guide/hybrid-search-rerank.html) — what hybrid
+  search and reranking actually do.

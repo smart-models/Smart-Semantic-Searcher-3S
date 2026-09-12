@@ -128,12 +128,11 @@ a:hover, a:focus-visible { text-decoration: underline; }
   white-space: nowrap;
 }
 
-.brand-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--blue);
-  box-shadow: 0 0 8px var(--blue-glow);
+.brand-logo {
+  height: 1.45em;
+  width: auto;
+  display: block;
+  filter: drop-shadow(0 0 6px var(--blue-glow));
 }
 
 @keyframes pulse {
@@ -142,7 +141,7 @@ a:hover, a:focus-visible { text-decoration: underline; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .brand-dot, .cursor, .health-dot, .apikey-popover { animation: none !important; }
+  .cursor, .health-dot, .apikey-popover { animation: none !important; }
   * { transition: none !important; }
 }
 
@@ -215,7 +214,7 @@ a:hover, a:focus-visible { text-decoration: underline; }
 
 .apikey-btn.is-set { color: var(--blue); }
 
-/* Same dot language as .brand-dot / .health-dot: blue = registered key,
+/* Same dot language as .health-dot: blue = registered key,
    red = key missing or rejected by the manager. */
 .apikey-btn.is-set::after,
 .apikey-btn.is-bad::after {
