@@ -83,6 +83,29 @@ make a cloud-hosted agent private.
   profile that created them and refuse to mix two vector spaces silently; a
   reindex job carries them across.
 
+## 🖥️ How do I interact with it?
+
+The **web console** (`http://127.0.0.1:6336`) is the fastest way to see all
+of that at once. Its query panel lays out the whole search surface — fusion
+mode and its weights, how deep to go for candidates, whether to rerank and
+how far down the list, payload filters — so you tune a search by changing a
+field and running it again, then carry the settings that worked into your
+own client.
+
+<p align="center">
+  <img src="console-query.png" alt="The Smart Semantic Searcher console running a hybrid search with reranking" width="900">
+</p>
+
+The second way is to skip the screen entirely. With the **MCP server** enabled
+and the **skill** installed, an agent — Claude Code here — drives the whole
+stack in plain language: not just searching, but creating collections,
+ingesting, reindexing, checking health. You say what you want, it picks the
+tool, fills in the parameters and reports back.
+
+<p align="center">
+  <img src="agent-query.png" alt="An agent running the same search through the MCP server and reporting the ranked hits" width="900">
+</p>
+
 ## 🚀 How do I start?
 
 Two things first: a Qdrant the stack can reach — a local container is enough;
