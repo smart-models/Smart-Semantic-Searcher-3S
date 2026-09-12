@@ -57,18 +57,18 @@ make a cloud-hosted agent private.
 * **Give a coding agent a private, searchable memory — and let it drive.**
   With the MCP server enabled, Claude Code or any other MCP client operates
   the whole stack in natural language: 28 tools cover everything the API can
-  do — create a collection, ingest a folder of text, search it — with no
+  do — create a collection, ingest a file of chunks, search it — with no
   search vendor in the path. The server also ships its own documentation, so
   the same agent can read the docs and explain back to you how it all works.
   What the agent's own model does with the passages it reads is between you
   and that agent.
 * **Give that agent the playbook, not just the tools.** The bundled
-  `smart-skill/` directory is a drop-in Agent Skill: copy it into your agent
-  host's skills folder and the same agent stops improvising — it picks the
-  right tool for each task, respects the confirmation gates around
-  destructive operations, follows tested sequences for ingest and reindex,
-  and knows how to recover when a call fails. Same agent, same tools —
-  noticeably better with both.
+  `smart-skill/` directory ships a drop-in Agent Skill: copy
+  `smart-skill/smart-qdrant-mcp/` into your agent host's skills folder and the
+  same agent stops improvising — it picks the right tool for each task,
+  respects the confirmation gates around destructive operations, follows
+  tested sequences for ingest and reindex, and knows how to recover when a
+  call fails. Same agent, same tools — noticeably better with both.
 * **Drive it from a browser instead of a terminal.** The built-in console
   exposes the whole API as a point-and-click surface — run searches with every
   parameter on the table, create and manage collections, ingest points, watch
