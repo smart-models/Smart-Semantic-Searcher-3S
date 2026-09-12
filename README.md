@@ -4,6 +4,8 @@
 
 # Smart Semantic Searcher (3S)
 
+## 💡 What is it?
+
 **Smart Semantic Searcher (3S)** aims to be the shortest path to a hybrid-search
 stack that runs on hardware you already own. Embedding, sparse lexical scoring
 and reranking happen on your machine rather than behind a hosted inference API:
@@ -35,13 +37,13 @@ stays with you. The one boundary the stack cannot police is the agent on the
 other side of MCP: this project keeps its own work on your machine, it cannot
 make a cloud-hosted agent private.
 
-## The stack
+## ⚙️ The stack
 
 <p align="center">
   <img src="stack.svg" alt="How the Smart Semantic Searcher stack fits together" width="900">
 </p>
 
-## What can I do with this software?
+## 🛠️ What can I do with this software?
 
 * **Search your own documents semantically.** You hand it text chunks — pages
   from your manuals, notes or reports — and it indexes them by meaning and by
@@ -81,7 +83,7 @@ make a cloud-hosted agent private.
   profile that created them and refuse to mix two vector spaces silently; a
   reindex job carries them across.
 
-## How do I start?
+## 🚀 How do I start?
 
 Two things first: a Qdrant the stack can reach — a local container is enough;
 the stack does not start one for you — and an `.env` copied from
