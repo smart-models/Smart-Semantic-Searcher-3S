@@ -670,8 +670,13 @@ BGE_RERANK_MAX_LENGTH = _env_int_range(
 REQUEST_TIMEOUT = _env_int_range("REQUEST_TIMEOUT", 90, min_value=1, max_value=3600)
 # Defaults tuned on RTX 4060 8GB: peak ~30-44 req/s @ conc=8 across scenarios
 MAX_QUEUE_SIZE = _env_int_range("MAX_QUEUE_SIZE", 200, min_value=1, max_value=10000)
+# Admission units are conservative UTF-8 bytes, not tokens (request_budget.py),
+# so the floor is one full request: MAX_PASSAGES_PER_REQUEST pairs would need
+# 2048 * 32768, but a client batches far smaller. 32 * QWEN_RERANK_MAX_LENGTH
+# covers the largest rerank the middleware sends; below it an ordinary 20-chunk
+# search is refused 413 request_budget_exceeded.
 MAX_INFLIGHT_TOKENS = _env_int_range(
-    "MAX_INFLIGHT_TOKENS", 65536, min_value=1, max_value=2**40
+    "MAX_INFLIGHT_TOKENS", 1048576, min_value=1, max_value=2**40
 )
 MAX_INFLIGHT_OUTPUT_BYTES = _env_int_range(
     "MAX_INFLIGHT_OUTPUT_BYTES", 268435456, min_value=1, max_value=2**40

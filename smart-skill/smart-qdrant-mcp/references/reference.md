@@ -609,7 +609,7 @@ remove them. `qdrant_set_payload` cannot set `text`; use
 | `qdrant_set_payload` / `qdrant_delete_payload_keys` / `qdrant_clear_payload` ids | **1000** | Lower than the point writes on purpose: these fan out one request per id (no bulk-by-ids endpoint exists), so a bigger list cannot finish or report inside one call. `selector="filter"` writes any number of points in a single request. |
 | `EXPORT_MAX_POINTS` / `EXPORT_MAX_BYTES` | 50000 / 67108864 | Whole collection only. Checked during the walk; bytes include the complete encoded document. Exceeding either returns 413 with no published file. |
 | `EXPORT_MAX_CONCURRENT` | 1 per middleware app | 503 before scrolling when all export slots are occupied. |
-| `SMART_EMBEDDER_MAX_INFLIGHT_TOKENS` / `SMART_EMBEDDER_MAX_INFLIGHT_OUTPUT_BYTES` | 65536 / 268435456 | Shared conservative inference admission estimates. One oversized request gets 413; occupied capacity gets upstream 503. Active native work retains its reservation after caller cancellation. |
+| `SMART_EMBEDDER_MAX_INFLIGHT_TOKENS` / `SMART_EMBEDDER_MAX_INFLIGHT_OUTPUT_BYTES` | 1048576 / 268435456 | Shared conservative inference admission estimates (UTF-8 bytes, not tokens; the token default covers one 32-pair rerank at full length). One oversized request gets 413; occupied capacity gets upstream 503. Active native work retains its reservation after caller cancellation. |
 | Search `limit` / `candidate_limit` | 50 / 200 (shipped `QUERY_MAX_*`) | Deep paging hits the candidate ceiling — see `qdrant_search.offset`. |
 | `confirm` token length | 255 chars | Over-long tokens refused locally. |
 | Filter depth / conditions | 20 / 100 (configurable) | Rejected before reaching Qdrant. |

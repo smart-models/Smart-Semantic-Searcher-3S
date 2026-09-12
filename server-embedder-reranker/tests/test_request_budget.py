@@ -1,5 +1,6 @@
 """Shared inference admission and native-worker lease regressions."""
 
+import re
 import sys
 import unittest
 from concurrent.futures import Future
@@ -91,6 +92,23 @@ class RequestBudgetTests(unittest.TestCase):
             **{**options, "advanced": True, "dense": False, "sparse_top_k": 16},
         )
         self.assertLess(sparse_only.output_bytes, advanced.output_bytes)
+
+    def test_shipped_default_admits_a_full_rerank_batch(self):
+        """The default must fit the largest rerank a client can send.
+
+        Admission counts conservative UTF-8 bytes, not tokens, so a default
+        below 32 pairs at QWEN_RERANK_MAX_LENGTH refuses an ordinary 20-chunk
+        search with 413 request_budget_exceeded.
+        """
+        compose = (SERVER_DIR.parent / "compose.yml").read_text(encoding="utf-8")
+        default = int(
+            re.search(
+                r"MAX_INFLIGHT_TOKENS: \$\{SMART_EMBEDDER_MAX_INFLIGHT_TOKENS:-(\d+)\}",
+                compose,
+            ).group(1)
+        )
+        worst = estimate_rerank("q", ["x" * 32768] * 32, pair_limit=32768)
+        self.assertGreaterEqual(default, worst.tokens)
 
     def test_rerank_repeats_query_budget_and_caps_each_pair(self):
         single = estimate_rerank("query", ["passage"], pair_limit=2048)

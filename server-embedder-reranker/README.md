@@ -584,7 +584,7 @@ Python, while `BGE_*`, `QWEN_*` and `MILCO_*` keep their names end to end.
 | `SMART_EMBEDDER_EMBED_GPU_TIMEOUT` | `60` | Embedding inference timeout; keep below the global timeout |
 | `SMART_EMBEDDER_RERANK_GPU_TIMEOUT` | `60` | Rerank inference timeout; keep below the global timeout |
 | `SMART_EMBEDDER_MAX_QUEUE_SIZE` | `200` | Maximum queued `/embeddings/` requests |
-| `SMART_EMBEDDER_MAX_INFLIGHT_TOKENS` | `65536` | Shared admitted token-work units across embedding and reranking |
+| `SMART_EMBEDDER_MAX_INFLIGHT_TOKENS` | `1048576` | Shared admitted token-work units across embedding and reranking |
 | `SMART_EMBEDDER_MAX_INFLIGHT_OUTPUT_BYTES` | `268435456` | Shared estimated JSON output bytes; not a physical memory ceiling |
 | `SMART_EMBEDDER_RERANK_MAX_QUEUE` | `32` | Maximum admitted `/rerank` requests |
 | `SMART_EMBEDDER_RATE_LIMIT_REQUESTS_PER_MINUTE` | `3600` | Token-bucket refill rate per client IP |
