@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="logo.svg" alt="Smart Semantic Searcher (3S) logo" width="180">
+  <img src="assets/logo.svg" alt="Smart Semantic Searcher (3S) logo" width="180">
 </p>
 
-# Smart Semantic Searcher (3S)
+<h1 align="center">Smart Semantic Searcher (3S)</h1>
 
 ## 💡 What is it?
 
@@ -40,7 +40,7 @@ make a cloud-hosted agent private.
 ## ⚙️ The stack
 
 <p align="center">
-  <img src="stack.svg" alt="How the Smart Semantic Searcher stack fits together" width="900">
+  <img src="assets/stack.svg" alt="How the Smart Semantic Searcher stack fits together" width="900">
 </p>
 
 ## 🛠️ What can I do with this software?
@@ -85,8 +85,9 @@ make a cloud-hosted agent private.
 
 ## 🚀 How do I start?
 
-Two things first: a Qdrant the stack can reach — a local container is enough;
-the stack does not start one for you — and an `.env` copied from
+Three things first: Docker with Compose 2.24.4 or newer and Python 3.10 or
+newer on PATH; a Qdrant the stack can reach — a local container is enough,
+the stack does not start one for you; and an `.env` copied from
 `.env.example` and reviewed. Then one command:
 
     pwsh stack.ps1 up auto      # Windows (PowerShell)
@@ -97,6 +98,9 @@ otherwise — and the first run downloads the models, so it is slower than
 every run after. When it finishes, the middleware answers on
 `http://127.0.0.1:6336` with the web console already on it.
 
+`down` stops it again, `logs` follows it, `status` shows what is running —
+[`cli.html`](guide/cli.html) covers the rest.
+
 ## 🖥️ How do I interact with it?
 
 Open that address and every knob is on the page at once, so tuning a search is
@@ -104,7 +108,7 @@ editing a field and running it again — then you carry the settings that worked
 into your own client.
 
 <p align="center">
-  <img src="console-query.png" alt="The Smart Semantic Searcher web console running a hybrid search with reranking" width="900">
+  <img src="assets/console-query.png" alt="The Smart Semantic Searcher web console running a hybrid search with reranking" width="900">
 </p>
 
 The second surface is an agent, and it needs no screen at all: with the MCP
@@ -113,7 +117,7 @@ conversation. You say what you want, it picks the tool and fills in the
 parameters.
 
 <p align="center">
-  <img src="agent-query.png" alt="An agent running a search through the MCP server and reporting the ranked hits" width="900">
+  <img src="assets/agent-query.png" alt="An agent running a search through the MCP server and reporting the ranked hits" width="900">
 </p>
 
 ## 📚 Where do I learn more?
@@ -133,3 +137,35 @@ needed:
   together: middleware, Smart Embedder, Qdrant, MCP and the agent skill.
 * [`hybrid-search-rerank.html`](guide/hybrid-search-rerank.html) — what hybrid
   search and reranking actually do.
+
+## 🤝 How can I contribute?
+
+**The project is open source under [AGPL-3.0](LICENSE) and anyone who wants to
+contribute is welcome.** One thing is worth saying up front, though: it was
+built with very heavy use of AI coding agents, and it expects you to work the
+same way.
+
+So if you find a bug or want a feature, point the coding agent you prefer at
+the repository before you write anything. `AGENTS.md`, the `guide/` pages and
+the MCP server's own documentation resources exist precisely so that an agent
+can read this codebase and work out what is really going on — which file,
+which setting, which service. Then **open an issue** with what it found: how
+to reproduce it, the trail it followed, what it believes the cause to be.
+
+That is where the conversation starts, not where it ends. How a bug should be
+fixed — or whether a feature belongs in the stack at all — gets decided
+afterwards, in the issue.
+
+On our side the project keeps moving, and two directions are already set. The
+first is **following Qdrant as it grows**, so that what lands upstream becomes
+an option here rather than a reason to rewrite. The second is **widening the
+hardware it runs on**, so that a consumer NVIDIA card is the first accelerator
+it supports well rather than the only one. Anyone who wants to push in either
+direction is especially welcome.
+
+---
+
+<p align="center">
+  <strong>🔍 HAPPY SMART SEMANTIC SEARCH! 🔎</strong>
+</p>
+
