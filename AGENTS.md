@@ -188,8 +188,8 @@ from the default configuration, and destructive series consume their fixtures.
 ### Full verification pass
 
 The check to run before opening a change. `.github/workflows/ci.yml` runs this
-on every push to `main` and every pull request, across five jobs — `lint`,
-`unit` (a Python 3.10/3.11 matrix), `frontend-unit`, `launchers`, `compose`:
+on every push to `main` and every pull request, across six jobs — `lint`,
+`unit` (a Python 3.10/3.11 matrix), `frontend-unit`, `guides`, `launchers`, `compose`:
 
 ```powershell
 py -m pytest middleware-qdrant-manager/tests -q
@@ -205,6 +205,7 @@ Invoke-ScriptAnalyzer -Path stack.ps1 -Severity Warning,Error
 Push-Location middleware-qdrant-manager/frontend
 npm run test:unit
 npx playwright test tests/application-state.spec.js tests/application-reindex.spec.js tests/application-accessibility.spec.js tests/harness-browser.spec.js tests/tb-monitoring.spec.js tests/tb-filter-validation.spec.js tests/tb-ui.spec.js --workers=1
+npx playwright test --config playwright.guides.config.js
 Pop-Location
 docker build --check .
 docker compose --env-file .env.example --profile cpu config --quiet

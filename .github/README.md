@@ -30,6 +30,9 @@ The workflows orchestrate existing owners rather than reimplementing them:
 [scripts](../scripts/README.md) owns launcher/security/audit/evidence logic;
 each service owns its tests. The [frontend test guide](../middleware-qdrant-manager/frontend/tests/README.md)
 distinguishes intercepted, destructive live and external campaigns.
+The required `guides` job runs the model guide's separate Playwright
+configuration over local `file://` pages. It needs Chromium but no server or
+token; see the [field guide verification](../guide/README.md#verification).
 
 ## Interface reference
 

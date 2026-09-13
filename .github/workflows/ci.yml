@@ -126,6 +126,31 @@ jobs:
         working-directory: middleware-qdrant-manager/frontend
         run: npx playwright test tests/e-monitoring.spec.js --grep 'M-G —' --workers=1
 
+  guides:
+    name: Offline field guide browser suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Install pinned browser test dependency
+        working-directory: middleware-qdrant-manager/frontend
+        run: npm install --ignore-scripts
+
+      - name: Install Chromium
+        working-directory: middleware-qdrant-manager/frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Offline model guide regressions
+        working-directory: middleware-qdrant-manager/frontend
+        run: npx playwright test --config playwright.guides.config.js
+
   launchers:
     name: Launcher suite
     runs-on: ubuntu-latest
@@ -190,7 +215,7 @@ jobs:
   ci:
     name: CI
     if: always()
-    needs: [lint, unit, frontend-unit, launchers, compose]
+    needs: [lint, unit, frontend-unit, guides, launchers, compose]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -199,6 +224,7 @@ jobs:
           echo "lint=${{ needs.lint.result }}"
           echo "unit=${{ needs.unit.result }}"
           echo "frontend-unit=${{ needs.frontend-unit.result }}"
+          echo "guides=${{ needs.guides.result }}"
           echo "launchers=${{ needs.launchers.result }}"
           echo "compose=${{ needs.compose.result }}"
 

@@ -56,7 +56,16 @@ Disclosures have stable IDs and open when addressed directly. Examples include
 [the private-network boundary](architecture.html#private-network-boundary),
 [the complete search journey](hybrid-search-rerank.html#read-story), and
 [the RRF calculation](hybrid-search-rerank.html#rrf-calculation).
-The model guide addresses each model by a stable ID, for example [BGE-M3](embedding-models.html#bge-m3) and [MILCO](embedding-models.html#milco-650m), and the ColBERT explanation at [`#colbert`](embedding-models.html#colbert). Its hero roster selector is illustrative; both rosters are readable without JavaScript and in print.
+The model guide addresses each model by a stable ID, for example
+[BGE-M3](embedding-models.html#bge-m3) and [MILCO](embedding-models.html#milco-650m),
+and the ColBERT explanation at [`#colbert`](embedding-models.html#colbert).
+Its profile/hardware chooser reads the authored
+[runtime table](embedding-models.html#runtime-limits). Both rosters and all four
+setups remain readable without JavaScript and in print. The
+[text journey](embedding-models.html#text-journey) distinguishes lexical examples,
+independent illustrative tokenizer counts and a real character-slicing example.
+The [evaluation protocol](embedding-models.html#evaluation-protocol) explains how
+to compare profiles without claiming that the guide runs a benchmark.
 Section links such as `#reference` navigate without opening all disclosures.
 The entry page was renamed from `index.html` to `getting-started.html`.
 Its existing fragment IDs, including `#mcp`, `#skill`, steps and help entries,
@@ -89,6 +98,16 @@ pinned-revision prefixes consistent with
 `server-embedder-reranker/model_revisions.py`; and preserve the distinction
 between what a model can produce (BGE-M3 ColBERT on a direct call) and what the
 stack stores and searches (dense + sparse only).
+Model source links use full immutable revisions with visible short prefixes.
+Keep `data-model-source` links aligned with the pins and the visible
+`data-default-env` values aligned with the corresponding Compose device settings.
+The chooser and token windows read those HTML values; do not duplicate defaults
+inside JavaScript. Token-window examples use independent teaching counts, never
+character-to-token estimates or claimed outputs from the displayed passages.
+The character demonstration follows Python Unicode code-point slicing; the
+reranker's later token limit still includes the query and formatted pair.
+Each model card separates upstream capability, actual stack use and practical
+impact. Evidence dates describe a fact review, not a new hardware/quality run.
 
 Preserve keyboard navigation, accessible names, existing IDs, reduced motion
 and authored content readable without JavaScript. Active scenes must retain
@@ -149,9 +168,9 @@ Use a supported Python interpreter with the repository's pytest and Ruff tools
 installed. From the repository root, these Windows examples select Python 3.11:
 
 ```powershell
-py -3.11 -m pytest scripts/test_guide_links.py scripts/test_branding_contract.py -q
-py -3.11 -m ruff check scripts/test_guide_links.py scripts/test_branding_contract.py
-py -3.11 -m ruff format --check scripts/test_guide_links.py scripts/test_branding_contract.py
+py -3.11 -m pytest scripts/test_guide_links.py scripts/test_guide_models.py scripts/test_branding_contract.py -q
+py -3.11 -m ruff check scripts/test_guide_links.py scripts/test_guide_models.py scripts/test_branding_contract.py
+py -3.11 -m ruff format --check scripts/test_guide_links.py scripts/test_guide_models.py scripts/test_branding_contract.py
 ```
 
 In an activated environment, use `python -m` with the same arguments. The link
@@ -161,7 +180,28 @@ The Markdown scanner supports inline links, including angle-bracket destinations
 it ignores link examples in fenced, indented and inline code. Synthetic cases
 cover encoded paths, missing files and missing fragments. The branding test checks
 public product names. Both are collected by the existing scripts suite in CI.
-Neither checks rendering or the availability of external websites.
+The model tests compare the rendered revision links and device-specific limits
+against source code without loading a model. These Python checks do not test
+rendering or the availability of external websites.
+
+The model guide also has an isolated, offline browser suite. From
+`middleware-qdrant-manager/frontend/`, after installing the existing pinned
+development dependency and Chromium:
+
+```powershell
+npx playwright test --config playwright.guides.config.js
+```
+
+The explicit configuration selects `guide-tests/`, with no console harness,
+credentials, live stack or destructive E2E setup. CI runs it in the required
+`guides` job, using the existing frontend test dependency.
+It checks profile/device limits, character slicing, keyboard controls, 320–1440
+pixel reflow with increased text spacing, no-JS reading, fragment navigation,
+embedded fonts and repeated PDF print-state restoration. Browser automation
+also sets real Chromium tab zoom to 200% using a local test extension, then
+checks reflow, usable controls and table semantics. This is browser zoom, not
+CSS scaling or a device-pixel-ratio substitute. A manual screen-reader pass
+remains a separate verification.
 
 For HTML changes, verify the final files through `file://` in a browser:
 
@@ -176,7 +216,7 @@ For HTML changes, verify the final files through `file://` in a browser:
 | Sample | Download the sample and compare its bytes with the displayed source; it contains four records. |
 | Startup | Verify Windows and Linux commands remain visible together; exercise CPU/GPU, both model families and MCP on/off; compare preview/start text with launcher semantics. Check successful copy and unavailable-clipboard selection fallback. No command should execute from the page. |
 | Environment | Compare all parameter entries with active/commented assignments in `.env.example`; exercise name/prose search, empty results, clear, group/parameter links and history. Print during a filtered search and confirm all parameters print and the filter/disclosures restore afterward. |
-| Models | Switch the hero roster between basic and advanced; confirm both rosters print; follow every model-card and README link; compare specifications with the model cards and the pinned revisions. |
+| Models | Exercise all four profile/device setups, evidence focus and short/long windows; move the remedy across the character cut. Confirm all reference setups and open specifications print, selections restore, and the PDF has no footer-only final page. Follow pinned model links and distinguish model specifications, stack settings and measured evidence. |
 
 Keep screenshots, PDFs and local review scripts in root gitignored `docs/`.
 Report automated results separately from visual inspection and manual browser
