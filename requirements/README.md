@@ -31,7 +31,7 @@ not serving images and do not substitute for rebuilding an affected target.
 | [embedder-base.txt](embedder-base.txt) | Common embedding/reranking HTTP, model and numeric dependencies. |
 | [embedder-cpu.txt](embedder-cpu.txt) | Base include plus CPU Torch and ONNX packages, with Python-version markers. |
 | [embedder-gpu.txt](embedder-gpu.txt) | Base include plus the CUDA Torch wheel source and pin. |
-| [dev.txt](dev.txt) | Pinned pytest, asyncio test support and Ruff tooling. |
+| [dev.txt](dev.txt) | Pinned pytest, asyncio test support, Ruff and the YAML parser for workflow contract tests. No serving image consumes these tooling pins. |
 | [ci.txt](ci.txt) | Offline-suite environment: dev, middleware and MCP inputs plus the numeric/runtime imports used by embedder tests. It deliberately does not install the full model stack. |
 | [security-constraints.txt](security-constraints.txt) | Exact transitive security overrides with rationale; input to `scripts/security_constraints.py`. |
 | [locks/](locks/) | Four resolved Linux image environments; consumed as Docker build constraints. |

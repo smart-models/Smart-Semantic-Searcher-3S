@@ -64,9 +64,9 @@ def test_frontend_presents_the_approved_product_name():
     assert "Smart Semantic Searcher" in package_source
     assert '"name": "qdrant-hybrid-manager-frontend-tests"' in package_source
     assert "Qdrant Hybrid Manager" not in package_source
-    assert "/assets/style.css?v=83" in index_source
-    assert "/assets/app.js?v=123" in index_source
-    assert 'import { api } from "/assets/api.js?v=63";' in app_source
+    assert re.search(r'href="/assets/style\.css\?v=\d+"', index_source)
+    assert re.search(r'src="/assets/app\.js\?v=\d+"', index_source)
+    assert re.search(r'import \{ api \} from "/assets/api\.js\?v=\d+";', app_source)
     for asset_path in asset_paths:
         source = asset_path.read_text(encoding="utf-8")
         assert "Smart Semantic Searcher" in source

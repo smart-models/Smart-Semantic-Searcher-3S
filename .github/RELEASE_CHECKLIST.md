@@ -65,6 +65,10 @@ BLOCKED; never substitute a mock or an old run silently.
 
 3. **Require CI for the exact SHA.** Save workflow URLs, conclusions and SHA in
    `03-ci.txt`. Require the aggregate `CI` and all its dependencies to succeed.
+   Verify that the effective branch protection or ruleset for `main` requires
+   the `CI` check before merging; record the setting and any applicable bypass.
+   A job named `CI` does not enable branch protection by itself. If a candidate
+   run was cancelled, follow the [rerun procedure](#recovering-a-cancelled-candidate-run).
    Dispatch `Release check` for that same candidate when authorized and preserve
    its downloaded artifact unchanged under `03-workflow/`. A historical green
    run or an artifact from another SHA cannot be credited.
@@ -186,10 +190,13 @@ and `manifest.json`, retained for 90 days. It does **not** use the numbered
 operator bundle layout above. Preserve the download and reference its files
 from the scope ledger rather than pretending both layouts are identical.
 
-That workflow runs Python 3.11 and only the frontend model test file; the
-broader Node/intercepted-browser coverage and Python version matrix come from
-regular CI. It also calls OSV, so its "offline" job label does not mean no
-network. Neither workflow performs the complete live acceptance campaign.
+That workflow runs Python 3.11 service/launcher suites, Python lint, all frontend
+`*.test.mjs` unit files, Dockerfile/Compose checks, security constraints and OSV.
+Regular CI supplies the Python 3.10 matrix leg, actionlint, shellcheck,
+PSScriptAnalyzer, the explicit token preflight, intercepted browser suites and
+field-guide tests. The OSV call means the release job's "offline" label does
+not mean no network. Neither workflow performs the complete live acceptance
+campaign.
 
 Create `15-decision.json` with the candidate SHA, required-case/layer outcomes,
 blockers, evidence references, completion time and the operator's decision.
@@ -208,6 +215,35 @@ missing assertion into PASS. Require both file completeness and an affirmative
 review of all required outcomes before calling the candidate accepted. Preserve
 incomplete bundles too, and record follow-up runs separately when a fix changes
 the candidate.
+
+## Recovering a cancelled candidate run
+
+A push can cancel an older CI run on the same ref. Within GitHub's 30-day rerun
+window, use an authenticated GitHub CLI with repository write access to rerun
+the existing candidate run; CI does not need `workflow_dispatch` for this.
+Replace `OWNER/REPO`, `CANDIDATE_SHA` and `RUN_ID` with the actual repository,
+full candidate commit and run ID:
+
+```bash
+gh run list --repo OWNER/REPO --workflow ci.yml --commit CANDIDATE_SHA --event push --json databaseId,headSha,status,conclusion,url
+gh run view RUN_ID --repo OWNER/REPO --json workflowName,headSha,event,status,conclusion,jobs,url
+gh run rerun RUN_ID --repo OWNER/REPO
+gh run watch RUN_ID --repo OWNER/REPO --exit-status
+gh run view RUN_ID --repo OWNER/REPO --json workflowName,headSha,event,status,conclusion,jobs,url
+```
+
+Before rerunning, require the `CI` workflow and exact candidate `headSha`.
+Afterward, require both the workflow and every required job to succeed and save
+the final run URL, SHA and conclusions in `03-ci.txt`. GitHub reuses the original
+event's SHA and ref; a pull-request merge commit must not be credited as a
+different release commit. See [GitHub's rerun contract](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
+
+The rerun still participates in the existing concurrency group, so another push
+on that ref can cancel it again. Coordinate a quiet interval for acceptance.
+If no matching run exists, the rerun window has expired, or GitHub access is
+unavailable, record missing CI evidence and withhold acceptance. A manual run
+against today's `main` does not validate an older candidate. Establish an
+authorized workflow execution for the intended candidate before proceeding.
 
 ## Maintenance
 

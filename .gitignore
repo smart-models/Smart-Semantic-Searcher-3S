@@ -107,6 +107,7 @@ smart-qdrant-mcp-server/docs/*
 # Node / Playwright (frontend E2E suite)
 node_modules/
 package-lock.json
+!middleware-qdrant-manager/frontend/package-lock.json
 test-results/
 playwright-report/
 blob-report/

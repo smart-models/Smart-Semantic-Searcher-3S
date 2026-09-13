@@ -47,7 +47,7 @@ Client ────────────────────────�
 | `scripts/` | What the launchers and CI call: the shared planner `stack_core.py` with its host GPU probe `stack_gpu_probe.py`; the preflight verifiers `verify_token_config.py` and `verify_compose_security.py`; `verify_dependencies.py` (network-dependent OSV/SBOM audit) with `security_constraints.py` and `render_dependency_audit_issue.py` beside it; the release gate `release_evidence.py`; the shared fixture helper `stack_test_support.py`; and their tests. |
 | `stack.ps1` / `stack.sh` | **At the repository root.** The only supported way to build/start/stop the stack. |
 | `requirements/` | Human-maintained direct pins (`middleware.txt`, `embedder-cpu.txt`, `embedder-gpu.txt`, `embedder-base.txt`, `shared.txt`, `mcp.txt`, `dev.txt`, `ci.txt`), the `security-constraints.txt` floor applied over them, and `locks/` transitive constraints applied only inside Docker builds. [`requirements/README.md`](requirements/README.md) is its reference. |
-| `.github/` | Three workflows plus the operator release checklist, documented in [`.github/README.md`](.github/README.md): `workflows/ci.yml` (every push to `main` and every PR), `workflows/dependency-audit.yml` (weekly OSV/SBOM cron that opens, updates and closes one deduplicated issue), `workflows/release-check.yml` (`workflow_dispatch` offline release gate that emits an evidence manifest), and `RELEASE_CHECKLIST.md`. Add a job to `ci.yml` when you add a suite. |
+| `.github/` | Three workflows, `dependabot.yml` and the operator release checklist, documented in [`.github/README.md`](.github/README.md): `workflows/ci.yml` (every push to `main` and every PR), `workflows/dependency-audit.yml` (weekly OSV/SBOM cron that opens, updates and closes one deduplicated issue), `workflows/release-check.yml` (manual release checks and evidence), and `RELEASE_CHECKLIST.md`. Add a job to `ci.yml` when you add a suite. |
 | `compose.yml` / `Dockerfile` | Multi-target build (`middleware`, `smart-qdrant-mcp`, `smart-embedder-cpu`, `smart-embedder-gpu`, plus non-network-facing `*-init-*` prep containers per hardware profile). |
 | `compose.embedder-private.yml` | One-purpose overlay the launchers add when `EXPOSE_SMART_EMBEDDER_PORT=false`; withdraws the host port publish with `ports: !reset []` (a plain `ports: []` would concatenate, not replace). |
 | `compose.gpu-device.yml` | Single physical GPU overlay; both GPU init and serving reservations use the UUID resolved by the launcher planner. |
@@ -200,6 +200,7 @@ py -m unittest discover -s tests -p "test_*.py"
 Pop-Location
 py -m ruff check .
 py -m ruff format --check .
+actionlint
 shellcheck stack.sh
 Invoke-ScriptAnalyzer -Path stack.ps1 -Severity Warning,Error
 Push-Location middleware-qdrant-manager/frontend
@@ -218,12 +219,15 @@ Two CI-only differences remain, by design: CI runs the Python suites on **both**
 3.10 and 3.11, and adds one `e-monitoring` history slice
 (`--grep 'M-G —'`). Neither changes what a local pass proves.
 
-`workflow_dispatch` also offers `release-check.yml`: the same offline set plus
-`security_constraints.py`, the OSV audit and an evidence manifest. Run it when
-cutting a release, not per change — see [`.github/README.md`](.github/README.md).
+`workflow_dispatch` also offers `release-check.yml`: a subset of CI's checks on
+Python 3.11 plus `security_constraints.py`, the OSV audit and an evidence manifest.
+It complements the candidate's regular CI result; the exact split and rerun
+procedure live in [`.github/RELEASE_CHECKLIST.md`](.github/RELEASE_CHECKLIST.md).
 
-The two launcher linters are the only tools here that are not already a
-dependency of a service. Install them once: `winget install koalaman.shellcheck`
+The launcher linters and actionlint are external verification tools. The
+actionlint version and archive checksum are pinned in the CI lint job; see
+[`.github/README.md`](.github/README.md#verification). Install the launcher
+linters once: `winget install koalaman.shellcheck`
 and `Install-Module PSScriptAnalyzer -Scope CurrentUser`. Both must report
 nothing; `Invoke-ScriptAnalyzer` signals findings by **printing** them, not by
 an exit code, so read its output rather than `$LASTEXITCODE`.

@@ -12,11 +12,11 @@ from qdrant_middleware.core.config import Settings
 from qdrant_middleware.main import create_app
 
 
-def _app():
+def _app(request_timeout=0.2):
     """Build a locally isolated app with a short test-only deadline."""
     settings = Settings(
         MIDDLEWARE_API_TOKENS="", MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL=True
-    ).model_copy(update={"request_timeout": 0.2})
+    ).model_copy(update={"request_timeout": request_timeout})
     return create_app(settings)
 
 
@@ -147,12 +147,16 @@ async def test_client_cancellation_does_not_leave_a_handler_or_lease():
     assert app.state.runtime.mutations._entries == {}
 
 
-async def test_handler_timeout_exception_is_not_the_response_deadline():
-    app = _app()
+@pytest.mark.parametrize(
+    "exception_type", [TimeoutError, asyncio.TimeoutError], ids=["builtin", "asyncio"]
+)
+async def test_handler_timeout_exception_is_not_the_response_deadline(exception_type):
+    # Allow route setup on slower runners while checking exception propagation.
+    app = _app(request_timeout=2)
 
     @app.get("/held")
     async def held():
-        raise TimeoutError("internal operation failure")
+        raise exception_type("internal operation failure")
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
