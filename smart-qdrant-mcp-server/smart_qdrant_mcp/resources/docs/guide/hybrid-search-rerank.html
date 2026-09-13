@@ -714,7 +714,7 @@
         <p class="architecture-route">Application → Middleware → Smart Embedder (encode) → Middleware → Qdrant (retrieve + fuse) → Middleware → Smart Embedder (rerank) → Middleware → Application</p>
         <div class="implementation-notes">
           <p><strong>Before the search starts</strong>Documents must already be split into passages, embedded and stored. Querying does not re-embed the whole collection. The optional MCP server gives agent clients another way to call the middleware.</p>
-          <p><strong>Two model profiles, the same flow</strong><span class="mono">basic</span> uses BGE-M3 embeddings and a BGE reranker. <span class="mono">advanced</span> uses Qwen dense embeddings, MILCO sparse embeddings and a Qwen reranker. The dense+sparse flow here does not use ColBERT.</p>
+          <p><strong>Two model profiles, the same flow</strong><span class="mono">basic</span> uses BGE-M3 embeddings and a BGE reranker. <span class="mono">advanced</span> uses Qwen dense embeddings, MILCO sparse embeddings and a Qwen reranker. The dense+sparse flow here does not use ColBERT. <a href="embedding-models.html#colbert">Why ColBERT stays out ↗</a>.</p>
         </div>
       </section>
       <section class="section" id="practice" aria-labelledby="practice-title" style="padding-top:0">
@@ -751,7 +751,7 @@
       </section>
     </div>
   </main>
-  <footer class="site-footer"><div class="wrap footer-inner"><span>Smart Semantic Searcher <span aria-hidden="true">/</span> The Search Field Guide <span aria-hidden="true">·</span> v1.0.0</span><nav class="footer-links" aria-label="Footer"><a href="getting-started.html">Getting Started</a><a href="cli.html">Start the App</a><a href="environment.html">Configure .env</a><a href="architecture.html">Architecture</a><a href="#top">Back to Top ↑</a></nav></div></footer>
+  <footer class="site-footer"><div class="wrap footer-inner"><span>Smart Semantic Searcher <span aria-hidden="true">/</span> The Search Field Guide <span aria-hidden="true">·</span> v1.0.0</span><nav class="footer-links" aria-label="Footer"><a href="getting-started.html">Getting Started</a><a href="cli.html">Start the App</a><a href="environment.html">Configure .env</a><a href="architecture.html">Architecture</a><a href="embedding-models.html">Embedding Models</a><a href="#top">Back to Top ↑</a></nav></div></footer>
   <script>
     // The guide intentionally has no network, storage or build-time dependencies.
     (() => {

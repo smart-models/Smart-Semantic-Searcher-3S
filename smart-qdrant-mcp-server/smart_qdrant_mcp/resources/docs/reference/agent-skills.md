@@ -30,7 +30,7 @@ when it works through this stack's MCP tools. A skill is text, not code.
 - Not a runtime component. Nothing in the stack imports it, reads it, or
   fails without it. Delete the whole directory and the stack behaves
   identically.
-- Not the server's own teaching channel. The MCP server already ships twelve
+- Not the server's own teaching channel. The MCP server already ships twenty-four
   `docs://` / `qhm://` resources and three workflow prompts, served live. The
   skill complements that channel from the client side; it does not replace it.
 - Not a place for server behaviour to be *defined*. Everything here describes

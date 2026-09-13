@@ -18,9 +18,9 @@ nine `docs://` resources: `docs://concepts/hybrid-search`,
 `docs://concepts/embedding-contract`, `docs://reference/filters`,
 `docs://workflows/ingest`, `docs://workflows/search-recipes`,
 `docs://workflows/reindex`, `docs://troubleshooting`. It also serves the
-application's own documentation, copied into the server: five guide pages
+application's own documentation, copied into the server: six guide pages
 (`docs://guide/getting-started`, `docs://guide/cli`, `docs://guide/environment`,
-`docs://guide/architecture`, `docs://guide/hybrid-search-rerank`) for how a user
+`docs://guide/architecture`, `docs://guide/hybrid-search-rerank`, `docs://guide/embedding-models`) for how a user
 runs and configures the stack, and the six component references those pages link
 to (`docs://reference/middleware-api`, `docs://reference/launcher-scripts`,
 `docs://reference/smart-embedder`, `docs://reference/mcp-server`,

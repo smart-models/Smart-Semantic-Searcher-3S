@@ -9,6 +9,7 @@ from mcp import MCPError
 from smart_qdrant_mcp.resources.docs import (
     APP_RESOURCES,
     DOC_RESOURCES,
+    _prepare,
     docs_directory,
     published_documents,
     resource_name,
@@ -25,6 +26,7 @@ APP_DOCUMENT_ORIGINS = {
     "guide/environment.html": "guide/environment.html",
     "guide/architecture.html": "guide/architecture.html",
     "guide/hybrid-search-rerank.html": "guide/hybrid-search-rerank.html",
+    "guide/embedding-models.html": "guide/embedding-models.html",
     "reference/middleware-api.md": "middleware-qdrant-manager/README.md",
     "reference/launcher-scripts.md": "scripts/README.md",
     "reference/smart-embedder.md": "server-embedder-reranker/README.md",
@@ -39,6 +41,7 @@ EXPECTED_APP_URIS = {
     "docs://guide/environment",
     "docs://guide/architecture",
     "docs://guide/hybrid-search-rerank",
+    "docs://guide/embedding-models",
     "docs://reference/middleware-api",
     "docs://reference/launcher-scripts",
     "docs://reference/smart-embedder",
@@ -209,6 +212,46 @@ async def test_guide_page_links_to_documents_this_server_serves(mcp_client, uri)
     assert targets <= set(published_documents())
 
 
+@pytest.mark.parametrize(
+    "uri", sorted(uri for uri in EXPECTED_APP_URIS if uri.startswith("docs://guide/"))
+)
+async def test_guide_pages_link_sibling_guides_by_resource_uri(mcp_client, uri):
+    """Sibling guide links resolve to ``docs://`` URIs, not relative paths.
+
+    Each guide page links to its companions by bare filename
+    (``href="cli.html#first-start"``), which a client with no checkout cannot
+    follow. Those are rewritten at read time to the ``docs://guide/<stem>``
+    URIs serving the same pages here, so no served page may still point at a
+    ``.html`` target, and every rewritten ``docs://guide/...`` URI must be a
+    document this server actually publishes.
+    """
+    served = (await mcp_client.read_resource(uri)).contents[0].text
+    assert not re.search(r'href="(?!https?://|/|\.\./|#)[^"]*\.html(#[^"]*)?"', served)
+    targets = set(re.findall(r'href="(docs://guide/[^"]*)"', served))
+    assert targets, uri
+    assert targets <= set(published_documents())
+
+
+def test_prepare_rewrites_sibling_guide_links_but_leaves_other_hrefs():
+    """``_prepare`` rewrites bare-filename guide links and leaves the rest.
+
+    A sibling guide link becomes the matching ``docs://guide/<stem>`` URI with
+    its fragment dropped; a same-page anchor and an absolute external URL are
+    left untouched, since they resolve without a checkout.
+    """
+    prepared = _prepare(
+        "guide/x.html",
+        '<a href="cli.html#first-start">x</a>'
+        '<a href="#top">y</a>'
+        '<a href="https://e.com/a.html">z</a>',
+    )
+    assert prepared == (
+        '<a href="docs://guide/cli">x</a>'
+        '<a href="#top">y</a>'
+        '<a href="https://e.com/a.html">z</a>'
+    )
+
+
 async def test_each_document_exposes_its_own_name_title_and_description(mcp_client):
     """Regression guard for the documents' identity in a resource listing.
 
@@ -236,12 +279,12 @@ async def test_each_document_exposes_its_own_name_title_and_description(mcp_clie
 async def test_all_resource_names_are_unique(mcp_client):
     """No two advertised resources share a name.
 
-    The nine teaching documents, the eleven application documents and the
-    three live resources share one listing, so all twenty-three names must be
+    The nine teaching documents, the twelve application documents and the
+    three live resources share one listing, so all twenty-four names must be
     distinct.
     """
     resources = (await mcp_client.list_resources()).resources
-    assert len(resources) == 23
+    assert len(resources) == 24
     names = [resource.name for resource in resources]
     assert len(names) == len(set(names))
 

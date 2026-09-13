@@ -123,7 +123,7 @@ parameters.
 ## 📚 Where do I learn more?
 
 The `guide/` directory is a complete field guide you read in the browser —
-five standalone pages that open straight from disk, no server or network
+six standalone pages that open straight from disk, no server or network
 needed:
 
 * [`getting-started.html`](guide/getting-started.html) — the first run end to
@@ -137,6 +137,9 @@ needed:
   together: middleware, Smart Embedder, Qdrant, MCP and the agent skill.
 * [`hybrid-search-rerank.html`](guide/hybrid-search-rerank.html) — what hybrid
   search and reranking actually do.
+* [`embedding-models.html`](guide/embedding-models.html) — the models behind each
+  profile: basic BGE and advanced Qwen + MILCO, their Hugging Face sources,
+  and why ColBERT stays out of the search.
 
 ## 🤝 How can I contribute?
 

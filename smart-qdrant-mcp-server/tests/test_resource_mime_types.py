@@ -29,7 +29,7 @@ EXPECTED_MIME_TYPES: dict[str, str] = {
 
 
 async def test_every_resource_declares_its_expected_mime_type(mcp_client):
-    assert len(EXPECTED_MIME_TYPES) == 23
+    assert len(EXPECTED_MIME_TYPES) == 24
     declared = {
         str(resource.uri): resource.mime_type
         for resource in (await mcp_client.list_resources()).resources

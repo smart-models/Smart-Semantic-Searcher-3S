@@ -90,7 +90,7 @@ DOC_RESOURCES: dict[str, tuple[str, str, str]] = {
 
 
 # uri -> (file_name, title, description), the same shape as DOC_RESOURCES, for
-# the application's own documentation: the five end-user guide pages and the
+# the application's own documentation: the six end-user guide pages and the
 # six component references those pages link to for the technical detail.
 #
 # Every file is a copy kept inside this package, not a path reaching out of
@@ -135,6 +135,15 @@ APP_RESOURCES: dict[str, tuple[str, str, str]] = {
         "The app's own plain-English walkthrough of hybrid search and "
         "reranking for end users, following one question from meaning and "
         "keywords through to a reranked set of results.",
+    ),
+    "docs://guide/embedding-models": (
+        "guide/embedding-models.html",
+        "Guide: the embedding models",
+        "The app's own end-user guide to the two model profiles: which "
+        "model fills the dense, sparse and reranking roles under basic "
+        "(BGE) and advanced (Qwen + MILCO), their Hugging Face sources and "
+        "licenses, why ColBERT is produced but never stored, and what the "
+        "embedding contract means for a collection.",
     ),
     "docs://reference/middleware-api": (
         "reference/middleware-api.md",
@@ -201,9 +210,27 @@ _LINKED_DOCS: dict[str, str] = {
     "smart-skill/smart-qdrant-mcp/SKILL.md": "docs://reference/smart-qdrant-skill",
 }
 
+# Sibling guide pages also link to each other by bare filename
+# (``href="cli.html#first-start"``), which has the same problem over MCP: the
+# client has no checkout, so the relative path resolves to nothing. The same
+# read-time rewrite applies, derived from ``APP_RESOURCES`` so it stays in sync
+# with the registered guide pages rather than being hand-maintained. Anchors
+# are dropped for the same reason as the README links above.
+_GUIDE_LINKS: dict[str, str] = {
+    Path(file_name).name: uri
+    for uri, (file_name, _, _) in APP_RESOURCES.items()
+    if file_name.startswith("guide/") and file_name.endswith(".html")
+}
+
 _LINK_HREF = re.compile(
     r'href="\.\./('
     + "|".join(re.escape(path) for path in _LINKED_DOCS)
+    + r')(#[^"]*)?"'
+)
+
+_SIBLING_HREF = re.compile(
+    r'href="(?!https?://|/|\.\./|#)('
+    + "|".join(re.escape(name) for name in _GUIDE_LINKS)
     + r')(#[^"]*)?"'
 )
 
@@ -229,13 +256,15 @@ def _prepare(file_name: str, text: str) -> str:
     """Return the document text as a client should receive it.
 
     Markdown is served exactly as stored. An HTML guide page is served with
-    its inline assets stripped and its checkout-path links rewritten to the
-    ``docs://`` URIs serving the same documents here.
+    its inline assets stripped and its links rewritten to the ``docs://`` URIs
+    serving the same documents here: checkout-path links to the component
+    READMEs and bare-filename links to sibling guide pages.
     """
     if not file_name.endswith(".html"):
         return text
     text = _ASSET_TAGS.sub("", text)
-    return _LINK_HREF.sub(lambda m: f'href="{_LINKED_DOCS[m.group(1)]}"', text)
+    text = _LINK_HREF.sub(lambda m: f'href="{_LINKED_DOCS[m.group(1)]}"', text)
+    return _SIBLING_HREF.sub(lambda m: f'href="{_GUIDE_LINKS[m.group(1)]}"', text)
 
 
 def docs_directory() -> Path:

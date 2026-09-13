@@ -43,7 +43,7 @@ Client ────────────────────────�
 | `server-embedder-reranker/` | "Smart Embedder": self-hosted embedding + reranking server with two fixed model profiles (`basic` = BGE-M3 family, `advanced` = Qwen/MILCO). No cloud dependency. |
 | `smart-qdrant-mcp-server/` | **Optional** MCP server exposing the middleware's REST API as 28 tools plus documentation/live-state resources and workflow prompts. The stack functions without it (`MCP_SERVER_ENABLED=false`; `EMBEDDER_ONLY=true` removes it too). |
 | `smart-skill/` | Client-side agent skill for the MCP server. Prompt-side documentation only — no runtime role; the stack runs identically without it. |
-| `guide/` | Five standalone HTML field guides — `getting-started`, `cli`, `environment`, `architecture`, `hybrid-search-rerank` — plus their README. Each page embeds its own CSS, classic JS and WOFF2 fonts, so it opens over `file://` with no server, build step or network. **Copied verbatim into the MCP server — see [Copied documents](#copied-documents).** |
+| `guide/` | Six standalone HTML field guides — `getting-started`, `cli`, `environment`, `architecture`, `hybrid-search-rerank`, `embedding-models` — plus their README. Each page embeds its own CSS, classic JS and WOFF2 fonts, so it opens over `file://` with no server, build step or network. **Copied verbatim into the MCP server — see [Copied documents](#copied-documents).** |
 | `scripts/` | What the launchers and CI call: the shared planner `stack_core.py` with its host GPU probe `stack_gpu_probe.py`; the preflight verifiers `verify_token_config.py` and `verify_compose_security.py`; `verify_dependencies.py` (network-dependent OSV/SBOM audit) with `security_constraints.py` and `render_dependency_audit_issue.py` beside it; the release gate `release_evidence.py`; the shared fixture helper `stack_test_support.py`; and their tests. |
 | `stack.ps1` / `stack.sh` | **At the repository root.** The only supported way to build/start/stop the stack. |
 | `requirements/` | Human-maintained direct pins (`middleware.txt`, `embedder-cpu.txt`, `embedder-gpu.txt`, `embedder-base.txt`, `shared.txt`, `mcp.txt`, `dev.txt`, `ci.txt`), the `security-constraints.txt` floor applied over them, and `locks/` transitive constraints applied only inside Docker builds. [`requirements/README.md`](requirements/README.md) is its reference. |
@@ -66,7 +66,7 @@ truth for its subject; none repeats another.
 | Embedding/reranking behaviour, model profiles, autotuner, metrics. | [`server-embedder-reranker/README.md`](server-embedder-reranker/README.md) |
 | MCP tools, confirmation gates, resources, prompts. | [`smart-qdrant-mcp-server/README.md`](smart-qdrant-mcp-server/README.md) |
 | The client-side skill: what an agent is told about those tools. | [`smart-skill/README.md`](smart-skill/README.md), with [`SKILL.md`](smart-skill/smart-qdrant-mcp/SKILL.md), [`references/reference.md`](smart-skill/smart-qdrant-mcp/references/reference.md) and [`references/playbooks.md`](smart-skill/smart-qdrant-mcp/references/playbooks.md) |
-| Educational browser guides: startup, `.env`, console workflow, architecture, hybrid search. | [`guide/README.md`](guide/README.md) |
+| Educational browser guides: startup, `.env`, console workflow, architecture, hybrid search, embedding models. | [`guide/README.md`](guide/README.md) |
 | The console test suites — which need a stack, which are intercepted, which are destructive. | [`middleware-qdrant-manager/frontend/tests/README.md`](middleware-qdrant-manager/frontend/tests/README.md) |
 | Dependency pins, lock regeneration, which image target a package affects. | [`requirements/README.md`](requirements/README.md) |
 | CI, the scheduled dependency audit, the release gate and its evidence. | [`.github/README.md`](.github/README.md) and [`.github/RELEASE_CHECKLIST.md`](.github/RELEASE_CHECKLIST.md) |
@@ -86,14 +86,14 @@ repository owner** — do not rewrite it unless asked directly.
 ### Copied documents
 
 The container image ships `smart_qdrant_mcp/` alone, so the MCP server carries
-its own **byte-for-byte copies** of eleven repository documents and serves them
+its own **byte-for-byte copies** of twelve repository documents and serves them
 as `docs://` resources. `smart-qdrant-mcp-server/tests/test_resources_docs.py`
 compares every copy against its original on every run: editing an original
 without re-copying it **fails CI**.
 
 | Original | Copy under `smart_qdrant_mcp/resources/docs/` |
 |---|---|
-| `guide/getting-started.html`, `cli.html`, `environment.html`, `architecture.html`, `hybrid-search-rerank.html` | `guide/` — same five filenames |
+| `guide/getting-started.html`, `cli.html`, `environment.html`, `architecture.html`, `hybrid-search-rerank.html`, `embedding-models.html` | `guide/` — same six filenames |
 | `middleware-qdrant-manager/README.md` | `reference/middleware-api.md` |
 | `scripts/README.md` | `reference/launcher-scripts.md` |
 | `server-embedder-reranker/README.md` | `reference/smart-embedder.md` |
@@ -329,9 +329,9 @@ an exit code, so read its output rather than `$LASTEXITCODE`.
 
 - A thin, stateless translation layer: every tool call becomes one or more HTTP
   requests to the middleware. It never talks to Qdrant or Smart Embedder
-  directly, and holds no data of its own. It exposes 28 tools, 23 resources —
-  20 static `docs://` documents (9 teaching documents written for the server,
-  plus 11 copies covered by [Copied documents](#copied-documents)) and 3
+  directly, and holds no data of its own. It exposes 28 tools, 24 resources —
+  21 static `docs://` documents (9 teaching documents written for the server,
+  plus 12 copies covered by [Copied documents](#copied-documents)) and 3
   `qhm://` live-state proxies — and 3 workflow prompts.
 - `tools/*.py` define each tool's input model, confirmation gate and limits —
   the client's tool list is generated from these. `tool_map.py` maps tool →
@@ -462,7 +462,7 @@ the change crosses a boundary:
 | MCP tool, resource, prompt, or parameter | MCP tests and the matching `smart-skill/` reference/playbook update. |
 | Launcher, `.env.example`, Compose, port, volume, profile, or security | `py -m pytest scripts -q`, both CPU/GPU Compose config checks, and the relevant Docker validation. |
 | Frontend source or console behaviour | Rebuild the middleware image, run `npm run test:unit` and the intercepted Playwright specs, and run the destructive live suite only after reading its README. |
-| Any of the eleven [copied documents](#copied-documents) | Re-copy into `smart_qdrant_mcp/resources/docs/` in the same commit, then `py -m pytest smart-qdrant-mcp-server/tests/test_resources_docs.py -q`. |
+| Any of the twelve [copied documents](#copied-documents) | Re-copy into `smart_qdrant_mcp/resources/docs/` in the same commit, then `py -m pytest smart-qdrant-mcp-server/tests/test_resources_docs.py -q`. |
 | Dependency pin or model revision | Rebuild the affected image, regenerate the matching lock from the verified image, run `py scripts\verify_dependencies.py` (network; audits the lock against OSV), and repeat both CPU and GPU smoke coverage where applicable. |
 
 Do not call the live embedder or Playwright suite an offline test. Live checks need
@@ -536,7 +536,7 @@ Things that have already cost time here.
 
 | Trap | Reality |
 |---|---|
-| Editing a README or a `guide/` page and stopping there | Eleven documents have byte-for-byte copies inside the MCP package and a test that compares them. Re-copy in the same commit — see [Copied documents](#copied-documents). |
+| Editing a README or a `guide/` page and stopping there | Twelve documents have byte-for-byte copies inside the MCP package and a test that compares them. Re-copy in the same commit — see [Copied documents](#copied-documents). |
 | Editing a launcher flag in one shell only | `stack.ps1` and `stack.sh` are held at parity by `scripts/test_stack_parity.py`, and both must match `scripts/README.md`. |
 | Putting launcher logic in the shell scripts | Everything deciding *what Compose is asked to do* lives in `scripts/stack_core.py`, once, for both. |
 | "Simplifying" `down`, `logs`, `status`, `version`, `help` | They deliberately bypass the planner so stopping a stack works with `.env` absent or malformed and no Python on `PATH`. `scripts/test_stack_recovery.py` enforces it. |

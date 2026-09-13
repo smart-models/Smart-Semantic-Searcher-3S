@@ -30,7 +30,7 @@ Client / MCP client → smart-qdrant-mcp (MCP, 6337) → middleware-qdrant-manag
 - A thin, stateless translation layer. Its complete surface covers every
   middleware operation: **28 MCP tools** map all tool-eligible routes, while
   `GET /metrics` is intentionally exposed only through a live resource. It
-  also exposes **23 resources** — 20 static `docs://` documents and 3 `qhm://`
+  also exposes **24 resources** — 21 static `docs://` documents and 3 `qhm://`
   live-state proxies — and **3 workflow prompts**.
 - Optional. The stack works without it; it only adds an agent-facing surface
   over the same REST contract any HTTP client can already use.
@@ -249,18 +249,18 @@ with why.
 
 ### Resources
 
-Twenty static documents (`docs://...`, `smart_qdrant_mcp/resources/docs/`)
+Twenty-one static documents (`docs://...`, `smart_qdrant_mcp/resources/docs/`)
 plus three live-state proxies (`qhm://...`,
-`smart_qdrant_mcp/resources/live.py`) — 23 total. None are cached:
+`smart_qdrant_mcp/resources/live.py`) — 24 total. None are cached:
 `mcp==2.0.0` configures cache hints per JSON-RPC method (all of
 `resources/read`), not per URI, and that method is shared between the two
 kinds, so caching one would mis-cache the other.
 
 The static documents come in two groups. Nine are **teaching documents**
-written against this server's tool surface. The other eleven are the
-**application's own documentation** — the five end-user guide pages from the
+written against this server's tool surface. The other twelve are the
+**application's own documentation** — the six end-user guide pages from the
 repository's `guide/` directory, and the six component references those pages
-link to for the technical detail. Those eleven are *copies* held inside
+link to for the technical detail. Those twelve are *copies* held inside
 `smart_qdrant_mcp/resources/`, not paths reaching out of the package: the
 container image copies `smart_qdrant_mcp/` and nothing else, so a link out
 would resolve in a checkout and be missing from every deployed server. The
@@ -291,6 +291,7 @@ that same document here, so a client with no checkout can follow them.
 | `docs://guide/environment` | The app's end-user reference for `.env`, parameter by parameter. |
 | `docs://guide/architecture` | The app's end-user tour of the whole local stack and its model profiles. |
 | `docs://guide/hybrid-search-rerank` | The app's plain-English walkthrough of hybrid search and reranking for end users. |
+| `docs://guide/embedding-models` | The app's end-user guide to the two model profiles: each model's role, source, license, the ColBERT decision and the embedding contract. |
 | `docs://reference/middleware-api` | `../middleware-qdrant-manager/README.md` — the REST API this server proxies. |
 | `docs://reference/launcher-scripts` | `../scripts/README.md` — the `stack.ps1`/`stack.sh` launchers and their reference. |
 | `docs://reference/smart-embedder` | `../server-embedder-reranker/README.md` — the embedding and reranking service. |

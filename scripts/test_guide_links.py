@@ -132,6 +132,7 @@ def test_field_guide_local_links_and_anchors():
         "environment.html",
         "architecture.html",
         "hybrid-search-rerank.html",
+        "embedding-models.html",
     } <= {page.name for page in pages}, "Required field guide document missing"
     errors = [error for page in pages for error in link_errors(page)]
     assert not errors, "\n".join(errors)

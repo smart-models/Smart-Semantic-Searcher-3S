@@ -4,7 +4,7 @@
 
 This directory contains educational explanations of Smart Semantic Searcher:
 startup, environment configuration, the console workflow, service architecture,
-and hybrid search/reranking.
+hybrid search/reranking, and the embedding models behind each profile.
 The operational console and API are documented in the
 [middleware reference](../middleware-qdrant-manager/README.md).
 
@@ -14,7 +14,7 @@ reader performs in a separately running console.
 
 ## Mental model
 
-There are five standalone HTML pages. Each embeds its own styles, classic
+There are six standalone HTML pages. Each embeds its own styles, classic
 JavaScript and WOFF2 fonts, so presentation and demonstrations work through
 `file://` without a server, build step or network dependency. Relative links to
 other pages and technical documents assume the repository layout is preserved.
@@ -41,6 +41,7 @@ accepts credentials, starts services or writes an environment file.
 | [environment.html](environment.html) | Initial configuration, Qdrant, access keys, applying edits and all template parameters in searchable groups. |
 | [architecture.html](architecture.html) | Service boundaries, deployment choices and agent/client request paths. |
 | [hybrid-search-rerank.html](hybrid-search-rerank.html) | Retrieval, fusion and reranking, with a computed ranking demonstration. |
+| [embedding-models.html](embedding-models.html) | The two model profiles: each model's role, characteristics, Hugging Face source and license, the ColBERT decision, the embedding contract and a side-by-side comparison. |
 | [README.md](README.md) | Maintenance boundaries, navigation contracts and verification. |
 
 ## Interface reference
@@ -55,6 +56,7 @@ Disclosures have stable IDs and open when addressed directly. Examples include
 [the private-network boundary](architecture.html#private-network-boundary),
 [the complete search journey](hybrid-search-rerank.html#read-story), and
 [the RRF calculation](hybrid-search-rerank.html#rrf-calculation).
+The model guide addresses each model by a stable ID, for example [BGE-M3](embedding-models.html#bge-m3) and [MILCO](embedding-models.html#milco-650m), and the ColBERT explanation at [`#colbert`](embedding-models.html#colbert). Its hero roster selector is illustrative; both rosters are readable without JavaScript and in print.
 Section links such as `#reference` navigate without opening all disclosures.
 The entry page was renamed from `index.html` to `getting-started.html`.
 Its existing fragment IDs, including `#mcp`, `#skill`, steps and help entries,
@@ -79,6 +81,14 @@ clearing it restores the reader's previous open/closed group selections.
 Keep explanatory claims aligned with the linked service references, which own
 the actual endpoint, configuration and runtime contracts. Controls must remain
 illustrative and must not make live requests or require credentials.
+
+For the model guide, keep every model fact (architecture, parameters,
+dimensions, context, languages, license) consistent with the linked Hugging
+Face model cards and with `server-embedder-reranker/README.md`; keep the
+pinned-revision prefixes consistent with
+`server-embedder-reranker/model_revisions.py`; and preserve the distinction
+between what a model can produce (BGE-M3 ColBERT on a direct call) and what the
+stack stores and searches (dense + sparse only).
 
 Preserve keyboard navigation, accessible names, existing IDs, reduced motion
 and authored content readable without JavaScript. Active scenes must retain
@@ -166,6 +176,7 @@ For HTML changes, verify the final files through `file://` in a browser:
 | Sample | Download the sample and compare its bytes with the displayed source; it contains four records. |
 | Startup | Verify Windows and Linux commands remain visible together; exercise CPU/GPU, both model families and MCP on/off; compare preview/start text with launcher semantics. Check successful copy and unavailable-clipboard selection fallback. No command should execute from the page. |
 | Environment | Compare all parameter entries with active/commented assignments in `.env.example`; exercise name/prose search, empty results, clear, group/parameter links and history. Print during a filtered search and confirm all parameters print and the filter/disclosures restore afterward. |
+| Models | Switch the hero roster between basic and advanced; confirm both rosters print; follow every model-card and README link; compare specifications with the model cards and the pinned revisions. |
 
 Keep screenshots, PDFs and local review scripts in root gitignored `docs/`.
 Report automated results separately from visual inspection and manual browser

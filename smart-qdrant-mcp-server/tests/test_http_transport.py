@@ -318,7 +318,7 @@ async def test_modern_resources_list_needs_no_initialize_or_session(http_client)
     assert response.status_code == 200
     assert "mcp-session-id" not in response.headers
     resources = response.json()["result"]["resources"]
-    assert len(resources) == 23
+    assert len(resources) == 24
     assert all(resource.get("name") for resource in resources)
 
 

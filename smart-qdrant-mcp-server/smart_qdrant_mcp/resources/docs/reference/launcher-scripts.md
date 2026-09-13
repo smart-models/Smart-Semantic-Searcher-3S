@@ -9,7 +9,8 @@
 > every flag, the precedence rule, the recipes, the exit-code contract and the
 > troubleshooting entries. Nothing else needs to be read to run the stack.
 > **Prerequisite** — none. This file stands alone; the root
-> [`README.md`](../README.md) is the shorter version of it.
+> [`README.md`](../README.md) introduces the stack and gives the one-command
+> quickstart.
 
 ---
 
