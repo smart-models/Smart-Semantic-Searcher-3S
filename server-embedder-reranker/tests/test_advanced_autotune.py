@@ -62,6 +62,33 @@ class AdvancedAutotuneConfigTests(unittest.TestCase):
         self.assertEqual(config.max_seconds, 42.5)
         self.assertEqual(config.profile_path, "/tmp/a.json")
 
+    def test_default_quick_budget_adapts_and_explicit_budget_is_fixed(self):
+        default = subject.AdvancedAutotuneConfig.from_env(
+            {"HF_HOME": "/models"}, device_kind="cuda"
+        )
+        explicit = subject.AdvancedAutotuneConfig.from_env(
+            {
+                "HF_HOME": "/models",
+                "SMART_EMBEDDER_ADVANCED_AUTOTUNE_MAX_SECONDS": "240",
+            },
+            device_kind="cuda",
+        )
+        full = subject.AdvancedAutotuneConfig.from_env(
+            {"HF_HOME": "/models", "SMART_EMBEDDER_AUTOTUNE": "full"},
+            device_kind="cuda",
+        )
+        cpu = subject.AdvancedAutotuneConfig.from_env(
+            {"HF_HOME": "/models"}, device_kind="cpu"
+        )
+
+        self.assertTrue(default.adaptive_budget)
+        self.assertEqual(default.budget_ceiling_seconds, 720.0)
+        self.assertEqual(cpu.budget_ceiling_seconds, 1080.0)
+        self.assertFalse(explicit.adaptive_budget)
+        self.assertEqual(explicit.budget_ceiling_seconds, 240.0)
+        self.assertFalse(full.adaptive_budget)
+        self.assertEqual(full.budget_ceiling_seconds, 1800.0)
+
 
 class AdvancedFingerprintTests(unittest.TestCase):
     """What the advanced fingerprint covers, and what invalidates it."""

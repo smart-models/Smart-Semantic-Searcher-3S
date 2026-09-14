@@ -128,6 +128,26 @@ class AutotuneEntrypointTests(unittest.TestCase):
         self.assertIn(profile_path, command)
         self.assertEqual(runner.call_args.kwargs["env"], env)
 
+    def test_advanced_default_budget_timeout_covers_the_adaptive_ceiling(self):
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout='{"action":"calibrated"}\n', stderr=""
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            env = {
+                "SMART_EMBEDDER_AUTOTUNE": "quick",
+                "EMBEDDER_PROFILE": "advanced",
+                "HF_HOME": str(Path(temporary) / "models"),
+            }
+            with (
+                patch.object(
+                    autotune_entrypoint, "_advanced_device_kind", return_value="cuda"
+                ),
+                patch.object(subprocess, "run", return_value=completed) as worker,
+            ):
+                autotune_entrypoint.prepare(env, script_dir=Path("/app"))
+
+        self.assertEqual(worker.call_args.kwargs["timeout"], 780.0)
+
     def test_timeout_degrades_to_visible_fallback(self):
         with (
             tempfile.TemporaryDirectory() as temporary,

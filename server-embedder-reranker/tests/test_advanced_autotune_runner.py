@@ -9,6 +9,7 @@ import json
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -96,6 +97,16 @@ def isolated_result(
         stderr="",
         payload=payload,
     )
+
+
+class FakeClock:
+    """Monotonic clock that a fake isolated runner advances by hand."""
+
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
 
 
 class SearchSpaceTests(unittest.TestCase):
@@ -427,6 +438,30 @@ class SearchSpaceTests(unittest.TestCase):
         large_full = runner.tuning_candidate_specs(fingerprint(memory_gib=24), full)
         self.assertEqual(large_full[0]["name"], "dense-geometric-batch-64")
         self.assertEqual(tokens_at_512(large_full[0]), 32768)
+
+    def test_default_budget_grows_to_fit_the_measured_baseline_within_its_ceiling(self):
+        config = schema.AdvancedAutotuneConfig.from_env(
+            {"HF_HOME": "/models"}, device_kind="cuda"
+        )
+        deadline = runner.calibration_deadline_seconds
+
+        self.assertEqual(
+            deadline(config, baseline_seconds=200.0, planned_candidate_seconds=100.0),
+            300.0,
+        )
+        self.assertEqual(
+            deadline(config, baseline_seconds=10.0, planned_candidate_seconds=20.0),
+            240.0,
+        )
+        self.assertEqual(
+            deadline(config, baseline_seconds=700.0, planned_candidate_seconds=500.0),
+            720.0,
+        )
+        fixed = replace(config, adaptive_budget=False)
+        self.assertEqual(
+            deadline(fixed, baseline_seconds=700.0, planned_candidate_seconds=500.0),
+            240.0,
+        )
 
 
 class CandidateGateTests(unittest.TestCase):
@@ -821,6 +856,55 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(records["every-backend"]["status"], "skipped-budget")
         self.assertNotEqual(records["reranker-only"].get("status"), "skipped-budget")
         self.assertEqual(len(launched), 2)
+
+    def test_slow_baseline_leaves_time_for_candidates_on_the_default_budget(self):
+        clock = FakeClock()
+        baseline = {
+            "candidate": "co-resident-safe-baseline",
+            "status": "passed",
+            "quality_passed": True,
+            "quality_capture": CandidateGateTests()._capture(),
+            "selected": schema.safe_advanced_defaults("cuda"),
+            "measurements": [],
+        }
+        specs = [
+            {"name": name, "target_backends": ["dense"], "changes": {}}
+            for name in ("dense-a", "dense-b")
+        ]
+        timeouts = []
+
+        def isolated_runner(command, *, timeout_seconds, **kwargs):
+            timeouts.append(timeout_seconds)
+            seconds = 200.0 if len(timeouts) == 1 else 20.0
+            clock.now += seconds
+            return isolated_result(payload=baseline, duration_seconds=seconds)
+
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(runner, "tuning_candidate_specs", return_value=specs),
+            patch.object(runner.time, "monotonic", clock),
+        ):
+            config = schema.AdvancedAutotuneConfig.from_env(
+                {
+                    "HF_HOME": "/models",
+                    "SMART_EMBEDDER_ADVANCED_AUTOTUNE_PROFILE": str(
+                        Path(temporary) / "profile.json"
+                    ),
+                },
+                device_kind="cuda",
+            )
+            result = runner.calibrate(
+                config=config,
+                fingerprint=fingerprint(),
+                script_dir=SERVER_DIR,
+                isolated_runner=isolated_runner,
+            )
+
+        self.assertEqual(timeouts[0], 720.0)
+        self.assertEqual(len(timeouts), 3)
+        self.assertTrue(result["budget"]["adaptive"])
+        self.assertGreater(result["budget"]["deadline_seconds"], 240.0)
+        self.assertLessEqual(result["budget"]["deadline_seconds"], 720.0)
 
     def test_timeout_names_candidate_and_reports_all_remaining_skips(self):
         items = [*quality.QUERIES, *quality.DOCUMENTS]

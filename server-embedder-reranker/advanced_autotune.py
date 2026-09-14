@@ -36,6 +36,9 @@ from model_revisions import MODEL_REVISIONS
 ADVANCED_AUTOTUNE_SCHEMA_VERSION = 2
 ADVANCED_AUTOTUNE_MODES = frozenset({"off", "quick", "full"})
 ADVANCED_AUTOTUNE_OBJECTIVES = frozenset({"balanced", "throughput", "latency"})
+#: An unset quick budget may grow to fit the measured baseline plus the planned
+#: candidates, up to this multiple of its default. An explicit budget is fixed.
+ADAPTIVE_BUDGET_CEILING_FACTOR = 3.0
 ADVANCED_MODEL_IDS = {
     "dense": "Qwen/Qwen3-Embedding-0.6B",
     "sparse": "omai-research/milco-650m",
@@ -111,6 +114,14 @@ class AdvancedAutotuneConfig:
     force: bool
     profile_path: str
     max_seconds: float
+    adaptive_budget: bool = False
+
+    @property
+    def budget_ceiling_seconds(self) -> float:
+        """Longest calibration this configuration may run, in seconds."""
+        if not self.adaptive_budget:
+            return self.max_seconds
+        return self.max_seconds * ADAPTIVE_BUDGET_CEILING_FACTOR
 
     @classmethod
     def from_env(
@@ -156,6 +167,7 @@ class AdvancedAutotuneConfig:
         max_seconds_value = values.get("SMART_EMBEDDER_ADVANCED_AUTOTUNE_MAX_SECONDS")
         if max_seconds_value is None or not max_seconds_value.strip():
             max_seconds_value = values.get("SMART_EMBEDDER_AUTOTUNE_MAX_SECONDS")
+        explicit_budget = positive_float(max_seconds_value, 0.0) > 0.0
         return cls(
             mode=mode,
             objective=objective,
@@ -165,6 +177,7 @@ class AdvancedAutotuneConfig:
                 max_seconds_value,
                 default_seconds,
             ),
+            adaptive_budget=mode == "quick" and not explicit_budget,
         )
 
 
@@ -529,6 +542,7 @@ def make_advanced_profile(
     status: str = "complete",
     fallback_reason: Optional[str] = None,
     duration_seconds: float = 0.0,
+    budget: Optional[Mapping[str, Any]] = None,
 ) -> dict:
     """Build a persisted ADVANCED hardware profile from measured evidence.
 
@@ -540,6 +554,7 @@ def make_advanced_profile(
         status: Profile completion state.
         fallback_reason: Optional reason a conservative policy was selected.
         duration_seconds: Total calibration duration.
+        budget: Optional record of the calibration time budget that applied.
 
     Returns:
         A versioned, JSON-serializable profile document.
@@ -549,7 +564,7 @@ def make_advanced_profile(
     """
     if not validate_advanced_selected(selected):
         raise ValueError("invalid ADVANCED selected policy")
-    return {
+    profile = {
         "schema_version": ADVANCED_AUTOTUNE_SCHEMA_VERSION,
         "profile": "advanced",
         "status": status,
@@ -562,6 +577,9 @@ def make_advanced_profile(
         "duration_seconds": round(max(0.0, duration_seconds), 6),
         "created_at_unix": int(time.time()),
     }
+    if budget is not None:
+        profile["budget"] = dict(budget)
+    return profile
 
 
 def load_advanced_profile(path: Path) -> Optional[dict]:

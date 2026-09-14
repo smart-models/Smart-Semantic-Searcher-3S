@@ -1274,6 +1274,25 @@ def estimate_deferred_canary_seconds(
     return max(120.0, min(max_seconds * 0.4, baseline_seconds + overhead))
 
 
+def calibration_deadline_seconds(
+    config: AdvancedAutotuneConfig,
+    *,
+    baseline_seconds: float,
+    planned_candidate_seconds: float,
+) -> float:
+    """Return the total calibration time allowed once the baseline is measured.
+
+    An explicit budget is a fixed limit. An unset quick budget grows to fit the
+    measured baseline plus every planned candidate, never below its default and
+    never above ``config.budget_ceiling_seconds``: on a host whose CPU dispatches
+    kernels slowly the baseline alone can consume the whole default budget.
+    """
+    if not config.adaptive_budget:
+        return config.max_seconds
+    planned = baseline_seconds + planned_candidate_seconds
+    return min(config.budget_ceiling_seconds, max(config.max_seconds, planned))
+
+
 def evaluate_final_canary(
     reference: Mapping[str, Any],
     candidate: Mapping[str, Any],
@@ -1394,7 +1413,7 @@ def calibrate(
             "search_space": search_space,
         }
 
-    remaining = config.max_seconds - (time.monotonic() - started)
+    remaining = config.budget_ceiling_seconds - (time.monotonic() - started)
     if remaining <= 1:
         return {"action": "fallback", "reason": "calibration budget exhausted"}
     memory_limit = fingerprint.get("hardware", {}).get("memory_limit_bytes")
@@ -1432,6 +1451,11 @@ def calibrate(
     selected = baseline_payload.get("selected") or candidate["selected"]
     baseline_selected = copy.deepcopy(selected)
     results = [baseline_record]
+    budget = {
+        "configured_seconds": config.max_seconds,
+        "adaptive": config.adaptive_budget,
+        "ceiling_seconds": config.budget_ceiling_seconds,
+    }
     reference_capture = baseline_payload.get("quality_capture")
     if isinstance(reference_capture, Mapping):
         baseline_quality = evaluate_quality_capture(
@@ -1477,6 +1501,28 @@ def calibrate(
             )
         else:
             final_canary_reserve = 0.0
+        planned_candidate_seconds = sum(
+            estimate_candidate_seconds(
+                isolated.duration_seconds, list(spec["target_backends"])
+            )
+            + (final_canary_reserve if spec.get("defer_long_canary") else 0.0)
+            for spec in specs
+            if not spec.get("unavailable_reason")
+        )
+        elapsed_seconds = time.monotonic() - started
+        deadline_seconds = calibration_deadline_seconds(
+            config,
+            baseline_seconds=elapsed_seconds,
+            planned_candidate_seconds=planned_candidate_seconds,
+        )
+        budget.update(
+            {
+                "planned_seconds": round(
+                    elapsed_seconds + planned_candidate_seconds, 6
+                ),
+                "deadline_seconds": round(deadline_seconds, 6),
+            }
+        )
         stopped_families: dict[str, str] = {}
         for spec_index, spec in enumerate(specs):
             search_family = spec.get("search_family")
@@ -1500,7 +1546,7 @@ def calibrate(
                     }
                 )
                 continue
-            remaining = config.max_seconds - (time.monotonic() - started)
+            remaining = deadline_seconds - (time.monotonic() - started)
             required_seconds = estimate_candidate_seconds(
                 isolated.duration_seconds,
                 list(spec["target_backends"]),
@@ -1623,7 +1669,7 @@ def calibrate(
             selected=selected,
         )
         if final_canary is not None:
-            remaining = config.max_seconds - (time.monotonic() - started)
+            remaining = deadline_seconds - (time.monotonic() - started)
             changed_backends = list(final_canary["target_backends"])
             if remaining <= 1.0:
                 results.append(
@@ -1702,6 +1748,7 @@ def calibrate(
         selected=selected,
         results=results,
         duration_seconds=time.monotonic() - started,
+        budget=budget,
     )
     save_advanced_profile(Path(config.profile_path), profile)
     return {
@@ -1710,6 +1757,7 @@ def calibrate(
         "fingerprint_sha256": profile["fingerprint_sha256"],
         "selected": selected,
         "duration_seconds": profile["duration_seconds"],
+        "budget": budget,
         "results": results,
         "search_space": search_space,
         "deferred_canary_token_lengths": list(
@@ -1756,6 +1804,8 @@ def main(argv=None) -> int:
         )
         if argument is not None
     }
+    if args.max_seconds is not None and args.max_seconds != config.max_seconds:
+        replacements["adaptive_budget"] = False
     if replacements:
         config = replace(config, **replacements)
     fingerprint = build_advanced_fingerprint(

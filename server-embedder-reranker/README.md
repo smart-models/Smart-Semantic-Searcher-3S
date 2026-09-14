@@ -978,6 +978,15 @@ and 32,768 from 23 GiB. A larger microbatch is only persisted after the memory
 and quality gates pass, and the serving process still lowers the reranker
 budget when its measured VRAM headroom is smaller.
 
+An unset quick budget adapts to the host. The baseline may run for up to three
+times the default budget (720 s on CUDA, 1,080 s on CPU); once it is measured,
+the calibration deadline becomes the elapsed time plus the estimated cost of
+every planned candidate, never below the default and never above that ceiling.
+The pre-start process allows the ceiling plus 60 s, and the persisted profile
+records the configured, planned and applied budget under `budget`. Setting
+`SMART_EMBEDDER_ADVANCED_AUTOTUNE_MAX_SECONDS` (or the shared budget) makes the
+budget a fixed limit again.
+
 The offline ADVANCED worker imports the serving model wrappers without opening
 an HTTP listener. When the prep container has no credentials, the import uses
 a fresh, process-local random credential and restores the environment afterward.
@@ -1011,7 +1020,7 @@ materialization.
 | Variable | Values / default | Purpose |
 |---|---|---|
 | `SMART_EMBEDDER_ADVANCED_AUTOTUNE_PROFILE` | `/app/runtime_state/autotune/advanced-hardware-profile.json` | Profile independent from BASIC |
-| `SMART_EMBEDDER_ADVANCED_AUTOTUNE_MAX_SECONDS` | GPU `240`, CPU `360` for quick | ADVANCED-specific budget override |
+| `SMART_EMBEDDER_ADVANCED_AUTOTUNE_MAX_SECONDS` | unset: quick adapts from GPU `240` / CPU `360` up to 3× | Fixed ADVANCED budget; setting it (or the shared budget) disables the adaptive quick budget |
 | `QWEN_EMBED_RUNTIME` | `torch`, `onnx-fp32`, `onnx-int8` | Explicit dense runtime; ORT is CPU-only |
 | `SMART_EMBEDDER_ADVANCED_ONNX_CACHE` | `/app/runtime_state/autotune/onnx` | Versioned export and manifest cache |
 | `QWEN_EMBED_CPU_MAX_LENGTH` | `2048` | CPU Compose dense safety cap |

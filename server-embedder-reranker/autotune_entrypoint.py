@@ -139,13 +139,20 @@ def prepare(
         if active_profile == ADVANCED_PROFILE
         else basic_calibration_command(config, script_dir=directory)
     )
-    timeout = max(30.0, config.max_seconds + 60.0)
+    budget_limit = (
+        config.budget_ceiling_seconds
+        if active_profile == ADVANCED_PROFILE
+        else config.max_seconds
+    )
+    timeout = max(30.0, budget_limit + 60.0)
     logging.info(
-        "%s hardware autotune pre-start begin: mode=%s objective=%s budget=%.0fs",
+        "%s hardware autotune pre-start begin: mode=%s objective=%s budget=%.0fs "
+        "ceiling=%.0fs",
         active_profile.upper(),
         config.mode,
         config.objective,
         config.max_seconds,
+        budget_limit,
     )
     try:
         profile_path = Path(config.profile_path)
