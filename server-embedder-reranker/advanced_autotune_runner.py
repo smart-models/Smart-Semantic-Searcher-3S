@@ -1472,30 +1472,22 @@ def calibrate(
                 )
                 continue
             remaining = config.max_seconds - (time.monotonic() - started)
-            estimated_candidate_seconds = estimate_candidate_seconds(
+            required_seconds = estimate_candidate_seconds(
                 isolated.duration_seconds,
                 list(spec["target_backends"]),
-            )
-            required_seconds = estimated_candidate_seconds + (
-                final_canary_reserve if spec.get("defer_long_canary") else 0.0
-            )
+            ) + (final_canary_reserve if spec.get("defer_long_canary") else 0.0)
             if remaining < required_seconds:
-                for pending in specs[spec_index:]:
-                    pending_estimate = estimate_candidate_seconds(
-                        isolated.duration_seconds,
-                        list(pending["target_backends"]),
-                    )
-                    if pending.get("defer_long_canary"):
-                        pending_estimate += final_canary_reserve
-                    results.append(
-                        {
-                            "candidate": pending["name"],
-                            "status": "skipped-budget",
-                            "remaining_seconds": round(max(0.0, remaining), 6),
-                            "estimated_seconds": round(pending_estimate, 6),
-                        }
-                    )
-                break
+                # Estimates depend on each candidate's backends, so a later one
+                # can still fit: skip this candidate instead of ending the search.
+                results.append(
+                    {
+                        "candidate": spec["name"],
+                        "status": "skipped-budget",
+                        "remaining_seconds": round(max(0.0, remaining), 6),
+                        "estimated_seconds": round(required_seconds, 6),
+                    }
+                )
+                continue
             tuned = materialise_candidate(baseline_template, selected, spec)
             candidate_timeout = remaining - (
                 final_canary_reserve if spec.get("defer_long_canary") else 0.0

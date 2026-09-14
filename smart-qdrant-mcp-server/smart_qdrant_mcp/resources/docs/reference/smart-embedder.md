@@ -968,6 +968,10 @@ baseline, their reserved time includes both a baseline-duration probe allowance
 and the measured model-load/quality overhead, within the existing calibration
 budget. Exhausting that window still rolls all tentative selections back.
 
+A candidate whose estimate does not fit the remaining budget is recorded as
+`skipped-budget` and the search continues with the next one, so a cheaper later
+candidate (for example a reranker-only probe) is still measured.
+
 The offline ADVANCED worker imports the serving model wrappers without opening
 an HTTP listener. When the prep container has no credentials, the import uses
 a fresh, process-local random credential and restores the environment afterward.

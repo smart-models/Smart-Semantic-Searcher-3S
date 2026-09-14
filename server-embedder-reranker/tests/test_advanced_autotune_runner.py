@@ -83,11 +83,12 @@ def isolated_result(
     returncode=0,
     timed_out=False,
     memory_exceeded=False,
+    duration_seconds=2.0,
 ) -> IsolatedResult:
     return IsolatedResult(
         command=("python", "worker.py"),
         returncode=returncode,
-        duration_seconds=2.0,
+        duration_seconds=duration_seconds,
         timed_out=timed_out,
         memory_exceeded=memory_exceeded,
         peak_rss_bytes=1024,
@@ -748,6 +749,50 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(result["action"], "fallback")
         self.assertIn("LexEcho", result["reason"])
         self.assertFalse(path.exists())
+
+    def test_candidate_that_does_not_fit_is_skipped_and_later_ones_still_run(self):
+        baseline = {
+            "candidate": "co-resident-safe-baseline",
+            "status": "passed",
+            "quality_passed": True,
+            "quality_capture": CandidateGateTests()._capture(),
+            "selected": schema.safe_advanced_defaults("cuda"),
+            "measurements": [],
+        }
+        specs = [
+            {
+                "name": "every-backend",
+                "target_backends": ["dense", "sparse", "hybrid", "reranker", "mixed"],
+                "changes": {},
+            },
+            {"name": "reranker-only", "target_backends": ["reranker"], "changes": {}},
+        ]
+        launched = []
+
+        def isolated_runner(command, **kwargs):
+            launched.append(command)
+            if len(launched) == 1:
+                return isolated_result(payload=baseline, duration_seconds=100.0)
+            return isolated_result(payload={**baseline, "candidate": "reranker-only"})
+
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(runner, "tuning_candidate_specs", return_value=specs),
+        ):
+            result = runner.calibrate(
+                config=self._config(
+                    Path(temporary) / "profile.json",
+                    SMART_EMBEDDER_AUTOTUNE_MAX_SECONDS="60",
+                ),
+                fingerprint=fingerprint(),
+                script_dir=SERVER_DIR,
+                isolated_runner=isolated_runner,
+            )
+
+        records = {record["candidate"]: record for record in result["results"][1:]}
+        self.assertEqual(records["every-backend"]["status"], "skipped-budget")
+        self.assertNotEqual(records["reranker-only"].get("status"), "skipped-budget")
+        self.assertEqual(len(launched), 2)
 
     def test_timeout_names_candidate_and_reports_all_remaining_skips(self):
         items = [*quality.QUERIES, *quality.DOCUMENTS]
