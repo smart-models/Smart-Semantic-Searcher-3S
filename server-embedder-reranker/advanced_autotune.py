@@ -20,7 +20,7 @@ import re
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional
 
 from basic_autotune import (
     ProfileLock,
@@ -39,6 +39,9 @@ ADVANCED_AUTOTUNE_OBJECTIVES = frozenset({"balanced", "throughput", "latency"})
 #: An unset quick budget may grow to fit the measured baseline plus the planned
 #: candidates, up to this multiple of its default. An explicit budget is fixed.
 ADAPTIVE_BUDGET_CEILING_FACTOR = 3.0
+#: Calibration cores running below this share of their maximum frequency are
+#: reported: slow single-thread kernel dispatch leaves the GPU waiting.
+CPU_FREQUENCY_WARNING_RATIO = 0.5
 ADVANCED_MODEL_IDS = {
     "dense": "Qwen/Qwen3-Embedding-0.6B",
     "sparse": "omai-research/milco-650m",
@@ -190,6 +193,7 @@ class AdvancedRuntimeProfile:
     fingerprint_sha256: str
     profile_path: str
     fallback_reason: Optional[str] = None
+    warnings: tuple[str, ...] = ()
 
 
 def safe_advanced_defaults(device_kind: str) -> dict:
@@ -420,6 +424,88 @@ def _package_version(name: str) -> Optional[str]:
         return None
 
 
+def _read_sysfs_text(path: Path) -> Optional[str]:
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except (FileNotFoundError, OSError, UnicodeError):
+        return None
+
+
+def read_cpu_power_policy(
+    cpu_ids: Iterable[int], *, sys_root: Path = Path("/sys")
+) -> dict:
+    """Summarise the host CPU frequency policy for the assigned CPUs.
+
+    Reads sysfs only; a container cannot, and must not, change host power
+    management. Settings are counted so a mixed policy stays visible.
+
+    Args:
+        cpu_ids: Logical CPUs assigned to this container.
+        sys_root: Root of the sysfs tree, replaceable in tests.
+
+    Returns:
+        Governor, energy preference and driver counts plus the highest maximum
+        frequency in MHz; ``available`` is false when cpufreq is not exposed.
+    """
+    base = sys_root / "devices" / "system" / "cpu"
+    governors: dict[str, int] = {}
+    preferences: dict[str, int] = {}
+    drivers: set[str] = set()
+    max_khz = 0
+    for cpu in sorted(set(cpu_ids)):
+        cpufreq = base / f"cpu{cpu}" / "cpufreq"
+        governor = _read_sysfs_text(cpufreq / "scaling_governor")
+        if not governor:
+            continue
+        governors[governor] = governors.get(governor, 0) + 1
+        preference = _read_sysfs_text(cpufreq / "energy_performance_preference")
+        if preference:
+            preferences[preference] = preferences.get(preference, 0) + 1
+        driver = _read_sysfs_text(cpufreq / "scaling_driver")
+        if driver:
+            drivers.add(driver)
+        with contextlib.suppress(TypeError, ValueError):
+            max_khz = max(max_khz, int(_read_sysfs_text(cpufreq / "scaling_max_freq")))
+    return {
+        "available": bool(governors),
+        "governors": governors,
+        "energy_performance_preferences": preferences,
+        "drivers": sorted(drivers),
+        "max_frequency_mhz": round(max_khz / 1000) if max_khz else None,
+    }
+
+
+def cpu_power_warnings(
+    policy: Mapping[str, Any], measured: Optional[Mapping[str, Any]]
+) -> list[str]:
+    """Return a warning when calibration ran on cores well below their maximum.
+
+    Args:
+        policy: Result of ``read_cpu_power_policy()``.
+        measured: Frequency summary sampled while the baseline probes ran.
+
+    Returns:
+        One warning naming the measured frequency and the policy, or no warning
+        when the cores ran fast enough or nothing could be measured.
+    """
+    maximum = policy.get("max_frequency_mhz")
+    median = (measured or {}).get("median_mhz")
+    if not maximum or not median or median >= maximum * CPU_FREQUENCY_WARNING_RATIO:
+        return []
+    governors = ", ".join(sorted(policy.get("governors") or {})) or "unknown"
+    preferences = (
+        ", ".join(sorted(policy.get("energy_performance_preferences") or {}))
+        or "unknown"
+    )
+    return [
+        f"calibration cores ran at a median {median:.0f} MHz, "
+        f"{median / maximum:.0%} of their {maximum:.0f} MHz maximum "
+        f"(governor {governors}, energy preference {preferences}); slow "
+        "single-thread kernel dispatch then limits GPU throughput, so ask the "
+        "host administrator to review CPU power management"
+    ]
+
+
 def build_advanced_fingerprint(
     *,
     config: AdvancedAutotuneConfig,
@@ -543,6 +629,7 @@ def make_advanced_profile(
     fallback_reason: Optional[str] = None,
     duration_seconds: float = 0.0,
     budget: Optional[Mapping[str, Any]] = None,
+    host_cpu_power: Optional[Mapping[str, Any]] = None,
 ) -> dict:
     """Build a persisted ADVANCED hardware profile from measured evidence.
 
@@ -555,6 +642,8 @@ def make_advanced_profile(
         fallback_reason: Optional reason a conservative policy was selected.
         duration_seconds: Total calibration duration.
         budget: Optional record of the calibration time budget that applied.
+        host_cpu_power: Optional host CPU power policy, measured frequency and
+            warnings recorded during calibration.
 
     Returns:
         A versioned, JSON-serializable profile document.
@@ -579,6 +668,8 @@ def make_advanced_profile(
     }
     if budget is not None:
         profile["budget"] = dict(budget)
+    if host_cpu_power is not None:
+        profile["host_cpu_power"] = dict(host_cpu_power)
     return profile
 
 
@@ -668,6 +759,9 @@ def resolve_advanced_runtime_profile(
                 fingerprint_sha256=digest,
                 profile_path=config.profile_path,
                 fallback_reason=profile.get("fallback_reason"),
+                warnings=tuple(
+                    (profile.get("host_cpu_power") or {}).get("warnings") or ()
+                ),
             )
         state = "stale" if profile is not None else "missing"
     return AdvancedRuntimeProfile(

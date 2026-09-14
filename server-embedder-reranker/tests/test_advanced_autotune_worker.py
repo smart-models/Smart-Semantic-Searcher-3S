@@ -235,5 +235,38 @@ class WorkerQualityInvariantTests(unittest.TestCase):
         self.assertEqual(payload["error_type"], "RuntimeError")
 
 
+class CpuFrequencySamplerTests(unittest.TestCase):
+    """The worker samples the frequency of the core running its probes."""
+
+    def test_sampler_reads_the_core_running_the_thread(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sampler = worker.CpuFrequencySampler(
+                proc_root=root / "proc", sys_root=root / "sys"
+            )
+            stat = root / "proc" / "self" / "task" / str(sampler.thread_id) / "stat"
+            stat.parent.mkdir(parents=True)
+            fields = ["R"] + ["0"] * 35 + ["5"]
+            stat.write_text("42 (python3) " + " ".join(fields), encoding="utf-8")
+            cpufreq = root / "sys" / "devices" / "system" / "cpu" / "cpu5" / "cpufreq"
+            cpufreq.mkdir(parents=True)
+            for khz in ("800000", "2400000", "2400000"):
+                (cpufreq / "scaling_cur_freq").write_text(khz, encoding="utf-8")
+                sampler.sample_once()
+
+        self.assertEqual(
+            sampler.summary(), {"samples": 3, "median_mhz": 2400, "max_mhz": 2400}
+        )
+
+    def test_sampler_without_readable_sources_reports_no_samples(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            sampler = worker.CpuFrequencySampler(
+                proc_root=Path(temporary), sys_root=Path(temporary)
+            )
+            sampler.sample_once()
+
+        self.assertEqual(sampler.summary(), {"samples": 0})
+
+
 if __name__ == "__main__":
     unittest.main()

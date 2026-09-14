@@ -9,6 +9,7 @@ import sys
 import tempfile
 import types
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -343,6 +344,77 @@ class AdvancedProfileTests(unittest.TestCase):
                 profile, self._fingerprint(), config=second
             )
         )
+
+
+class CpuPowerTests(unittest.TestCase):
+    """Host CPU power policy is recorded and throttled calibration is reported."""
+
+    def _cpufreq(self, root, cpu, governor, preference, max_khz):
+        base = f"devices/system/cpu/cpu{cpu}/cpufreq"
+        write(root, f"{base}/scaling_governor", governor)
+        write(root, f"{base}/energy_performance_preference", preference)
+        write(root, f"{base}/scaling_driver", "intel_pstate")
+        write(root, f"{base}/scaling_max_freq", str(max_khz))
+
+    def test_policy_counts_each_setting_across_assigned_cpus(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._cpufreq(root, 0, "powersave", "balance_performance", 2700000)
+            self._cpufreq(root, 1, "performance", "performance", 2700000)
+            policy = subject.read_cpu_power_policy([0, 1, 7], sys_root=root)
+
+        self.assertTrue(policy["available"])
+        self.assertEqual(policy["governors"], {"performance": 1, "powersave": 1})
+        self.assertEqual(
+            policy["energy_performance_preferences"],
+            {"balance_performance": 1, "performance": 1},
+        )
+        self.assertEqual(policy["drivers"], ["intel_pstate"])
+        self.assertEqual(policy["max_frequency_mhz"], 2700)
+
+    def test_missing_cpufreq_is_reported_as_unavailable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            policy = subject.read_cpu_power_policy([0], sys_root=Path(temporary))
+
+        self.assertFalse(policy["available"])
+        self.assertIsNone(policy["max_frequency_mhz"])
+
+    def test_warns_only_when_measured_frequency_is_below_half_of_maximum(self):
+        policy = {
+            "governors": {"powersave": 224},
+            "energy_performance_preferences": {"balance_performance": 224},
+            "max_frequency_mhz": 2700,
+        }
+        slow = subject.cpu_power_warnings(policy, {"samples": 9, "median_mhz": 800})
+
+        self.assertEqual(len(slow), 1)
+        self.assertIn("800 MHz", slow[0])
+        self.assertIn("powersave", slow[0])
+        self.assertIn("balance_performance", slow[0])
+        fast = {"samples": 9, "median_mhz": 2400}
+        self.assertEqual(subject.cpu_power_warnings(policy, fast), [])
+        self.assertEqual(subject.cpu_power_warnings(policy, {"samples": 0}), [])
+        self.assertEqual(subject.cpu_power_warnings(policy, None), [])
+
+    def test_active_profile_exposes_its_recorded_warnings(self):
+        config = subject.AdvancedAutotuneConfig.from_env({"HF_HOME": "/models"})
+        fingerprint = {"schema_version": 1, "hardware": {"gpus": []}}
+        profile = subject.make_advanced_profile(
+            fingerprint=fingerprint,
+            config=config,
+            selected=subject.safe_advanced_defaults("cuda"),
+            results=[],
+            host_cpu_power={"policy": {}, "measured": None, "warnings": ["slow"]},
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "advanced.json"
+            subject.save_advanced_profile(path, profile)
+            resolved = subject.resolve_advanced_runtime_profile(
+                replace(config, profile_path=str(path)), fingerprint
+            )
+
+        self.assertEqual(resolved.state, "active")
+        self.assertEqual(resolved.warnings, ("slow",))
 
 
 if __name__ == "__main__":

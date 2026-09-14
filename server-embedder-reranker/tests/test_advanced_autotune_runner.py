@@ -906,6 +906,44 @@ class CalibrationTests(unittest.TestCase):
         self.assertGreater(result["budget"]["deadline_seconds"], 240.0)
         self.assertLessEqual(result["budget"]["deadline_seconds"], 720.0)
 
+    def test_profile_records_cpu_power_and_warns_on_throttled_cores(self):
+        baseline = {
+            "candidate": "co-resident-safe-baseline",
+            "status": "passed",
+            "quality_passed": True,
+            "quality_capture": CandidateGateTests()._capture(),
+            "selected": schema.safe_advanced_defaults("cuda"),
+            "measurements": [],
+            "cpu_frequency": {"samples": 12, "median_mhz": 800, "max_mhz": 804},
+        }
+        policy = {
+            "available": True,
+            "governors": {"powersave": 8},
+            "energy_performance_preferences": {"balance_performance": 8},
+            "drivers": ["intel_pstate"],
+            "max_frequency_mhz": 2700,
+        }
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(runner, "tuning_candidate_specs", return_value=[]),
+            patch.object(runner, "read_cpu_power_policy", return_value=policy),
+        ):
+            path = Path(temporary) / "profile.json"
+            result = runner.calibrate(
+                config=self._config(path),
+                fingerprint=fingerprint(),
+                script_dir=SERVER_DIR,
+                isolated_runner=lambda *args, **kwargs: isolated_result(
+                    payload=baseline
+                ),
+            )
+            saved = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(saved["host_cpu_power"]["policy"], policy)
+        self.assertEqual(saved["host_cpu_power"]["measured"]["median_mhz"], 800)
+        self.assertEqual(len(saved["host_cpu_power"]["warnings"]), 1)
+        self.assertEqual(result["warnings"], saved["host_cpu_power"]["warnings"])
+
     def test_timeout_names_candidate_and_reports_all_remaining_skips(self):
         items = [*quality.QUERIES, *quality.DOCUMENTS]
         capture = {

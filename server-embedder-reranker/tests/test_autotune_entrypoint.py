@@ -148,6 +148,30 @@ class AutotuneEntrypointTests(unittest.TestCase):
 
         self.assertEqual(worker.call_args.kwargs["timeout"], 780.0)
 
+    def test_calibration_warnings_are_logged(self):
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout='{"action":"calibrated","warnings":["cores ran at 800 MHz"]}\n',
+            stderr="",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            env = {
+                "SMART_EMBEDDER_AUTOTUNE": "quick",
+                "EMBEDDER_PROFILE": "advanced",
+                "HF_HOME": str(Path(temporary) / "models"),
+            }
+            with (
+                patch.object(
+                    autotune_entrypoint, "_advanced_device_kind", return_value="cuda"
+                ),
+                patch.object(subprocess, "run", return_value=completed),
+                self.assertLogs(level="WARNING") as logs,
+            ):
+                autotune_entrypoint.prepare(env, script_dir=Path("/app"))
+
+        self.assertTrue(any("800 MHz" in line for line in logs.output))
+
     def test_timeout_degrades_to_visible_fallback(self):
         with (
             tempfile.TemporaryDirectory() as temporary,

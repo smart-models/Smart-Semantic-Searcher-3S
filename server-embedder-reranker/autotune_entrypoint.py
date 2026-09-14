@@ -203,6 +203,8 @@ def prepare(
             "reason": reason,
             "returncode": completed.returncode,
         }
+    for warning in payload.get("warnings") or ():
+        logging.warning("%s hardware autotune: %s", active_profile.upper(), warning)
     return payload
 
 

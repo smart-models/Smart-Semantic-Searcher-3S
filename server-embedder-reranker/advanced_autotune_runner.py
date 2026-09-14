@@ -22,9 +22,11 @@ from advanced_autotune import (
     AdvancedAutotuneConfig,
     advanced_profile_matches,
     build_advanced_fingerprint,
+    cpu_power_warnings,
     load_advanced_profile,
     make_advanced_profile,
     models_are_cached,
+    read_cpu_power_policy,
     safe_advanced_defaults,
     save_advanced_profile,
 )
@@ -1456,6 +1458,17 @@ def calibrate(
         "adaptive": config.adaptive_budget,
         "ceiling_seconds": config.budget_ceiling_seconds,
     }
+    cpu = fingerprint.get("hardware", {}).get("cpu", {})
+    cpu_ids = (
+        cpu.get("cpuset") or cpu.get("affinity_cpu_ids") or range(os.cpu_count() or 1)
+    )
+    cpu_policy = read_cpu_power_policy(cpu_ids)
+    measured_frequency = baseline_payload.get("cpu_frequency")
+    host_cpu_power = {
+        "policy": cpu_policy,
+        "measured": measured_frequency,
+        "warnings": cpu_power_warnings(cpu_policy, measured_frequency),
+    }
     reference_capture = baseline_payload.get("quality_capture")
     if isinstance(reference_capture, Mapping):
         baseline_quality = evaluate_quality_capture(
@@ -1749,6 +1762,7 @@ def calibrate(
         results=results,
         duration_seconds=time.monotonic() - started,
         budget=budget,
+        host_cpu_power=host_cpu_power,
     )
     save_advanced_profile(Path(config.profile_path), profile)
     return {
@@ -1758,6 +1772,8 @@ def calibrate(
         "selected": selected,
         "duration_seconds": profile["duration_seconds"],
         "budget": budget,
+        "host_cpu_power": host_cpu_power,
+        "warnings": host_cpu_power["warnings"],
         "results": results,
         "search_space": search_space,
         "deferred_canary_token_lengths": list(

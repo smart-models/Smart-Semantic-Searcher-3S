@@ -14,6 +14,7 @@ import os
 import secrets
 import statistics
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -333,6 +334,77 @@ def _latency_summary(samples: list[float]) -> dict[str, float]:
     }
 
 
+class CpuFrequencySampler:
+    """Sample the frequency of the core running the thread that created it.
+
+    A daemon thread reads that thread's current CPU from /proc and the CPU's
+    ``scaling_cur_freq`` from sysfs every interval while probes run.
+    """
+
+    def __init__(
+        self,
+        *,
+        interval_seconds: float = 0.5,
+        proc_root: Path = Path("/proc"),
+        sys_root: Path = Path("/sys"),
+    ):
+        """Prepare a sampler bound to the calling thread.
+
+        Args:
+            interval_seconds: Delay between samples once started.
+            proc_root: Root of procfs, replaceable in tests.
+            sys_root: Root of sysfs, replaceable in tests.
+        """
+        self.thread_id = threading.get_native_id()
+        self._interval = interval_seconds
+        self._proc_root = proc_root
+        self._sys_root = sys_root
+        self._samples: list[float] = []
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def sample_once(self) -> None:
+        """Record the current frequency of the sampled thread's core, if readable."""
+        stat = self._proc_root / "self" / "task" / str(self.thread_id) / "stat"
+        try:
+            fields = stat.read_text(encoding="utf-8").rsplit(")", 1)[1].split()
+            cpu = int(fields[36])
+            frequency = (
+                self._sys_root / "devices" / "system" / "cpu" / f"cpu{cpu}" / "cpufreq"
+            ) / "scaling_cur_freq"
+            khz = int(frequency.read_text(encoding="utf-8").strip())
+        except (OSError, IndexError, ValueError):
+            return
+        self._samples.append(khz / 1000)
+
+    def start(self) -> "CpuFrequencySampler":
+        """Start sampling in a daemon thread and return this sampler."""
+
+        def loop() -> None:
+            while not self._stop.wait(self._interval):
+                self.sample_once()
+
+        self._thread = threading.Thread(target=loop, name="cpu-frequency", daemon=True)
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        """Stop sampling and wait for the sampling thread to finish."""
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join()
+
+    def summary(self) -> dict:
+        """Return the sample count and the median and maximum frequency in MHz."""
+        if not self._samples:
+            return {"samples": 0}
+        return {
+            "samples": len(self._samples),
+            "median_mhz": round(statistics.median(self._samples)),
+            "max_mhz": round(max(self._samples)),
+        }
+
+
 def run_candidate(candidate: dict, *, script_dir: Path) -> dict:
     """Measure one ADVANCED candidate with all production models resident.
 
@@ -383,6 +455,7 @@ def run_candidate(candidate: dict, *, script_dir: Path) -> dict:
         )
         return configured is None or length in {int(value) for value in configured}
 
+    sampler = CpuFrequencySampler().start()
     for length, text in texts.items():
         for backend in ("dense", "sparse", "hybrid"):
             if backend not in target_backends or not requested_at_length(
@@ -591,6 +664,7 @@ def run_candidate(candidate: dict, *, script_dir: Path) -> dict:
             )
             quality_errors.extend(_validate_scores(mixed_scores, mixed_batch_size))
 
+    sampler.stop()
     quality_capture = _capture_quality(server)
 
     memory = _cuda_memory(torch)
@@ -606,6 +680,7 @@ def run_candidate(candidate: dict, *, script_dir: Path) -> dict:
         "measurements": measurements,
         "quality_capture": quality_capture,
         "memory": memory,
+        "cpu_frequency": sampler.summary(),
         "duration_seconds": round(time.monotonic() - started, 6),
         "selected": candidate.get("selected", {}),
         "co_resident_models": [

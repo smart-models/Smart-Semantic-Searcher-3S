@@ -987,6 +987,15 @@ records the configured, planned and applied budget under `budget`. Setting
 `SMART_EMBEDDER_ADVANCED_AUTOTUNE_MAX_SECONDS` (or the shared budget) makes the
 budget a fixed limit again.
 
+The profile also records the host's CPU power management under
+`host_cpu_power`: how many assigned CPUs use each frequency governor, energy
+performance preference and driver, their maximum frequency, and the median and
+maximum frequency sampled every 0.5 s on the core running the baseline probes.
+When that median is below half of the maximum, calibration adds a warning that
+the preparation container logs, and the serving process logs it again at every
+start with that profile: slow single-thread kernel dispatch then limits GPU
+throughput. The tuner only reads sysfs and never changes host power settings.
+
 The offline ADVANCED worker imports the serving model wrappers without opening
 an HTTP listener. When the prep container has no credentials, the import uses
 a fresh, process-local random credential and restores the environment afterward.

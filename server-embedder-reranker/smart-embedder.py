@@ -192,6 +192,9 @@ elif EFFECTIVE_AUTOTUNE_RUNTIME_PROFILE.state not in {
         EFFECTIVE_AUTOTUNE_RUNTIME_PROFILE.state,
         EFFECTIVE_AUTOTUNE_RUNTIME_PROFILE.profile_path,
     )
+if ACTIVE_PROFILE["profile"] == EMBEDDER_PROFILE_ADVANCED:
+    for autotune_warning in ADVANCED_AUTOTUNE_RUNTIME_PROFILE.warnings:
+        logging.warning("ADVANCED hardware autotune: %s", autotune_warning)
 
 
 # Server configuration parameters (env-tunable)
