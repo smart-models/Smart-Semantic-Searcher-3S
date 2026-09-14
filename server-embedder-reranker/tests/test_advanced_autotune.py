@@ -417,5 +417,45 @@ class CpuPowerTests(unittest.TestCase):
         self.assertEqual(resolved.warnings, ("slow",))
 
 
+class GpuWaitDiagnosisTests(unittest.TestCase):
+    """Low GPU utilisation during the probes means the GPU waits on the CPU."""
+
+    def test_low_median_utilisation_is_diagnosed_and_warned(self):
+        diagnosis = subject.gpu_wait_diagnosis({"samples": 20, "median_percent": 11.0})
+
+        self.assertTrue(diagnosis["gpu_waits_on_cpu"])
+        self.assertEqual(len(diagnosis["warnings"]), 1)
+        self.assertIn("11%", diagnosis["warnings"][0])
+
+    def test_busy_gpu_or_too_few_samples_is_not_diagnosed(self):
+        busy = subject.gpu_wait_diagnosis({"samples": 20, "median_percent": 85.0})
+        few = subject.gpu_wait_diagnosis({"samples": 2, "median_percent": 5.0})
+        missing = subject.gpu_wait_diagnosis(None)
+
+        for diagnosis in (busy, few, missing):
+            self.assertFalse(diagnosis["gpu_waits_on_cpu"])
+            self.assertEqual(diagnosis["warnings"], [])
+
+    def test_active_profile_warnings_include_gpu_dispatch(self):
+        config = subject.AdvancedAutotuneConfig.from_env({"HF_HOME": "/models"})
+        fingerprint = {"schema_version": 1, "hardware": {"gpus": []}}
+        profile = subject.make_advanced_profile(
+            fingerprint=fingerprint,
+            config=config,
+            selected=subject.safe_advanced_defaults("cuda"),
+            results=[],
+            host_cpu_power={"policy": {}, "measured": None, "warnings": ["cpu"]},
+            gpu_dispatch={"gpu_waits_on_cpu": True, "warnings": ["gpu"]},
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "advanced.json"
+            subject.save_advanced_profile(path, profile)
+            resolved = subject.resolve_advanced_runtime_profile(
+                replace(config, profile_path=str(path)), fingerprint
+            )
+
+        self.assertEqual(resolved.warnings, ("cpu", "gpu"))
+
+
 if __name__ == "__main__":
     unittest.main()

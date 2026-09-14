@@ -996,6 +996,16 @@ the preparation container logs, and the serving process logs it again at every
 start with that profile: slow single-thread kernel dispatch then limits GPU
 throughput. The tuner only reads sysfs and never changes host power settings.
 
+On CUDA the worker also samples GPU utilisation with `nvidia-smi` while the
+baseline probes run. A median below 50% (from at least four samples) means the
+GPU waits on host-side work such as single-thread kernel dispatch; calibration
+then measures larger batch policies and request coalescing first, and in full
+mode CUDA-graph compilation next, keeping every other candidate in its usual
+order. The diagnosis is persisted under `gpu_dispatch` and its warning is
+logged with the CPU power warning. The probing thread's CPU time is not used
+as the signal, because CUDA synchronisation may spin-wait on the CPU while the
+GPU is still busy.
+
 The offline ADVANCED worker imports the serving model wrappers without opening
 an HTTP listener. When the prep container has no credentials, the import uses
 a fresh, process-local random credential and restores the environment afterward.

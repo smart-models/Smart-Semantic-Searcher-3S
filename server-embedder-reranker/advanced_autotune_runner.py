@@ -23,6 +23,7 @@ from advanced_autotune import (
     advanced_profile_matches,
     build_advanced_fingerprint,
     cpu_power_warnings,
+    gpu_wait_diagnosis,
     load_advanced_profile,
     make_advanced_profile,
     models_are_cached,
@@ -1276,6 +1277,30 @@ def estimate_deferred_canary_seconds(
     return max(120.0, min(max_seconds * 0.4, baseline_seconds + overhead))
 
 
+def prioritise_for_gpu_wait(specs: list[dict]) -> list[dict]:
+    """Order candidates for a GPU that waits on the CPU, keeping each group stable.
+
+    Larger batches and request coalescing cut the number of kernel launches
+    first; CUDA graphs (compile reduce-overhead) remove launch overhead next.
+
+    Args:
+        specs: Candidate specifications in their default order.
+
+    Returns:
+        The same candidates, with those groups moved to the front.
+    """
+
+    def rank(spec: Mapping[str, Any]) -> int:
+        name = str(spec.get("name", ""))
+        if "geometric-batch" in name or name.startswith("schedule-queue-batch"):
+            return 0
+        if name.endswith("compile-reduce-overhead"):
+            return 1
+        return 2
+
+    return sorted(specs, key=rank)
+
+
 def calibration_deadline_seconds(
     config: AdvancedAutotuneConfig,
     *,
@@ -1453,6 +1478,7 @@ def calibrate(
     selected = baseline_payload.get("selected") or candidate["selected"]
     baseline_selected = copy.deepcopy(selected)
     results = [baseline_record]
+    gpu_dispatch = gpu_wait_diagnosis(None)
     budget = {
         "configured_seconds": config.max_seconds,
         "adaptive": config.adaptive_budget,
@@ -1495,6 +1521,10 @@ def calibrate(
         champion_payload = baseline_payload
         baseline_template = candidate
         specs = tuning_candidate_specs(fingerprint, config)
+        if _device_kind(fingerprint) == "cuda":
+            gpu_dispatch = gpu_wait_diagnosis(baseline_payload.get("gpu_utilization"))
+        if gpu_dispatch["gpu_waits_on_cpu"]:
+            specs = prioritise_for_gpu_wait(specs)
         if candidate.get("canary_token_lengths"):
             final_canary_reserve = estimate_final_canary_seconds(
                 baseline_payload,
@@ -1763,6 +1793,7 @@ def calibrate(
         duration_seconds=time.monotonic() - started,
         budget=budget,
         host_cpu_power=host_cpu_power,
+        gpu_dispatch=gpu_dispatch,
     )
     save_advanced_profile(Path(config.profile_path), profile)
     return {
@@ -1773,7 +1804,8 @@ def calibrate(
         "duration_seconds": profile["duration_seconds"],
         "budget": budget,
         "host_cpu_power": host_cpu_power,
-        "warnings": host_cpu_power["warnings"],
+        "gpu_dispatch": gpu_dispatch,
+        "warnings": [*host_cpu_power["warnings"], *gpu_dispatch["warnings"]],
         "results": results,
         "search_space": search_space,
         "deferred_canary_token_lengths": list(

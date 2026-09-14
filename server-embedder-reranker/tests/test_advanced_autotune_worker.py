@@ -268,5 +268,46 @@ class CpuFrequencySamplerTests(unittest.TestCase):
         self.assertEqual(sampler.summary(), {"samples": 0})
 
 
+class GpuUtilizationSamplerTests(unittest.TestCase):
+    """The worker records GPU utilisation while its probes run."""
+
+    def test_summary_uses_parsable_lines_only(self):
+        sampler = worker.GpuUtilizationSampler("GPU-test")
+        for line in ("12", " 8 ", "[N/A]", "", "10"):
+            sampler.record_line(line)
+
+        self.assertEqual(
+            sampler.summary(),
+            {"samples": 3, "median_percent": 10.0, "mean_percent": 10.0},
+        )
+
+    def test_empty_sampler_reports_no_samples(self):
+        sampler = worker.GpuUtilizationSampler("GPU-test")
+
+        self.assertEqual(sampler.summary(), {"samples": 0})
+
+    def test_start_streams_nvidia_smi_for_the_device(self):
+        launched = []
+
+        class FakeProcess:
+            def __init__(self, command, **kwargs):
+                launched.append(command)
+                self.stdout = io.StringIO("15\n25\n")
+
+            def terminate(self):
+                pass
+
+            def wait(self, timeout=None):
+                return 0
+
+        sampler = worker.GpuUtilizationSampler("GPU-abc", command_runner=FakeProcess)
+        sampler.start()
+        sampler.stop()
+
+        self.assertIn("GPU-abc", launched[0])
+        self.assertIn("--query-gpu=utilization.gpu", launched[0])
+        self.assertEqual(sampler.summary()["samples"], 2)
+
+
 if __name__ == "__main__":
     unittest.main()

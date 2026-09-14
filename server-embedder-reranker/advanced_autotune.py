@@ -42,6 +42,10 @@ ADAPTIVE_BUDGET_CEILING_FACTOR = 3.0
 #: Calibration cores running below this share of their maximum frequency are
 #: reported: slow single-thread kernel dispatch leaves the GPU waiting.
 CPU_FREQUENCY_WARNING_RATIO = 0.5
+#: A GPU busy less than this share of the baseline probes is waiting on the CPU.
+GPU_WAIT_UTILIZATION_PERCENT = 50.0
+#: Fewer utilisation samples than this are too few to diagnose anything.
+GPU_WAIT_MIN_SAMPLES = 4
 ADVANCED_MODEL_IDS = {
     "dense": "Qwen/Qwen3-Embedding-0.6B",
     "sparse": "omai-research/milco-650m",
@@ -506,6 +510,40 @@ def cpu_power_warnings(
     ]
 
 
+def gpu_wait_diagnosis(utilization: Optional[Mapping[str, Any]]) -> dict:
+    """Decide from baseline GPU utilisation whether the GPU waits on the CPU.
+
+    Args:
+        utilization: Utilisation summary sampled while the baseline probes ran.
+
+    Returns:
+        Whether the GPU waits on host-side work, the evidence it rests on, and a
+        warning when it does.
+    """
+    samples = int((utilization or {}).get("samples") or 0)
+    median = (utilization or {}).get("median_percent")
+    waits = (
+        samples >= GPU_WAIT_MIN_SAMPLES
+        and median is not None
+        and float(median) < GPU_WAIT_UTILIZATION_PERCENT
+    )
+    warnings = (
+        [
+            f"the GPU was busy a median {float(median):.0f}% of the calibration "
+            "probes: it waits on host-side work, so larger batches, request "
+            "coalescing and CUDA graphs were measured first"
+        ]
+        if waits
+        else []
+    )
+    return {
+        "gpu_waits_on_cpu": waits,
+        "median_percent": None if median is None else float(median),
+        "samples": samples,
+        "warnings": warnings,
+    }
+
+
 def build_advanced_fingerprint(
     *,
     config: AdvancedAutotuneConfig,
@@ -630,6 +668,7 @@ def make_advanced_profile(
     duration_seconds: float = 0.0,
     budget: Optional[Mapping[str, Any]] = None,
     host_cpu_power: Optional[Mapping[str, Any]] = None,
+    gpu_dispatch: Optional[Mapping[str, Any]] = None,
 ) -> dict:
     """Build a persisted ADVANCED hardware profile from measured evidence.
 
@@ -644,6 +683,7 @@ def make_advanced_profile(
         budget: Optional record of the calibration time budget that applied.
         host_cpu_power: Optional host CPU power policy, measured frequency and
             warnings recorded during calibration.
+        gpu_dispatch: Optional diagnosis of whether the GPU waited on the CPU.
 
     Returns:
         A versioned, JSON-serializable profile document.
@@ -670,6 +710,8 @@ def make_advanced_profile(
         profile["budget"] = dict(budget)
     if host_cpu_power is not None:
         profile["host_cpu_power"] = dict(host_cpu_power)
+    if gpu_dispatch is not None:
+        profile["gpu_dispatch"] = dict(gpu_dispatch)
     return profile
 
 
@@ -760,7 +802,10 @@ def resolve_advanced_runtime_profile(
                 profile_path=config.profile_path,
                 fallback_reason=profile.get("fallback_reason"),
                 warnings=tuple(
-                    (profile.get("host_cpu_power") or {}).get("warnings") or ()
+                    [
+                        *((profile.get("host_cpu_power") or {}).get("warnings") or ()),
+                        *((profile.get("gpu_dispatch") or {}).get("warnings") or ()),
+                    ]
                 ),
             )
         state = "stale" if profile is not None else "missing"

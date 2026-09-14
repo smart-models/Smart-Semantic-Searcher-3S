@@ -463,6 +463,28 @@ class SearchSpaceTests(unittest.TestCase):
             240.0,
         )
 
+    def test_gpu_wait_puts_batch_and_coalescing_candidates_first(self):
+        specs = [
+            {"name": "sparse-bf16-weights"},
+            {"name": "dense-geometric-batch-policy"},
+            {"name": "hybrid-cuda-overlap"},
+            {"name": "dense-compile-reduce-overhead"},
+            {"name": "schedule-queue-batch-32"},
+            {"name": "reranker-geometric-batch-policy"},
+        ]
+
+        self.assertEqual(
+            [spec["name"] for spec in runner.prioritise_for_gpu_wait(specs)],
+            [
+                "dense-geometric-batch-policy",
+                "schedule-queue-batch-32",
+                "reranker-geometric-batch-policy",
+                "dense-compile-reduce-overhead",
+                "sparse-bf16-weights",
+                "hybrid-cuda-overlap",
+            ],
+        )
+
 
 class CandidateGateTests(unittest.TestCase):
     """The gates a candidate must clear before it can be promoted."""
@@ -943,6 +965,54 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(saved["host_cpu_power"]["measured"]["median_mhz"], 800)
         self.assertEqual(len(saved["host_cpu_power"]["warnings"]), 1)
         self.assertEqual(result["warnings"], saved["host_cpu_power"]["warnings"])
+
+    def test_low_gpu_utilisation_reorders_candidates_and_is_recorded(self):
+        baseline = {
+            "candidate": "co-resident-safe-baseline",
+            "status": "passed",
+            "quality_passed": True,
+            "quality_capture": CandidateGateTests()._capture(),
+            "selected": schema.safe_advanced_defaults("cuda"),
+            "measurements": [],
+            "gpu_utilization": {
+                "samples": 30,
+                "median_percent": 10.0,
+                "mean_percent": 11.0,
+            },
+        }
+        specs = [
+            {"name": "dense-bf16-sdpa", "target_backends": ["dense"], "changes": {}},
+            {
+                "name": "dense-geometric-batch-policy",
+                "target_backends": ["dense"],
+                "changes": {},
+            },
+        ]
+        order = []
+
+        def isolated_runner(command, **kwargs):
+            payload = json.loads(command[command.index("--candidate-json") + 1])
+            order.append(payload.get("name"))
+            return isolated_result(
+                payload={**baseline, "candidate": payload.get("name")}
+            )
+
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(runner, "tuning_candidate_specs", return_value=specs),
+        ):
+            path = Path(temporary) / "profile.json"
+            result = runner.calibrate(
+                config=self._config(path, SMART_EMBEDDER_AUTOTUNE_MAX_SECONDS="600"),
+                fingerprint=fingerprint(),
+                script_dir=SERVER_DIR,
+                isolated_runner=isolated_runner,
+            )
+            saved = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(order[1:], ["dense-geometric-batch-policy", "dense-bf16-sdpa"])
+        self.assertTrue(saved["gpu_dispatch"]["gpu_waits_on_cpu"])
+        self.assertTrue(any("10%" in warning for warning in result["warnings"]))
 
     def test_timeout_names_candidate_and_reports_all_remaining_skips(self):
         items = [*quality.QUERIES, *quality.DOCUMENTS]

@@ -7,12 +7,14 @@ performance, and memory evidence for one serialized candidate.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import math
 import os
 import secrets
 import statistics
+import subprocess
 import sys
 import threading
 import time
@@ -405,6 +407,98 @@ class CpuFrequencySampler:
         }
 
 
+class GpuUtilizationSampler:
+    """Record GPU utilisation while probes run, from one streaming nvidia-smi."""
+
+    def __init__(
+        self,
+        device_uuid: str,
+        *,
+        interval_ms: int = 500,
+        command_runner: Any = subprocess.Popen,
+    ):
+        """Prepare a sampler for one GPU.
+
+        Args:
+            device_uuid: nvidia-smi device identifier (``GPU-...``).
+            interval_ms: nvidia-smi sampling period in milliseconds.
+            command_runner: ``subprocess.Popen``-compatible factory, replaceable
+                in tests.
+        """
+        self._command = [
+            "nvidia-smi",
+            "--query-gpu=utilization.gpu",
+            "--format=csv,noheader,nounits",
+            "-i",
+            device_uuid,
+            "-lms",
+            str(interval_ms),
+        ]
+        self._runner = command_runner
+        self._process: Any = None
+        self._reader: threading.Thread | None = None
+        self._samples: list[float] = []
+
+    def record_line(self, line: str) -> None:
+        """Keep one utilisation sample when the line is a number."""
+        with contextlib.suppress(ValueError):
+            self._samples.append(float(line.strip()))
+
+    def start(self) -> "GpuUtilizationSampler":
+        """Start nvidia-smi and a reader thread; do nothing if it cannot start."""
+        try:
+            self._process = self._runner(
+                self._command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+        except OSError:
+            return self
+
+        def read() -> None:
+            for line in self._process.stdout:
+                self.record_line(line)
+
+        self._reader = threading.Thread(
+            target=read, name="gpu-utilization", daemon=True
+        )
+        self._reader.start()
+        return self
+
+    def stop(self) -> None:
+        """Stop nvidia-smi and wait for the reader to drain its output."""
+        if self._process is None:
+            return
+        self._process.terminate()
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            self._process.wait(timeout=5)
+        if self._reader is not None:
+            self._reader.join(timeout=5)
+
+    def summary(self) -> dict:
+        """Return the sample count and the median and mean utilisation in percent."""
+        if not self._samples:
+            return {"samples": 0}
+        return {
+            "samples": len(self._samples),
+            "median_percent": round(statistics.median(self._samples), 1),
+            "mean_percent": round(statistics.fmean(self._samples), 1),
+        }
+
+
+def _start_gpu_sampler(torch_module: Any) -> GpuUtilizationSampler | None:
+    """Start utilisation sampling for the probing GPU when its UUID is known."""
+    if not torch_module.cuda.is_available():
+        return None
+    try:
+        uuid = str(torch_module.cuda.get_device_properties(0).uuid)
+    except (AttributeError, RuntimeError):
+        return None
+    device = uuid if uuid.startswith("GPU-") else f"GPU-{uuid}"
+    return GpuUtilizationSampler(device).start()
+
+
 def run_candidate(candidate: dict, *, script_dir: Path) -> dict:
     """Measure one ADVANCED candidate with all production models resident.
 
@@ -456,6 +550,7 @@ def run_candidate(candidate: dict, *, script_dir: Path) -> dict:
         return configured is None or length in {int(value) for value in configured}
 
     sampler = CpuFrequencySampler().start()
+    gpu_sampler = _start_gpu_sampler(torch)
     for length, text in texts.items():
         for backend in ("dense", "sparse", "hybrid"):
             if backend not in target_backends or not requested_at_length(
@@ -665,6 +760,8 @@ def run_candidate(candidate: dict, *, script_dir: Path) -> dict:
             quality_errors.extend(_validate_scores(mixed_scores, mixed_batch_size))
 
     sampler.stop()
+    if gpu_sampler is not None:
+        gpu_sampler.stop()
     quality_capture = _capture_quality(server)
 
     memory = _cuda_memory(torch)
@@ -681,6 +778,9 @@ def run_candidate(candidate: dict, *, script_dir: Path) -> dict:
         "quality_capture": quality_capture,
         "memory": memory,
         "cpu_frequency": sampler.summary(),
+        "gpu_utilization": (
+            gpu_sampler.summary() if gpu_sampler is not None else {"samples": 0}
+        ),
         "duration_seconds": round(time.monotonic() - started, 6),
         "selected": candidate.get("selected", {}),
         "co_resident_models": [
