@@ -193,6 +193,23 @@ def _power_of_two_floor(value: int) -> int:
     return 1 << (max(1, int(value)).bit_length() - 1)
 
 
+#: Padded tokens per microbatch that the conservative serving default allows.
+BASE_BATCH_TOKENS = 8192
+
+
+def _vram_multiplier(fingerprint: Mapping[str, Any]) -> int:
+    """Return the GPU memory tier shared by workloads, batch caps and token caps."""
+    total = int(fingerprint["hardware"]["gpus"][0]["total_memory_bytes"])
+    return 4 if total >= 23 * 1024**3 else (2 if total >= 15 * 1024**3 else 1)
+
+
+def _batch_token_cap(fingerprint: Mapping[str, Any]) -> int:
+    """Return the largest padded-token microbatch a calibrated policy may use."""
+    if _device_kind(fingerprint) != "cuda":
+        return BASE_BATCH_TOKENS
+    return BASE_BATCH_TOKENS * _vram_multiplier(fingerprint)
+
+
 def _gpu_geometric_batch_maps(
     fingerprint: Mapping[str, Any], lengths: list[int]
 ) -> dict[str, dict[str, int]]:
@@ -202,8 +219,7 @@ def _gpu_geometric_batch_maps(
     a candidate can therefore be compared on the exact same external workload.
     Larger GPUs expand geometrically without claiming physical performance.
     """
-    total = int(fingerprint["hardware"]["gpus"][0]["total_memory_bytes"])
-    multiplier = 4 if total >= 23 * 1024**3 else (2 if total >= 15 * 1024**3 else 1)
+    multiplier = _vram_multiplier(fingerprint)
 
     def policy(token_budget: int, batch_cap: int) -> dict[str, int]:
         return {
@@ -307,7 +323,10 @@ def _configured_limit(fingerprint: Mapping[str, Any], name: str, default: int) -
 
 
 def _bucket_policy(
-    max_length: int, batch_sizes: Mapping[int, int]
+    max_length: int,
+    batch_sizes: Mapping[int, int],
+    *,
+    max_batch_tokens: int = BASE_BATCH_TOKENS,
 ) -> tuple[list[dict], list[dict]]:
     thresholds = sorted({length for length in batch_sizes if length <= max_length})
     if not thresholds or thresholds[-1] < max_length:
@@ -323,7 +342,9 @@ def _bucket_policy(
         token_budgets.append(
             {
                 "max_tokens": threshold,
-                "max_batch_tokens": max(threshold, min(8192, threshold * last_batch)),
+                "max_batch_tokens": max(
+                    threshold, min(max_batch_tokens, threshold * last_batch)
+                ),
             }
         )
     return batches, token_budgets
@@ -354,6 +375,7 @@ def _geometric_batch_family_specs(
     batch_sizes: Mapping[int, int],
     max_length: int,
     start_cap: int,
+    max_batch_tokens: int,
 ) -> list[dict]:
     """Build one measurable candidate per geometric batch expansion.
 
@@ -375,7 +397,9 @@ def _geometric_batch_family_specs(
         previous = current
         if not changed_lengths:
             continue
-        policy, token_policy = _bucket_policy(max_length, current)
+        policy, token_policy = _bucket_policy(
+            max_length, current, max_batch_tokens=max_batch_tokens
+        )
         specs.append(
             {
                 "name": f"{backend}-geometric-batch-{cap}",
@@ -772,9 +796,14 @@ def tuning_candidate_specs(
         dense_batches = {128: 2, 512: 2, 1024: 1, 2048: 1, 8192: 1}
         sparse_batches = dict(dense_batches)
         rerank_batches = dict(dense_batches)
-    dense_policy = _bucket_policy(dense_max, dense_batches)
-    sparse_policy = _bucket_policy(sparse_max, sparse_batches)
-    rerank_policy = _bucket_policy(rerank_max, rerank_batches)
+    token_cap = _batch_token_cap(fingerprint)
+    dense_policy = _bucket_policy(dense_max, dense_batches, max_batch_tokens=token_cap)
+    sparse_policy = _bucket_policy(
+        sparse_max, sparse_batches, max_batch_tokens=token_cap
+    )
+    rerank_policy = _bucket_policy(
+        rerank_max, rerank_batches, max_batch_tokens=token_cap
+    )
     schedule_spec = {
         "name": ("hybrid-cuda-overlap" if device == "cuda" else "hybrid-cpu-parallel"),
         "target_backends": ["hybrid", "mixed"],
@@ -801,10 +830,7 @@ def tuning_candidate_specs(
     }
     if config.mode == "full":
         if device == "cuda":
-            total = int(fingerprint["hardware"]["gpus"][0]["total_memory_bytes"])
-            multiplier = (
-                4 if total >= 23 * 1024**3 else (2 if total >= 15 * 1024**3 else 1)
-            )
+            multiplier = _vram_multiplier(fingerprint)
             dense_start = 8 * multiplier
             sparse_start = 8 * multiplier
             rerank_start = 16 * multiplier
@@ -817,6 +843,7 @@ def tuning_candidate_specs(
                 batch_sizes=dense_batches,
                 max_length=dense_max,
                 start_cap=dense_start,
+                max_batch_tokens=token_cap,
             ),
             schedule_spec,
             *_geometric_batch_family_specs(
@@ -825,6 +852,7 @@ def tuning_candidate_specs(
                 batch_sizes=sparse_batches,
                 max_length=sparse_max,
                 start_cap=sparse_start,
+                max_batch_tokens=token_cap,
             ),
             *_geometric_batch_family_specs(
                 backend="reranker",
@@ -832,6 +860,7 @@ def tuning_candidate_specs(
                 batch_sizes=rerank_batches,
                 max_length=rerank_max,
                 start_cap=rerank_start,
+                max_batch_tokens=token_cap,
             ),
         ]
     else:

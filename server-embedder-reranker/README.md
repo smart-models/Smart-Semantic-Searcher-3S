@@ -972,6 +972,12 @@ A candidate whose estimate does not fit the remaining budget is recorded as
 `skipped-budget` and the search continues with the next one, so a cheaper later
 candidate (for example a reranker-only probe) is still measured.
 
+On CUDA the calibrated padded-token budget per microbatch follows the same VRAM
+tier as the benchmark workloads: 8,192 tokens below 15 GiB, 16,384 from 15 GiB
+and 32,768 from 23 GiB. A larger microbatch is only persisted after the memory
+and quality gates pass, and the serving process still lowers the reranker
+budget when its measured VRAM headroom is smaller.
+
 The offline ADVANCED worker imports the serving model wrappers without opening
 an HTTP listener. When the prep container has no credentials, the import uses
 a fresh, process-local random credential and restores the environment afterward.

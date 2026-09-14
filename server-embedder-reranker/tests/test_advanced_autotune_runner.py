@@ -400,6 +400,34 @@ class SearchSpaceTests(unittest.TestCase):
         self.assertGreater(hybrid, reranker)
         self.assertGreaterEqual(reranker, 20.0)
 
+    def test_batch_token_cap_scales_with_gpu_memory(self):
+        quick = schema.AdvancedAutotuneConfig.from_env({"HF_HOME": "/models"})
+        full = schema.AdvancedAutotuneConfig.from_env(
+            {"HF_HOME": "/models", "SMART_EMBEDDER_AUTOTUNE": "full"},
+            device_kind="cuda",
+        )
+
+        def tokens_at_512(spec):
+            policy = spec["changes"]["dense"]["max_batch_tokens_policy"]
+            return next(
+                item["max_batch_tokens"] for item in policy if item["max_tokens"] == 512
+            )
+
+        def quick_dense(memory_gib):
+            specs = runner.tuning_candidate_specs(
+                fingerprint(memory_gib=memory_gib), quick
+            )
+            return next(
+                item for item in specs if item["name"] == "dense-geometric-batch-policy"
+            )
+
+        self.assertEqual(tokens_at_512(quick_dense(8)), 8192)
+        self.assertEqual(tokens_at_512(quick_dense(16)), 16384)
+        self.assertEqual(tokens_at_512(quick_dense(24)), 32768)
+        large_full = runner.tuning_candidate_specs(fingerprint(memory_gib=24), full)
+        self.assertEqual(large_full[0]["name"], "dense-geometric-batch-64")
+        self.assertEqual(tokens_at_512(large_full[0]), 32768)
+
 
 class CandidateGateTests(unittest.TestCase):
     """The gates a candidate must clear before it can be promoted."""
