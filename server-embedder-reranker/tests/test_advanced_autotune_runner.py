@@ -485,6 +485,37 @@ class SearchSpaceTests(unittest.TestCase):
             ],
         )
 
+    def test_cuda_baseline_measures_single_and_concurrent_requests(self):
+        config = schema.AdvancedAutotuneConfig.from_env({"HF_HOME": "/models"})
+        candidate = runner.baseline_candidate(fingerprint(), config)
+
+        self.assertIn("requests", candidate["target_backends"])
+        self.assertEqual(candidate["backend_token_lengths"]["requests"], [128])
+        cpu = runner.baseline_candidate(fingerprint("cpu"), config)
+        self.assertNotIn("requests", cpu["target_backends"])
+
+    def test_quick_and_full_cuda_offer_one_coalescing_candidate(self):
+        for mode in ("quick", "full"):
+            config = schema.AdvancedAutotuneConfig.from_env(
+                {"HF_HOME": "/models", "SMART_EMBEDDER_AUTOTUNE": mode},
+                device_kind="cuda",
+            )
+            specs = runner.tuning_candidate_specs(fingerprint(), config)
+            coalescing = [s for s in specs if s["name"] == "schedule-queue-batch-32"]
+
+            self.assertEqual(len(coalescing), 1, mode)
+            self.assertEqual(coalescing[0]["target_backends"], ["requests"])
+            self.assertEqual(
+                coalescing[0]["changes"],
+                {"schedule": {"queue_batch": 32, "flush_timeout_ms": 10}},
+            )
+            self.assertEqual(coalescing[0]["promotion_scope"], {"requests": [128]})
+        cpu_config = schema.AdvancedAutotuneConfig.from_env(
+            {"HF_HOME": "/models"}, device_kind="cpu"
+        )
+        cpu_specs = runner.tuning_candidate_specs(fingerprint("cpu"), cpu_config)
+        self.assertNotIn("schedule-queue-batch-32", {s["name"] for s in cpu_specs})
+
 
 class CandidateGateTests(unittest.TestCase):
     """The gates a candidate must clear before it can be promoted."""

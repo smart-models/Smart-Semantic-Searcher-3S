@@ -4,6 +4,7 @@ The worker runs each candidate in its own process; these checks pin the
 quality invariants it must report back to the runner.
 """
 
+import asyncio
 import io
 import json
 import os
@@ -307,6 +308,65 @@ class GpuUtilizationSamplerTests(unittest.TestCase):
         self.assertIn("GPU-abc", launched[0])
         self.assertIn("--query-gpu=utilization.gpu", launched[0])
         self.assertEqual(sampler.summary()["samples"], 2)
+
+
+class ConcurrentRequestProbeTests(unittest.TestCase):
+    """The requests probe drives a fresh serving request processor."""
+
+    def test_concurrent_requests_use_a_new_processor_and_return_latencies(self):
+        created = []
+
+        class FakeProcessor:
+            def __init__(self, model_wrapper, *, max_batch_size, accumulation_timeout):
+                created.append((model_wrapper, max_batch_size, accumulation_timeout))
+                self.processing_loop_task = None
+
+            async def start_processing_loop(self):
+                self.processing_loop_task = asyncio.create_task(asyncio.sleep(3600))
+
+            async def process_request(self, request, *, lease=None):
+                await asyncio.sleep(0.001)
+                return {"dense_vecs": [[0.0]] * len(request.sentences)}
+
+        class FakeRequest:
+            def __init__(self, **values):
+                self.sentences = values["sentences"]
+
+        server = SimpleNamespace(
+            RequestProcessor=FakeProcessor,
+            embedding_service="service",
+            MAX_REQUESTS_IN_BATCH=32,
+            REQUEST_FLUSH_TIMEOUT=0.01,
+            ActiveEmbedRequest=FakeRequest,
+        )
+        latencies = worker._run_concurrent_requests(
+            server, "text", clients=4, requests_per_client=3
+        )
+
+        self.assertEqual(len(latencies), 12)
+        self.assertTrue(all(value > 0 for value in latencies))
+        self.assertEqual(created, [("service", 32, 0.01)])
+
+    def test_requests_measurement_reports_throughput_and_request_latency(self):
+        latencies = [0.1, 0.2, 0.3]
+        measurement = worker._requests_measurement(
+            length=128,
+            clients=32,
+            requests_per_client=2,
+            sample_seconds=[1.0, 1.2],
+            latencies=latencies,
+        )
+        latency = worker._latency_summary(latencies)
+
+        self.assertEqual(measurement["backend"], "requests")
+        self.assertEqual(measurement["input_tokens"], 128)
+        self.assertEqual(measurement["batch_size"], 32)
+        self.assertFalse(measurement["is_canary"])
+        self.assertEqual(measurement["p95_seconds"], round(latency["p95"], 6))
+        self.assertEqual(
+            measurement["useful_tokens_per_second"], round(128 * 64 / 1.1, 3)
+        )
+        self.assertEqual(measurement["requests_per_second"], round(64 / 1.1, 6))
 
 
 if __name__ == "__main__":

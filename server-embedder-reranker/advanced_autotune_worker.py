@@ -7,6 +7,7 @@ performance, and memory evidence for one serialized candidate.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import importlib.util
 import json
@@ -125,6 +126,100 @@ def _run_mixed(server: Any, texts: list[str]) -> tuple[Any, Any]:
     )
     reranker_future = server.GPU_EXECUTOR.submit(rerank)
     return embedding_future.result(), reranker_future.result()
+
+
+#: Concurrent clients in the request-coalescing probe; one client is also measured.
+REQUEST_PROBE_CLIENTS = 32
+#: Requests each client sends per sample.
+REQUEST_PROBE_REQUESTS_PER_CLIENT = 2
+
+
+def _run_concurrent_requests(
+    server: Any, text: str, *, clients: int, requests_per_client: int
+) -> list[float]:
+    """Send single-sentence requests through a fresh serving request processor.
+
+    A new processor is created inside this ``asyncio.run`` because an asyncio
+    queue stays bound to the first event loop that uses it.
+
+    Args:
+        server: Loaded serving module.
+        text: Sentence sent by every request.
+        clients: Concurrent clients.
+        requests_per_client: Sequential requests each client sends.
+
+    Returns:
+        One latency in seconds per request.
+    """
+
+    async def scenario() -> list[float]:
+        processor = server.RequestProcessor(
+            server.embedding_service,
+            max_batch_size=server.MAX_REQUESTS_IN_BATCH,
+            accumulation_timeout=server.REQUEST_FLUSH_TIMEOUT,
+        )
+        await processor.start_processing_loop()
+        latencies: list[float] = []
+
+        async def client() -> None:
+            for _ in range(requests_per_client):
+                request = server.ActiveEmbedRequest(
+                    sentences=[text], return_dense=True, return_sparse=True
+                )
+                begin = time.perf_counter()
+                await processor.process_request(request)
+                latencies.append(time.perf_counter() - begin)
+
+        try:
+            await asyncio.gather(*(client() for _ in range(clients)))
+        finally:
+            task = processor.processing_loop_task
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        return latencies
+
+    return asyncio.run(scenario())
+
+
+def _requests_measurement(
+    *,
+    length: int,
+    clients: int,
+    requests_per_client: int,
+    sample_seconds: list[float],
+    latencies: list[float],
+) -> dict:
+    """Summarise one requests-probe scenario for the promotion gates.
+
+    Args:
+        length: Token length of each request's sentence.
+        clients: Concurrent clients in the scenario.
+        requests_per_client: Requests each client sent per sample.
+        sample_seconds: Wall time of each measured sample.
+        latencies: Every request latency across the measured samples.
+
+    Returns:
+        A measurement comparable across candidates by backend, length and
+        client count.
+    """
+    latency = _latency_summary(latencies)
+    walls = _latency_summary(sample_seconds)
+    elapsed = statistics.median(sample_seconds)
+    requests = clients * requests_per_client
+    return {
+        "backend": "requests",
+        "input_tokens": length,
+        "batch_size": clients,
+        "is_canary": False,
+        "median_seconds": round(latency["p50"], 6),
+        "p50_seconds": round(latency["p50"], 6),
+        "p95_seconds": round(latency["p95"], 6),
+        "p99_seconds": round(latency["p99"], 6),
+        "coefficient_of_variation": round(walls["coefficient_of_variation"], 6),
+        "useful_tokens_per_second": round(length * requests / elapsed, 3),
+        "requests_per_second": round(requests / elapsed, 6),
+        "sentences_per_second": round(requests / elapsed, 6),
+    }
 
 
 def _capture_quality(server: Any) -> dict:
@@ -691,6 +786,51 @@ def run_candidate(candidate: dict, *, script_dir: Path) -> dict:
                 }
             )
             quality_errors.extend(_validate_scores(scores, rerank_batch_size))
+
+        if (
+            "requests" in target_backends
+            and requested_at_length("requests", length)
+            and length not in canary_lengths
+        ):
+            for clients in (1, REQUEST_PROBE_CLIENTS):
+                print(
+                    f"probe-start backend=requests tokens={length} clients={clients}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                _run_concurrent_requests(
+                    server,
+                    text,
+                    clients=clients,
+                    requests_per_client=REQUEST_PROBE_REQUESTS_PER_CLIENT,
+                )
+                sample_seconds = []
+                request_latencies = []
+                for _ in range(repeats):
+                    begin = time.perf_counter()
+                    request_latencies.extend(
+                        _run_concurrent_requests(
+                            server,
+                            text,
+                            clients=clients,
+                            requests_per_client=REQUEST_PROBE_REQUESTS_PER_CLIENT,
+                        )
+                    )
+                    sample_seconds.append(time.perf_counter() - begin)
+                measurement = _requests_measurement(
+                    length=length,
+                    clients=clients,
+                    requests_per_client=REQUEST_PROBE_REQUESTS_PER_CLIENT,
+                    sample_seconds=sample_seconds,
+                    latencies=request_latencies,
+                )
+                print(
+                    f"probe-done backend=requests tokens={length} clients={clients} "
+                    f"p50={measurement['p50_seconds']:.6f}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                measurements.append(measurement)
 
         if "mixed" in target_backends and requested_at_length("mixed", length):
             is_canary = length in canary_lengths

@@ -1006,6 +1006,14 @@ logged with the CPU power warning. The probing thread's CPU time is not used
 as the signal, because CUDA synchronisation may spin-wait on the CPU while the
 GPU is still busy.
 
+On CUDA the baseline also measures real request traffic through a fresh copy
+of the serving request processor: 128-token, single-sentence dense and sparse
+requests from one client and from 32 concurrent clients. The
+`schedule-queue-batch-32` candidate lets that processor combine up to 32 queued
+requests into one model call, waiting at most 10 ms for more to arrive. It is
+promoted only when those scenarios gain throughput and the P95 gate still
+holds, including for the lone client that pays the flush wait.
+
 The offline ADVANCED worker imports the serving model wrappers without opening
 an HTTP listener. When the prep container has no credentials, the import uses
 a fresh, process-local random credential and restores the environment afterward.

@@ -299,6 +299,9 @@ def baseline_candidate(
                 else [128]
             )
         }
+    if device_kind == "cuda":
+        candidate["target_backends"].append("requests")
+        candidate.setdefault("backend_token_lengths", {})["requests"] = [128]
     if device_kind == "cpu":
         canary_buckets = (1024, 2048, 8192)
         max_lengths = {
@@ -904,6 +907,16 @@ def tuning_candidate_specs(
             },
         ]
     specs[0:0] = batch_specs
+    if device == "cuda":
+        specs.insert(
+            len(batch_specs),
+            {
+                "name": "schedule-queue-batch-32",
+                "target_backends": ["requests"],
+                "promotion_scope": {"requests": [128]},
+                "changes": {"schedule": {"queue_batch": 32, "flush_timeout_ms": 10}},
+            },
+        )
     if device == "cpu" and config.mode == "full":
         # Measure portable dense runtimes immediately after the safe baseline.
         # A CPU FULL run otherwise spends its finite budget on batch/topology
@@ -1226,6 +1239,7 @@ def estimate_candidate_seconds(
         "hybrid": 1.5,
         "reranker": 0.8,
         "mixed": 2.0,
+        "requests": 1.0,
     }
     total_weight = sum(backend_weights.values())
     selected_weight = sum(
