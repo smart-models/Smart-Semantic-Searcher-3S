@@ -502,10 +502,12 @@ SWITCH_FLAG_PAIRS = (
     ),
 )
 
-#: Compose's own --wait-timeout default is 0, which means wait forever. The
-#: slowest health check in compose.yml has start_period: 300s, so 600 gives it
-#: room to fail honestly instead of hanging a terminal indefinitely.
-DEFAULT_WAIT_TIMEOUT = "600"
+#: Compose's own --wait-timeout default is 0, which means wait forever. Services
+#: that depend on the Smart Embedder start only after its preparation container
+#: exits, and an unset ADVANCED quick calibration budget may run for up to
+#: 1,080 s on CPU (720 s on CUDA) before the slowest health check's 300 s start
+#: period. 1800 covers that and still fails honestly instead of hanging forever.
+DEFAULT_WAIT_TIMEOUT = "1800"
 
 
 def resolve_switch_flags(cli: Mapping[str, str]) -> dict[str, str | None]:

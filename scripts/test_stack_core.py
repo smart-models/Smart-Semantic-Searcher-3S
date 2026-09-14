@@ -589,7 +589,7 @@ def test_wait_uses_the_default_timeout():
     """--wait alone still bounds the wait, rather than waiting forever."""
     plan = plan_for("up", hardware="cpu", wait="true")
     argv = argv_of(plan, -1)
-    assert argv[argv.index("--wait-timeout") + 1] == "600"
+    assert argv[argv.index("--wait-timeout") + 1] == "1800"
 
 
 def test_wait_timeout_is_absent_without_wait():
