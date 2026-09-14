@@ -596,6 +596,7 @@ Python, while `BGE_*`, `QWEN_*` and `MILCO_*` keep their names end to end.
 | `SMART_EMBEDDER_LENGTH_AWARE_BATCHING` | `true` | Group inputs by estimated length before micro-batching, then restore API order |
 | `EMBEDDER_NUM_THREADS` | autotuned on CPU | Explicit intra-op thread override |
 | `EMBEDDER_INTEROP_THREADS` | runtime default | Explicit CPU inter-op thread override |
+| `SMART_EMBEDDER_NATIVE_THREADS` | `4` | Cap for the native OpenMP/OpenBLAS/MKL pools (`OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS` in the container). Those pools size to every host CPU, not the `cpus:` quota; on a many-core host that exceeds `pids_limit` and model loading crashes. Keep it equal to `cpus:` |
 | `PYTORCH_CUDA_ALLOC_CONF` | `expandable_segments:True,throw_on_cudamalloc_oom:True` | CUDA allocator tuning for the GPU target |
 | `SMART_EMBEDDER_VRAM_RESERVE_MB` | `512` | VRAM held back from the reranker token-budget calibration measured at startup. Valid range: 0..65536 |
 | `SMART_EMBEDDER_OOM_FALLBACK` | `true` | `false` disables the automatic batch-halving retry on VRAM exhaustion; detection, the typed error and the GPU cache release stay active either way |
