@@ -367,6 +367,10 @@ services:
       SERVICE_TOKEN: ""
       HF_HUB_OFFLINE: "0"
       TRANSFORMERS_OFFLINE: "0"
+      # Plain HTTP writes each file as it arrives and resumes it after a dropped
+      # connection; Xet can hold a partial file in memory and lose it once its
+      # retries run out.
+      HF_HUB_DISABLE_XET: ${SMART_EMBEDDER_HF_HUB_DISABLE_XET:-1}
       CUDA_VISIBLE_DEVICES: "-1"
       BGE_EMBED_MAX_LENGTH: ${BGE_EMBED_CPU_MAX_LENGTH:-2048}
       QWEN_EMBED_MAX_LENGTH: ${QWEN_EMBED_CPU_MAX_LENGTH:-2048}
@@ -429,6 +433,10 @@ services:
       SERVICE_TOKEN: ""
       HF_HUB_OFFLINE: "0"
       TRANSFORMERS_OFFLINE: "0"
+      # Plain HTTP writes each file as it arrives and resumes it after a dropped
+      # connection; Xet can hold a partial file in memory and lose it once its
+      # retries run out.
+      HF_HUB_DISABLE_XET: ${SMART_EMBEDDER_HF_HUB_DISABLE_XET:-1}
       PYTORCH_CUDA_ALLOC_CONF: ${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True,throw_on_cudamalloc_oom:True}
       QWEN_RERANK_MAX_LENGTH: ${QWEN_RERANK_MAX_LENGTH:-32768}
       QWEN_RERANK_BATCH_SIZE: ${QWEN_RERANK_BATCH_SIZE:-8}
