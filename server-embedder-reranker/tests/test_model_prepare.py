@@ -4,6 +4,7 @@
 ``model_revisions`` and fail loudly rather than fall back to a branch.
 """
 
+import runpy
 import sys
 import tempfile
 import types
@@ -200,6 +201,41 @@ class ModelPrepareTests(unittest.TestCase):
             self.assertEqual(model_prepare.main(), 0)
 
         self.assertEqual(order, [("prefetch", "advanced"), ("prepare", None)])
+
+    def test_running_the_file_as_a_script_prepares_models(self):
+        """model_bootstrap execs this file, so running it must run main()."""
+        calibrations = []
+        fake_hub = types.ModuleType("huggingface_hub")
+        fake_autotune = types.ModuleType("autotune_entrypoint")
+        fake_autotune.prepare = lambda: (
+            calibrations.append("prepare") or {"action": "reused"}
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            hub = FakeHubCache(Path(temporary) / "fake")
+            fake_hub.snapshot_download = hub
+            modules = {
+                "huggingface_hub": fake_hub,
+                "autotune_entrypoint": fake_autotune,
+            }
+            environment = {
+                "EMBEDDER_PROFILE": "basic",
+                "HF_HUB_CACHE": str(Path(temporary) / "hub"),
+            }
+            with (
+                patch.dict(sys.modules, modules),
+                patch.dict("os.environ", environment),
+                patch("logging.basicConfig"),
+                self.assertRaises(SystemExit) as exited,
+            ):
+                runpy.run_path(
+                    str(SERVER_DIR / "model_prepare.py"), run_name="__main__"
+                )
+
+        self.assertEqual(exited.exception.code, 0)
+        self.assertEqual(
+            hub.online_repositories(), list(model_prepare.PROFILE_MODELS["basic"])
+        )
+        self.assertEqual(calibrations, ["prepare"])
 
 
 if __name__ == "__main__":

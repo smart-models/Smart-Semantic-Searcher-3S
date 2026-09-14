@@ -130,3 +130,7 @@ def main() -> int:
     else:
         logging.info("Hardware autotune preparation result: %s", result)
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
