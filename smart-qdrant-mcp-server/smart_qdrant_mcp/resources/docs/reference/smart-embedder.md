@@ -135,7 +135,7 @@ point 2.
 | Shared startup | `autotune_entrypoint.py` | Selects and runs the BASIC or ADVANCED pre-start tuner before Uvicorn. |
 | Shared tooling | `benchmark.py` | HTTP latency, throughput, token, padding and Prometheus benchmark matrix. |
 | Shared models | `model_revisions.py` | The immutable Hugging Face commit revision pinned for every model — the single place a model update is expressed. |
-| Shared startup | `model_prepare.py` | Prefetches each profile's models at exactly those revisions, reusing a local snapshot and refusing a revision mismatch rather than falling back to a branch. |
+| Shared startup | `model_prepare.py` | Prefetches each profile's models at exactly those revisions, refusing a revision mismatch rather than falling back to a branch. A local snapshot is reused only once a finished download has been recorded beside it (`.smart-embedder-complete/`), so a download interrupted mid-way resumes on the next start instead of passing as cached. `BAAI/bge-m3-unsupervised` is fetched without its weights: MILCO reads only that repository's tokenizer. |
 | Shared startup | `model_bootstrap.py` | Init-container entry point: prepares the named volumes' ownership, then drops `CHOWN`/`SETUID`/`SETGID` before any model or network library is imported. |
 | Shared runtime | `vram_budget.py` | Device headroom accounting, the safe max-batch-token cap, and the guard that turns a CUDA allocation failure into a typed, tensor-free error. |
 | Shared runtime | `request_budget.py` | Token/output estimates and shared admission leases whose lifetime includes physical native work. |

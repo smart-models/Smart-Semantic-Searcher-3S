@@ -19,6 +19,40 @@ import model_prepare  # noqa: E402
 from model_revisions import MODEL_REVISIONS  # noqa: E402
 
 
+class FakeHubCache:
+    """Stand-in for ``snapshot_download`` that keeps the hub cache's weak spot.
+
+    A local-only lookup returns any snapshot folder that exists, exactly as
+    ``huggingface_hub`` does, even when an interrupted download left that folder
+    holding only the files that finished before the connection dropped.
+    """
+
+    def __init__(self, root, fail_download_of=()):
+        self.root = Path(root)
+        self.fail_download_of = set(fail_download_of)
+        self.calls = []
+
+    def snapshot(self, revision):
+        return self.root / "snapshots" / revision
+
+    def __call__(self, **kwargs):
+        self.calls.append(kwargs)
+        snapshot = self.snapshot(kwargs["revision"])
+        if kwargs.get("local_files_only"):
+            if not snapshot.is_dir():
+                raise OSError("not cached")
+            return str(snapshot)
+        snapshot.mkdir(parents=True, exist_ok=True)
+        if kwargs["repo_id"] in self.fail_download_of:
+            raise OSError("connection dropped mid-download")
+        return str(snapshot)
+
+    def online_repositories(self):
+        return [
+            call["repo_id"] for call in self.calls if not call.get("local_files_only")
+        ]
+
+
 class ModelPrepareTests(unittest.TestCase):
     """Model sets stay pinned, and prefetch honours the exact revision."""
 
@@ -35,67 +69,105 @@ class ModelPrepareTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported EMBEDDER_PROFILE"):
             model_prepare.models_for_profile("experimental")
 
-    def test_prefetch_reuses_local_snapshot_without_network_fallback(self):
-        calls = []
+    def test_prefetch_reuses_a_completed_snapshot_without_network(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-
-            def downloader(**kwargs):
-                calls.append(kwargs)
-                snapshot = root / kwargs["revision"]
-                snapshot.mkdir()
-                return str(snapshot)
-
+            cache = Path(temporary) / "hub"
+            hub = FakeHubCache(Path(temporary) / "fake")
+            model_prepare.prefetch_models("basic", downloader=hub, cache_dir=cache)
+            hub.calls.clear()
             result = model_prepare.prefetch_models(
-                "basic", downloader=downloader, cache_dir=root / "hub"
+                "basic", downloader=hub, cache_dir=cache
             )
 
-        self.assertEqual(len(calls), 2)
-        self.assertTrue(all(call["local_files_only"] for call in calls))
+        self.assertEqual(len(hub.calls), 2)
+        self.assertTrue(all(call["local_files_only"] for call in hub.calls))
         self.assertEqual(set(result), set(model_prepare.PROFILE_MODELS["basic"]))
 
-    def test_prefetch_downloads_exact_revision_after_local_miss(self):
-        calls = []
+    def test_prefetch_downloads_the_exact_pinned_revision(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-
-            def downloader(**kwargs):
-                calls.append(kwargs)
-                if kwargs.get("local_files_only"):
-                    raise OSError("not cached")
-                snapshot = root / kwargs["revision"]
-                snapshot.mkdir()
-                return str(snapshot)
-
+            hub = FakeHubCache(Path(temporary) / "fake")
             model_prepare.prefetch_models(
-                "basic", downloader=downloader, cache_dir=root / "hub"
+                "basic", downloader=hub, cache_dir=Path(temporary) / "hub"
             )
 
-        self.assertEqual(len(calls), 4)
-        for local_call, download_call in zip(calls[::2], calls[1::2]):
-            self.assertTrue(local_call["local_files_only"])
-            self.assertNotIn("local_files_only", download_call)
-            self.assertEqual(download_call["revision"], local_call["revision"])
+        online = [call for call in hub.calls if not call.get("local_files_only")]
+        self.assertEqual(
+            [call["repo_id"] for call in online],
+            list(model_prepare.PROFILE_MODELS["basic"]),
+        )
+        for call in online:
+            self.assertEqual(call["revision"], MODEL_REVISIONS[call["repo_id"]])
+
+    def test_snapshot_folder_without_a_finished_download_is_fetched_again(self):
+        """A snapshot folder alone does not prove its download completed."""
+        with tempfile.TemporaryDirectory() as temporary:
+            hub = FakeHubCache(Path(temporary) / "fake")
+            for model_id in model_prepare.PROFILE_MODELS["basic"]:
+                hub.snapshot(MODEL_REVISIONS[model_id]).mkdir(parents=True)
+            model_prepare.prefetch_models(
+                "basic", downloader=hub, cache_dir=Path(temporary) / "hub"
+            )
+
+        self.assertEqual(
+            hub.online_repositories(), list(model_prepare.PROFILE_MODELS["basic"])
+        )
+
+    def test_download_interrupted_mid_way_resumes_on_the_next_prepare(self):
+        interrupted = model_prepare.PROFILE_MODELS["basic"][1]
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "hub"
+            hub = FakeHubCache(Path(temporary) / "fake", fail_download_of={interrupted})
+            with self.assertRaises(OSError):
+                model_prepare.prefetch_models("basic", downloader=hub, cache_dir=cache)
+            hub.fail_download_of.clear()
+            hub.calls.clear()
+            model_prepare.prefetch_models("basic", downloader=hub, cache_dir=cache)
+
+        self.assertEqual(hub.online_repositories(), [interrupted])
+
+    def test_advanced_prefetch_skips_encoder_weights_milco_never_loads(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            hub = FakeHubCache(Path(temporary) / "fake")
+            model_prepare.prefetch_models(
+                "advanced", downloader=hub, cache_dir=Path(temporary) / "hub"
+            )
+
+        patterns = {
+            call["repo_id"]: call.get("ignore_patterns")
+            for call in hub.calls
+            if not call.get("local_files_only")
+        }
+        self.assertEqual(
+            patterns.pop("BAAI/bge-m3-unsupervised"), ["*.safetensors", "*.bin"]
+        )
+        self.assertEqual(set(patterns.values()), {None})
+
+    def test_changed_download_patterns_fetch_the_snapshot_again(self):
+        """A snapshot completed without some files is incomplete for a wider set."""
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "hub"
+            hub = FakeHubCache(Path(temporary) / "fake")
+            model_prepare.prefetch_models("advanced", downloader=hub, cache_dir=cache)
+            hub.calls.clear()
+            with patch.dict(model_prepare.DOWNLOAD_IGNORE_PATTERNS, clear=True):
+                model_prepare.prefetch_models(
+                    "advanced", downloader=hub, cache_dir=cache
+                )
+
+        self.assertEqual(hub.online_repositories(), ["BAAI/bge-m3-unsupervised"])
 
     def test_prefetch_imports_the_default_downloader_only_when_needed(self):
-        calls = []
         fake_hub = types.ModuleType("huggingface_hub")
 
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-
-            def downloader(**kwargs):
-                calls.append(kwargs)
-                snapshot = root / kwargs["revision"]
-                snapshot.mkdir(exist_ok=True)
-                return str(snapshot)
-
-            fake_hub.snapshot_download = downloader
+            hub = FakeHubCache(Path(temporary) / "fake")
+            fake_hub.snapshot_download = hub
             with patch.dict(sys.modules, {"huggingface_hub": fake_hub}):
-                model_prepare.prefetch_models("basic", cache_dir=root / "hub")
+                model_prepare.prefetch_models(
+                    "basic", cache_dir=Path(temporary) / "hub"
+                )
 
-        self.assertEqual(len(calls), 2)
-        self.assertTrue(all(call["local_files_only"] for call in calls))
+        self.assertEqual(len(hub.online_repositories()), 2)
 
     def test_revision_mismatch_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:

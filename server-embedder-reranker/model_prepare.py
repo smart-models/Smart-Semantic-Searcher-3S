@@ -25,6 +25,17 @@ PROFILE_MODELS = {
         "Qwen/Qwen3-Reranker-0.6B",
     ),
 }
+# MILCO builds its multilingual encoder from the sub-config cached in its own
+# config.json and reads only this repository's tokenizer, so neither of its
+# 2.3 GB weight files is ever loaded.
+DOWNLOAD_IGNORE_PATTERNS = {
+    "BAAI/bge-m3-unsupervised": ("*.safetensors", "*.bin"),
+}
+# Folder beside a repository's ``snapshots/`` recording finished downloads. The
+# hub cache links each file into its snapshot as soon as that file lands, so a
+# local-only lookup still returns the snapshot an interrupted download left
+# behind; only this record proves every requested file arrived.
+COMPLETION_MARKERS = ".smart-embedder-complete"
 
 
 def models_for_profile(profile: str) -> tuple[str, ...]:
@@ -40,13 +51,19 @@ def models_for_profile(profile: str) -> tuple[str, ...]:
     return models
 
 
+def completion_marker(cache_dir: Path, model_id: str, revision: str) -> Path:
+    """Return the record of one pinned snapshot's finished download."""
+    repository = "models--" + model_id.replace("/", "--")
+    return cache_dir / repository / COMPLETION_MARKERS / revision
+
+
 def prefetch_models(
     profile: str,
     *,
     downloader: Callable[..., str] | None = None,
     cache_dir: Path | None = None,
 ) -> dict[str, str]:
-    """Ensure every pinned snapshot exists without importing remote code."""
+    """Fully download every pinned snapshot without importing remote code."""
     if downloader is None:
         from huggingface_hub import snapshot_download
 
@@ -60,15 +77,27 @@ def prefetch_models(
     snapshots: dict[str, str] = {}
     for model_id in models_for_profile(profile):
         revision = MODEL_REVISIONS[model_id]
+        ignore_patterns = DOWNLOAD_IGNORE_PATTERNS.get(model_id, ())
         options = {
             "repo_id": model_id,
             "revision": revision,
             "cache_dir": str(resolved_cache),
         }
-        try:
-            snapshot = downloader(local_files_only=True, **options)
-            logging.info("Pinned model already cached: %s@%s", model_id, revision)
-        except Exception:  # local cache probes use backend-specific exceptions
+        if ignore_patterns:
+            options["ignore_patterns"] = list(ignore_patterns)
+        marker = completion_marker(resolved_cache, model_id, revision)
+        # The record names the skipped files, so a wider download set never
+        # reuses a snapshot that was completed without them.
+        record = "\n".join(ignore_patterns)
+        snapshot = None
+        if marker.is_file() and marker.read_text(encoding="utf-8") == record:
+            try:
+                snapshot = downloader(local_files_only=True, **options)
+            except Exception:  # a pruned cache may have lost a recorded snapshot
+                snapshot = None
+            else:
+                logging.info("Pinned model already cached: %s@%s", model_id, revision)
+        if snapshot is None:
             logging.info("Downloading pinned model: %s@%s", model_id, revision)
             snapshot = downloader(**options)
         snapshot_path = Path(snapshot)
@@ -81,6 +110,8 @@ def prefetch_models(
                 f"snapshot revision mismatch for {model_id}: "
                 f"expected {revision}, got {snapshot_path.name}"
             )
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(record, encoding="utf-8")
         snapshots[model_id] = str(snapshot_path)
     return snapshots
 
@@ -99,7 +130,3 @@ def main() -> int:
     else:
         logging.info("Hardware autotune preparation result: %s", result)
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
