@@ -213,6 +213,34 @@ def test_empty_token_list_without_flag_is_refused():
         _settings(MIDDLEWARE_API_TOKENS="")
 
 
+def test_bind_host_defaults_to_loopback():
+    assert _settings().bind_host == "127.0.0.1"
+
+
+@pytest.mark.parametrize(
+    "host", ["127.0.0.1", "::1", "10.10.141.10", "172.16.0.5", "192.168.1.10"]
+)
+def test_bind_host_accepts_loopback_or_a_private_ipv4(host):
+    assert _settings(MIDDLEWARE_BIND_HOST=host).bind_host == host
+
+
+@pytest.mark.parametrize(
+    "host", ["0.0.0.0", "::", "8.8.8.8", "169.254.1.1", "vpn-box.local", ""]
+)
+def test_bind_host_refuses_wildcard_public_link_local_or_hostname(host):
+    with pytest.raises(ValueError, match="MIDDLEWARE_BIND_HOST"):
+        _settings(MIDDLEWARE_BIND_HOST=host)
+
+
+def test_unauthenticated_middleware_on_a_private_bind_host_is_refused():
+    with pytest.raises(ValueError, match="MIDDLEWARE_BIND_HOST"):
+        _settings(
+            MIDDLEWARE_API_TOKENS="",
+            MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL=True,
+            MIDDLEWARE_BIND_HOST="10.10.141.10",
+        )
+
+
 def test_invalid_token_configuration_hides_the_supplied_value():
     """Configuration errors must not render a bearer token in startup output."""
     sentinel = "audit-synthetic-secret-123456"

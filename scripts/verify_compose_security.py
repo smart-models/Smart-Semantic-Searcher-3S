@@ -33,8 +33,7 @@ PRIVATE_IPV4_NETWORKS = (
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
 )
-LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1"})
-BIND_EXEMPT_SERVICE = "smart-qdrant-mcp"
+PRIVATE_BIND_SERVICES = frozenset({"middleware", "smart-qdrant-mcp"})
 
 
 def _is_private_ipv4(host_ip: str) -> bool:
@@ -46,9 +45,9 @@ def _is_private_ipv4(host_ip: str) -> bool:
     surrounding whitespace fails to parse and is correctly treated as not
     private. Any value that is not a syntactically valid IPv4 literal --
     including every IPv6 form, such as the IPv4-mapped ``::ffff:10.0.0.1`` --
-    is refused here; only the bare-loopback case is handled separately by
-    ``LOOPBACK_HOSTS``. Excluding IPv4-mapped IPv6 (and IPv6 generally) from
-    the private-address exemption is deliberate scope, not an oversight.
+    is refused here; loopback is handled separately by ``_is_loopback``.
+    Excluding IPv4-mapped IPv6 (and IPv6 generally) from the private-address
+    exemption is deliberate scope, not an oversight.
     """
     try:
         address = ipaddress.IPv4Address(host_ip)
@@ -57,17 +56,26 @@ def _is_private_ipv4(host_ip: str) -> bool:
     return any(address in network for network in PRIVATE_IPV4_NETWORKS)
 
 
+def _is_loopback(host_ip: str) -> bool:
+    """Return True for any loopback literal (127.0.0.0/8 or ::1), as the services do."""
+    try:
+        return ipaddress.ip_address(host_ip).is_loopback
+    except ValueError:
+        return False
+
+
 def _bind_violation(service_name: str, host_ip: str | None) -> str | None:
     """Return a violation message when a published bind address is unacceptable."""
-    if host_ip in LOOPBACK_HOSTS:
+    if host_ip and _is_loopback(host_ip):
         return None
-    if service_name == BIND_EXEMPT_SERVICE and host_ip and _is_private_ipv4(host_ip):
-        # The MCP endpoint may be reached from the private VPN; wildcard and
-        # public addresses stay refused for every service.
+    if service_name in PRIVATE_BIND_SERVICES and host_ip and _is_private_ipv4(host_ip):
+        # The console and the MCP endpoint may be reached from the private VPN;
+        # wildcard and public addresses stay refused for every service.
         return None
     return (
         f"service {service_name} publishes on {host_ip or 'all interfaces'}; "
-        "only loopback is allowed (smart-qdrant-mcp may also use a private address)"
+        "only loopback is allowed (middleware and smart-qdrant-mcp may also use "
+        "a private address)"
     )
 
 

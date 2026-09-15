@@ -46,7 +46,8 @@ Client → middleware-qdrant-manager → Smart Embedder  (embed / rerank)
   deliberately narrower, opinionated surface.
 - Not a chunker. Chunk boundaries are the caller's decision; the middleware
   stores what it is given.
-- Not internet-facing. Its published port is hardcoded to `127.0.0.1`.
+- Not internet-facing. Its port is published on `127.0.0.1` unless
+  `MIDDLEWARE_BIND_HOST` names a private address, which requires authentication.
 
 ## Mental model
 
@@ -145,7 +146,7 @@ defines UI and agent acceptance; inventory assignments are not execution proof.
 Interactive API docs (when `EXPOSE_MIDDLEWARE_SWAGGER=true`):
 `http://localhost:6336/docs`.
 
-### Monitoring (no auth required)
+### Monitoring
 
 | Method | Path | Description |
 |---|---|---|
@@ -155,8 +156,12 @@ Interactive API docs (when `EXPOSE_MIDDLEWARE_SWAGGER=true`):
 | GET | `/stats` | Uptime and request counters |
 | GET | `/metrics` | Prometheus metrics |
 
-These five are unauthenticated by design: this service publishes only on
-`127.0.0.1`, so the telemetry surface is loopback-local. Note the asymmetry with
+`/livez` is always unauthenticated: it answers `{"status": "alive"}` and nothing
+else, for the container healthcheck. The other four are unauthenticated only
+while `MIDDLEWARE_BIND_HOST` is loopback, which keeps the telemetry surface
+local. On a private publish they require the bearer token like every other
+route, because they report collection names, models and request counters. Note
+the asymmetry with
 Smart Embedder, which *requires* the bearer token for its own `/stats` and
 `/metrics` (its global auth middleware exempts only `/health`). Prometheus label
 values here are route paths, so neither endpoint leaks per-caller data.
@@ -517,6 +522,7 @@ authoritative ranges live in `.env.example` and are enforced by
 | `QDRANT_SPARSE_FLOAT16` | `true` | Store sparse-vector values as float16. |
 | `QDRANT_API_HOST` | `127.0.0.1` | Interface on which the middleware listens. |
 | `MIDDLEWARE_PORT` | `6336` | Published/local middleware port. |
+| `MIDDLEWARE_BIND_HOST` | `127.0.0.1` | Host address Compose publishes the port on: loopback or a private RFC1918 IPv4 literal. A non-loopback value requires authentication, and then every monitoring route except `/livez` requires the token too. It never reaches a socket; that is `QDRANT_API_HOST`. |
 | `MIDDLEWARE_API_TOKENS` | _(empty)_ | Operator-provisioned inbound bearer credentials as a `token:label` list, accepted alongside `SERVICE_TOKEN`. |
 | `MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL` | `false` | Permit unauthenticated access only when both the operator token list and the auto-accepted service token are empty. |
 | `SERVICE_TOKEN` | _(empty)_ | Delivered by Compose from `MIDDLEWARE_CLIENT_TOKEN`: the credential the MCP server presents, auto-accepted under the reserved label `@mcp`. |
@@ -704,8 +710,9 @@ These hold regardless of configuration.
 - Mutate a collection while a reindex job is pending on it.
 - Escape the ingest sandbox: paths that resolve outside
   `middleware-qdrant-manager/data/` are rejected with HTTP 400.
-- Reach the service from another host by configuration alone — the published
-  port is hardcoded to `127.0.0.1` in `compose.yml`.
+- Publish the service on a public or wildcard address, or on a private one
+  without authentication — `MIDDLEWARE_BIND_HOST` accepts only loopback or an
+  RFC1918 address, and off loopback it requires a token.
 
 ### Data directories
 
@@ -819,16 +826,17 @@ it is destructive against `e2e_`-prefixed collections.
   `Settings` fields, pydantic-settings would populate them from the environment
   under their upper-cased names, letting the loopback classification and the
   ingest sandbox disable themselves.
-- **The published port stays `127.0.0.1` in `compose.yml`.**
-  `scripts/verify_compose_security.py` enforces it.
+- **The published address is loopback or private.** `MIDDLEWARE_BIND_HOST`
+  defaults to `127.0.0.1` and accepts only loopback or an RFC1918 IPv4 literal;
+  `core/config.py` and `scripts/verify_compose_security.py` both enforce it.
 - **The effective inbound ACL must be non-empty** — `MIDDLEWARE_API_TOKENS`
   plus the `SERVICE_TOKEN` Compose delivers — or the service refuses to start.
   Serving with no authentication at all is a deliberate configuration, not an
   accident: it requires an empty list *and*
-  `MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL=true`. The bind address does not
-  enter into it, because under Compose the container always binds `0.0.0.0`
-  inside its own namespace while the published port stays fixed to `127.0.0.1`
-  on the host.
+  `MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL=true`. The socket bind does not
+  enter into it — under Compose the container always binds `0.0.0.0` inside
+  its own namespace — but the published address does: with a non-loopback
+  `MIDDLEWARE_BIND_HOST` the service refuses to start unauthenticated.
 - **`/assets/config.js` leaks *whether* auth is required, never the token.**
 - **Embedding always precedes the first write.** Do not add a write path that
   embeds lazily.

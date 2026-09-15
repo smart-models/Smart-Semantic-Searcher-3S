@@ -673,11 +673,12 @@ Or just use `stack.ps1`, which is the supported Windows entry point.
   arguments are world-readable through `ps`.
 - **`urls` never prints a token**, with or without `--show-secrets`. It reports
   only whether one is required.
-- **The loopback binds are not negotiable.** The middleware and Smart Embedder
-  publishes are hardcoded to `127.0.0.1` in `compose.yml`. The MCP publish is
-  the one operator-settable address (`MCP_BIND_HOST`): it defaults to loopback,
-  accepts `::1` or a private RFC1918 address, and the server refuses `0.0.0.0` at
-  startup.
+- **Publishes are loopback or private, never public.** The Smart Embedder
+  publish is hardcoded to `127.0.0.1` in `compose.yml`. The middleware and MCP
+  publishes are the operator-settable addresses (`MIDDLEWARE_BIND_HOST`,
+  `MCP_BIND_HOST`): each defaults to loopback, accepts `::1` or a private
+  RFC1918 address, and refuses `0.0.0.0`. Off loopback, `verify` and the
+  service itself refuse to serve that service without authentication.
 - **On POSIX, a group- or world-readable `.env` earns a warning.** It holds
   bearer tokens; `chmod 600 .env`. It is a warning rather than a refusal
   because the file mode is the operator's call. The check is skipped on

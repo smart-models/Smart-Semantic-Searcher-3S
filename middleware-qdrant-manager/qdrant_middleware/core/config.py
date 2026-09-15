@@ -1,5 +1,6 @@
 """Typed application settings loaded from environment and .env."""
 
+import ipaddress
 import os
 import re
 from functools import lru_cache
@@ -24,6 +25,13 @@ QDRANT_ENV_FILE = WORKSPACE_ROOT / ".env"
 #     to; the whole point of the sandbox is that it cannot be relocated.
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 INGEST_DATA_ROOT = QDRANT_ROOT / "data"
+# The only non-loopback addresses MIDDLEWARE_BIND_HOST may publish on (RFC 1918),
+# a constant for the same reason as LOOPBACK_HOSTS.
+PRIVATE_IPV4_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+)
 
 LABEL_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 RESERVED_LABEL_PREFIX = "@"
@@ -141,6 +149,10 @@ class Settings(BaseSettings):
 
     api_host: str = Field("127.0.0.1", alias="QDRANT_API_HOST")
     api_port: int = Field(6336, alias="MIDDLEWARE_PORT", ge=1, le=65535)
+    # The host address Compose publishes the port on. It never reaches a
+    # socket (QDRANT_API_HOST does); it decides whether serving without
+    # authentication is allowed.
+    bind_host: str = Field("127.0.0.1", alias="MIDDLEWARE_BIND_HOST")
     api_tokens_raw: str = Field("", alias="MIDDLEWARE_API_TOKENS")
     # The credential the MCP server presents, delivered by compose so the
     # operator sets one value that works at both ends. Never listed in
@@ -320,6 +332,18 @@ class Settings(BaseSettings):
             raise ValueError(
                 "INGEST_DEFAULT_BATCH_SIZE must be <= INGEST_MAX_BATCH_SIZE"
             )
+        try:
+            bind_address = ipaddress.ip_address(self.bind_host.strip())
+        except ValueError:
+            bind_address = None
+        if bind_address is None or not (
+            bind_address.is_loopback
+            or any(bind_address in network for network in PRIVATE_IPV4_NETWORKS)
+        ):
+            raise ValueError(
+                "MIDDLEWARE_BIND_HOST must be a loopback or private RFC 1918 IPv4 "
+                "literal; wildcard and public addresses and hostnames are refused"
+            )
         tokens = parse_api_tokens(self.api_tokens_raw, "MIDDLEWARE_API_TOKENS")
         service = self.service_token.get_secret_value() if self.service_token else ""
         if service:
@@ -332,6 +356,12 @@ class Settings(BaseSettings):
             raise ValueError(
                 "MIDDLEWARE_API_TOKENS must define at least one token:label entry "
                 "unless MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL=true"
+            )
+        if not tokens and not bind_address.is_loopback:
+            raise ValueError(
+                "MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL=true requires a loopback "
+                "MIDDLEWARE_BIND_HOST; refusing to serve unauthenticated on "
+                f"{self.bind_host}"
             )
         self._api_tokens = tokens
         return self
@@ -377,8 +407,14 @@ class Settings(BaseSettings):
 
     @property
     def public_auth_paths(self) -> frozenset[str]:
-        """Return paths exempt from bearer auth (docs included when public)."""
-        paths = {"/health", "/livez", "/readyz", "/stats", "/metrics"}
+        """Return paths exempt from bearer auth (docs included when public).
+
+        Only liveness stays public on a private publish: the other probes report
+        collections, models and counters, which only a loopback publish keeps local.
+        """
+        paths = {"/livez"}
+        if ipaddress.ip_address(self.bind_host.strip()).is_loopback:
+            paths.update({"/health", "/readyz", "/stats", "/metrics"})
         if self.expose_middleware_swagger:
             paths.update({"/docs", "/redoc", "/openapi.json"})
         return frozenset(paths)

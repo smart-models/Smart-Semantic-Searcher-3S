@@ -76,11 +76,17 @@ ALL_PROFILE_ARGUMENTS = ("--profile", "cpu", "--profile", "gpu")
 MIDDLEWARE_SERVICES = ("middleware", "smart-qdrant-mcp")
 
 #: Published endpoints, as (label, host variable, host default, port variable,
-#: port default). The middleware and Smart Embedder publishes are hardcoded to
-#: 127.0.0.1 in compose.yml and have no host variable; the MCP publish is the
-#: one operator-settable address.
+#: port default). The Smart Embedder publish is hardcoded to 127.0.0.1 in
+#: compose.yml and has no host variable; the middleware and MCP publishes are
+#: operator-settable.
 ENDPOINTS = {
-    "middleware": ("Middleware API", None, "127.0.0.1", "MIDDLEWARE_PORT", "6336"),
+    "middleware": (
+        "Middleware API",
+        "MIDDLEWARE_BIND_HOST",
+        "127.0.0.1",
+        "MIDDLEWARE_PORT",
+        "6336",
+    ),
     "mcp": ("MCP server", "MCP_BIND_HOST", "127.0.0.1", "MCP_PORT", "6337"),
     "smart-embedder": (
         "Smart Embedder",

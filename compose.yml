@@ -182,13 +182,19 @@ services:
     init: true
     user: "1000:1000"
     ports:
-      - "127.0.0.1:${MIDDLEWARE_PORT:-6336}:6336"
+      - target: 6336
+        published: "${MIDDLEWARE_PORT:-6336}"
+        host_ip: "${MIDDLEWARE_BIND_HOST:-127.0.0.1}"
+        protocol: tcp
     volumes:
       - ./middleware-qdrant-manager/data:/app/middleware-qdrant-manager/data:ro
       - ./middleware-qdrant-manager/exports:/app/middleware-qdrant-manager/exports
     environment:
       QDRANT_API_HOST: "0.0.0.0"
       MIDDLEWARE_PORT: "6336"
+      # The published address, so the service can refuse to serve
+      # unauthenticated anywhere but loopback. QDRANT_API_HOST is the socket.
+      MIDDLEWARE_BIND_HOST: ${MIDDLEWARE_BIND_HOST:-127.0.0.1}
       MIDDLEWARE_API_TOKENS: ${MIDDLEWARE_API_TOKENS:-}
       SERVICE_TOKEN: ${MIDDLEWARE_CLIENT_TOKEN:-}
       MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL: ${MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL:-false}

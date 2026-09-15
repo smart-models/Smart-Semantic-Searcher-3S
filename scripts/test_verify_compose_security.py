@@ -214,6 +214,29 @@ class ComposeSecurityValidationTests(unittest.TestCase):
         errors = validate_config(resolved_config("gpu", "0.0.0.0"), "gpu")
         self.assertTrue(any("0.0.0.0" in error for error in errors))
 
+    def test_middleware_on_a_private_address_is_accepted(self):
+        config = resolved_config("cpu")
+        config["services"]["middleware"]["ports"][0]["host_ip"] = "10.10.141.10"
+        self.assertEqual(validate_config(config, "cpu"), [])
+
+    def test_any_loopback_address_is_accepted(self):
+        config = resolved_config("cpu")
+        config["services"]["middleware"]["ports"][0]["host_ip"] = "127.0.0.2"
+        self.assertEqual(validate_config(config, "cpu"), [])
+
+    def test_middleware_on_a_public_address_is_rejected(self):
+        config = resolved_config("cpu")
+        config["services"]["middleware"]["ports"][0]["host_ip"] = "8.8.8.8"
+        errors = validate_config(config, "cpu")
+        self.assertTrue(any("service middleware" in error for error in errors))
+
+    def test_embedder_on_a_private_address_is_still_rejected(self):
+        config = resolved_config("cpu")
+        embedder = config["services"]["smart-embedder-cpu"]
+        embedder["ports"][0]["host_ip"] = "10.10.141.10"
+        errors = validate_config(config, "cpu")
+        self.assertTrue(any("smart-embedder-cpu" in error for error in errors))
+
     def test_missing_host_ip_is_rejected(self):
         config = resolved_config("cpu")
         del config["services"]["smart-embedder-cpu"]["ports"][0]["host_ip"]

@@ -1341,7 +1341,7 @@ the remaining badge and metric-value checks still need separate evidence.
 | ID | Action | Expected |
 |---|---|---|
 | M20 | JS console | zero exceptions; only deliberate 4xx elsewhere. Covered by K6-style console-error guard in `e-monitoring.spec.js` |
-| M21 | Monitoring requests | no 401 on `/stats` and `/health` during the observed polling window; these monitoring endpoints are public, so this is not a bearer-auth proof |
+| M21 | Monitoring requests | no 401 on `/stats` and `/health` during the observed polling window; on the loopback publish this book targets these monitoring endpoints are public, so this is not a bearer-auth proof |
 | M22 | Escaping | detail/dynamic values escaped, no DOM injection. Verified via route mock with malicious payload |
 | M-A | Open Monitoring | `mon-badges` live (livez/readyz/qdrant/embedder/health) |
 | M-B | **Embedder Models** | `mon-models` lists dense/sparse/reranker of the **active profile** |

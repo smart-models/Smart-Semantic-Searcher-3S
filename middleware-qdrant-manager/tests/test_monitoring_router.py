@@ -43,6 +43,38 @@ def _probe(**attrs):
     return type("Probe", (), attrs)()
 
 
+def _authenticated_app(bind_host):
+    settings = Settings(
+        _env_file=None,
+        QDRANT_API_HOST="127.0.0.1",
+        MIDDLEWARE_API_TOKENS="monitor-token:ops",
+        MIDDLEWARE_BIND_HOST=bind_host,
+    )
+    app = create_app(settings)
+    app.state.health_probe = _probe(
+        reachable=True, collections=1, embedder_reachable=True
+    )
+    return app
+
+
+def test_monitoring_needs_the_token_off_loopback_except_livez():
+    """A private publish must not hand collection names and counters to anyone."""
+    client = TestClient(_authenticated_app("10.10.141.10"))
+
+    assert client.get("/livez").status_code == 200
+    for path in ("/health", "/readyz", "/stats", "/metrics"):
+        assert client.get(path).status_code == 401, path
+        authorized = client.get(path, headers={"Authorization": "Bearer monitor-token"})
+        assert authorized.status_code == 200, path
+
+
+def test_monitoring_stays_public_on_loopback():
+    client = TestClient(_authenticated_app("127.0.0.1"))
+
+    for path in ("/livez", "/health", "/readyz", "/stats", "/metrics"):
+        assert client.get(path).status_code == 200, path
+
+
 def test_health_reports_embedder_reachable_with_models():
     settings = Settings(
         QDRANT_API_HOST="127.0.0.1",

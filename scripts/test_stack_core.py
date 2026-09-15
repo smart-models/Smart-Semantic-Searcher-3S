@@ -820,6 +820,13 @@ def test_urls_bracket_an_ipv6_mcp_host():
     assert "http://[::1]:6337" in "\n".join(plan.summary)
 
 
+def test_urls_report_the_middleware_bind_host():
+    """A private middleware publish is where the console really answers."""
+    plan = plan_for("urls", environment={"MIDDLEWARE_BIND_HOST": "10.10.141.10"})
+
+    assert "http://10.10.141.10:6336" in "\n".join(plan.summary)
+
+
 def test_urls_needs_no_hardware_profile():
     """Published ports are the same on cpu and gpu, so none is required."""
     plan = plan_for("urls")

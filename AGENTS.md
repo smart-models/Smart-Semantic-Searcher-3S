@@ -511,13 +511,18 @@ include console screenshots or API examples when applicable.
 These are invariants, not preferences. Breaking one is a bug even when tests
 pass.
 
-- **Loopback binds are not negotiable.** The middleware and Smart Embedder
-  publishes are hardcoded to `127.0.0.1` in `compose.yml`. The MCP publish is
-  the one operator-settable address (`${MCP_BIND_HOST:-127.0.0.1}`): it
+- **Publishes are loopback or private, never public.** The Smart Embedder
+  publish is hardcoded to `127.0.0.1` in `compose.yml`. The middleware and MCP
+  publishes are the two operator-settable addresses
+  (`${MIDDLEWARE_BIND_HOST:-127.0.0.1}`, `${MCP_BIND_HOST:-127.0.0.1}`): each
   defaults to loopback and accepts only loopback or an IPv4 RFC1918 literal;
   public, hostname, link-local, multicast and wildcard values fail startup.
-  `MCP_ALLOW_UNAUTHENTICATED_LOCAL=true` additionally requires a loopback
-  `MCP_BIND_HOST`. OAuth URLs require HTTPS except on explicit loopback hosts.
+  Serving without authentication (an empty effective token list with
+  `MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL=true` or
+  `MCP_ALLOW_UNAUTHENTICATED_LOCAL=true`) additionally requires a loopback bind
+  address for that service, and off loopback every middleware monitoring route
+  except `/livez` requires the token. OAuth URLs require HTTPS except on
+  explicit loopback hosts.
 - **Keep the three ACLs pairwise disjoint** — see [Cross-cutting](#cross-cutting).
   `scripts/verify_token_config.py` refuses to start the stack on an overlap.
 - **Introduce configuration in `.env.example`, never in a local `.env`.** Never

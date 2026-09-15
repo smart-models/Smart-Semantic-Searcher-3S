@@ -83,6 +83,71 @@ def test_unauthenticated_mcp_on_loopback_is_accepted():
     )
 
 
+def test_unauthenticated_middleware_on_a_private_bind_host_is_an_error():
+    errors = check_token_config(
+        _values(
+            MIDDLEWARE_API_TOKENS="",
+            MIDDLEWARE_CLIENT_TOKEN="",
+            MCP_SERVER_ENABLED="false",
+            MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL="true",
+            MIDDLEWARE_BIND_HOST="10.10.141.10",
+        )
+    )
+    assert any("MIDDLEWARE_BIND_HOST" in error for error in errors)
+
+
+def test_authenticated_middleware_on_a_private_bind_host_is_accepted():
+    assert check_token_config(_values(MIDDLEWARE_BIND_HOST="10.10.141.10")) == []
+
+
+def test_a_token_makes_the_opt_out_irrelevant_on_a_private_bind_host():
+    """The services judge the effective ACL, not the switch; so does the preflight."""
+    assert (
+        check_token_config(
+            _values(
+                MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL="true",
+                MIDDLEWARE_BIND_HOST="10.10.141.10",
+                MCP_ALLOW_UNAUTHENTICATED_LOCAL="true",
+                MCP_BIND_HOST="10.10.141.10",
+            )
+        )
+        == []
+    )
+
+
+def test_a_private_bind_host_of_a_service_that_does_not_run_is_ignored():
+    assert (
+        check_token_config(
+            _values(
+                EMBEDDER_ONLY="true",
+                MCP_SERVER_ENABLED="false",
+                MIDDLEWARE_API_TOKENS="",
+                MIDDLEWARE_CLIENT_TOKEN="",
+                MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL="true",
+                MIDDLEWARE_BIND_HOST="10.10.141.10",
+            )
+        )
+        == []
+    )
+
+
+def test_every_loopback_address_and_only_those_count_as_loopback():
+    unauthenticated = {
+        "MIDDLEWARE_API_TOKENS": "",
+        "MIDDLEWARE_CLIENT_TOKEN": "",
+        "MCP_SERVER_ENABLED": "false",
+        "MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL": "true",
+    }
+    assert (
+        check_token_config(_values(**unauthenticated, MIDDLEWARE_BIND_HOST="127.0.0.2"))
+        == []
+    )
+    errors = check_token_config(
+        _values(**unauthenticated, MIDDLEWARE_BIND_HOST="127.0.0.1.example.com")
+    )
+    assert any("MIDDLEWARE_BIND_HOST" in error for error in errors)
+
+
 def test_empty_middleware_tokens_without_opt_out_is_an_error():
     errors = check_token_config(
         _values(MIDDLEWARE_API_TOKENS="", MIDDLEWARE_CLIENT_TOKEN="")

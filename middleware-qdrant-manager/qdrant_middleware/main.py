@@ -114,7 +114,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(collections.router, dependencies=protected)
     app.include_router(points.router, dependencies=protected)
     app.include_router(query.router, dependencies=protected)
-    app.include_router(monitoring.router)
+    # Bearer auth decides per path: settings.public_auth_paths keeps the probes
+    # open on loopback and leaves only /livez open on a private publish.
+    app.include_router(monitoring.router, dependencies=[Depends(require_bearer_auth)])
 
     if resolved_settings.expose_frontend:
 

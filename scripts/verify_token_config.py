@@ -11,13 +11,13 @@ these values are bearer tokens and process arguments are world-readable through
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import sys
 from collections.abc import Mapping
 
 LABEL_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 RESERVED_LABEL_PREFIX = "@"
-PUBLISH_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1"})
 REMOVED_ENV_NAMES = {
     "MIDDLEWARE_API_TOKEN": "MIDDLEWARE_API_TOKENS or MIDDLEWARE_CLIENT_TOKEN",
     "SMART_EMBEDDER_API_TOKEN": (
@@ -43,6 +43,12 @@ SERVICE_UNAUTH_FLAGS = {
     "middleware": "MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL",
     "smart-embedder": "SMART_EMBEDDER_ALLOW_UNAUTHENTICATED_LOCAL",
     "mcp": "MCP_ALLOW_UNAUTHENTICATED_LOCAL",
+}
+# The services whose publish address is operator-settable; each refuses at boot
+# to serve without authentication anywhere but loopback.
+PUBLISH_BIND_HOSTS = {
+    "middleware": "MIDDLEWARE_BIND_HOST",
+    "mcp": "MCP_BIND_HOST",
 }
 
 
@@ -79,8 +85,10 @@ def _parse(raw: str, variable: str, errors: list[str]) -> set[str]:
 
 def _is_publish_loopback(host: str) -> bool:
     """Return whether a published address stays on the loopback interface."""
-    normalized = host.strip().lower()
-    return normalized in PUBLISH_LOOPBACK_HOSTS or normalized.startswith("127.")
+    try:
+        return ipaddress.ip_address(host.strip().strip("[]")).is_loopback
+    except ValueError:
+        return False
 
 
 def check_token_config(values: Mapping[str, str]) -> list[str]:
@@ -164,13 +172,17 @@ def check_token_config(values: Mapping[str, str]) -> list[str]:
                 f"{INBOUND_LISTS[service]} is empty and {flag} is not true; "
                 f"{service} would refuse to start"
             )
-
-    if _is_true(values.get("MCP_ALLOW_UNAUTHENTICATED_LOCAL", "false")):
-        bind_host = values.get("MCP_BIND_HOST", "127.0.0.1")
+            continue
+        # Reaching here means the service would serve without authentication;
+        # like its own boot check, refuse that anywhere but loopback.
+        bind_variable = PUBLISH_BIND_HOSTS.get(service)
+        if bind_variable is None:
+            continue
+        bind_host = values.get(bind_variable, "").strip() or "127.0.0.1"
         if not _is_publish_loopback(bind_host):
             errors.append(
-                "MCP_ALLOW_UNAUTHENTICATED_LOCAL=true requires a loopback "
-                f"MCP_BIND_HOST; refusing to publish unauthenticated on {bind_host}"
+                f"{flag}=true requires a loopback {bind_variable}; "
+                f"refusing to publish unauthenticated on {bind_host}"
             )
     return errors
 
