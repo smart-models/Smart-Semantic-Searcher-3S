@@ -867,7 +867,7 @@ safe defaults.
 | `SMART_EMBEDDER_AUTOTUNE` | `off`, `quick`, `full`; `quick` | First-start behaviour |
 | `SMART_EMBEDDER_TUNING_OBJECTIVE` | `balanced`, `throughput`, `latency`; `balanced` | Selection objective |
 | `SMART_EMBEDDER_AUTOTUNE_FORCE` | `false`, `true`; `false` | Ignore a reusable profile whenever preparation runs while true |
-| `SMART_EMBEDDER_AUTOTUNE_MAX_SECONDS` | `120` quick, configurable | Target measurement budget; checked between bounded candidates |
+| `SMART_EMBEDDER_AUTOTUNE_MAX_SECONDS` | `120` quick, configurable | Target measurement budget; checked between bounded candidates. ADVANCED also uses it when its own budget is unset, and its quick budget is then fixed instead of adaptive |
 | `SMART_EMBEDDER_AUTOTUNE_PROFILE` | path in `/app/runtime_state/autotune` | Persisted BASIC operational profile |
 
 For startup mode selection and a single forced preparation request, see the
@@ -960,7 +960,8 @@ The `advanced` profile has its **own** hardware profile at
 profile, and the same tuner never runs across both profiles. `quick` and `full`
 use the same isolated pre-start, fingerprint, quality, memory and
 atomic-persistence contract described above, but benchmark Qwen dense, MILCO
-sparse, hybrid, Qwen reranking and mixed traffic separately. `full` is an
+sparse, hybrid, Qwen reranking and mixed traffic separately, plus request
+traffic through the serving queue on CUDA. `full` is an
 explicit operator audit and reserves time for a final isolated long-input
 canary; **if that canary fails, all tentative selections are rolled back**
 rather than partially persisted. When long probes were deferred from the
@@ -1253,10 +1254,11 @@ Check the `autotune` object returned by `/health` (and, for ADVANCED, the
 `advanced_config` object plus the backend/phase Prometheus metrics), the
 `embedding_autotune_info` Prometheus metric, and the `Hardware autotune
 pre-start result` log line before expanding the rollout.
-Restart once and require `action=reused`. Use `full` only for an explicit audit
-and raise `SMART_EMBEDDER_AUTOTUNE_MAX_SECONDS` (normally to at least `600`):
+Restart once and require `action=reused`. Use `full` only for an explicit audit:
 it adds three-sample exploratory stages and long-sequence canaries, so it is
-not a first-start default.
+not a first-start default. Its default budget is already longer (600 s for
+BASIC, 1,800 s for ADVANCED); a budget you set yourself is a fixed limit, so
+raise it rather than lower it when a full audit needs more time.
 
 **Roll back** immediately with `SMART_EMBEDDER_AUTOTUNE=off` or explicit safe
 backend overrides.
