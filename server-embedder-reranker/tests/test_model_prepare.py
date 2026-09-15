@@ -4,6 +4,7 @@
 ``model_revisions`` and fail loudly rather than fall back to a branch.
 """
 
+import fnmatch
 import runpy
 import sys
 import tempfile
@@ -19,6 +20,8 @@ if str(SERVER_DIR) not in sys.path:
 import model_prepare  # noqa: E402
 from model_revisions import MODEL_REVISIONS  # noqa: E402
 
+REPOSITORY_FILES = ("config.json", "model.safetensors", "tokenizer.json")
+
 
 class FakeHubCache:
     """Stand-in for ``snapshot_download`` that keeps the hub cache's weak spot.
@@ -28,13 +31,21 @@ class FakeHubCache:
     holding only the files that finished before the connection dropped.
     """
 
-    def __init__(self, root, fail_download_of=()):
+    def __init__(self, root, fail_download_of=(), partial_download_of=()):
         self.root = Path(root)
         self.fail_download_of = set(fail_download_of)
+        self.partial_download_of = set(partial_download_of)
+        self.reachable = True
         self.calls = []
 
     def snapshot(self, revision):
         return self.root / "snapshots" / revision
+
+    def list_repo_files(self, repo_id, *, revision=None):
+        """Return the repository listing, as ``huggingface_hub.list_repo_files``."""
+        if not self.reachable:
+            raise OSError("hub unreachable")
+        return list(REPOSITORY_FILES)
 
     def __call__(self, **kwargs):
         self.calls.append(kwargs)
@@ -46,6 +57,15 @@ class FakeHubCache:
         snapshot.mkdir(parents=True, exist_ok=True)
         if kwargs["repo_id"] in self.fail_download_of:
             raise OSError("connection dropped mid-download")
+        if not self.reachable or kwargs["repo_id"] in self.partial_download_of:
+            # With the Hub unreachable and no cached tree listing,
+            # snapshot_download returns the folder as-is, however partial.
+            (snapshot / "config.json").touch()
+            return str(snapshot)
+        ignored = kwargs.get("ignore_patterns") or ()
+        for name in REPOSITORY_FILES:
+            if not any(fnmatch.fnmatch(name, pattern) for pattern in ignored):
+                (snapshot / name).touch()
         return str(snapshot)
 
     def online_repositories(self):
@@ -74,10 +94,13 @@ class ModelPrepareTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             cache = Path(temporary) / "hub"
             hub = FakeHubCache(Path(temporary) / "fake")
-            model_prepare.prefetch_models("basic", downloader=hub, cache_dir=cache)
+            model_prepare.prefetch_models(
+                "basic", downloader=hub, lister=hub.list_repo_files, cache_dir=cache
+            )
             hub.calls.clear()
+            hub.reachable = False
             result = model_prepare.prefetch_models(
-                "basic", downloader=hub, cache_dir=cache
+                "basic", downloader=hub, lister=hub.list_repo_files, cache_dir=cache
             )
 
         self.assertEqual(len(hub.calls), 2)
@@ -88,7 +111,10 @@ class ModelPrepareTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             hub = FakeHubCache(Path(temporary) / "fake")
             model_prepare.prefetch_models(
-                "basic", downloader=hub, cache_dir=Path(temporary) / "hub"
+                "basic",
+                downloader=hub,
+                lister=hub.list_repo_files,
+                cache_dir=Path(temporary) / "hub",
             )
 
         online = [call for call in hub.calls if not call.get("local_files_only")]
@@ -106,7 +132,10 @@ class ModelPrepareTests(unittest.TestCase):
             for model_id in model_prepare.PROFILE_MODELS["basic"]:
                 hub.snapshot(MODEL_REVISIONS[model_id]).mkdir(parents=True)
             model_prepare.prefetch_models(
-                "basic", downloader=hub, cache_dir=Path(temporary) / "hub"
+                "basic",
+                downloader=hub,
+                lister=hub.list_repo_files,
+                cache_dir=Path(temporary) / "hub",
             )
 
         self.assertEqual(
@@ -119,10 +148,14 @@ class ModelPrepareTests(unittest.TestCase):
             cache = Path(temporary) / "hub"
             hub = FakeHubCache(Path(temporary) / "fake", fail_download_of={interrupted})
             with self.assertRaises(OSError):
-                model_prepare.prefetch_models("basic", downloader=hub, cache_dir=cache)
+                model_prepare.prefetch_models(
+                    "basic", downloader=hub, lister=hub.list_repo_files, cache_dir=cache
+                )
             hub.fail_download_of.clear()
             hub.calls.clear()
-            model_prepare.prefetch_models("basic", downloader=hub, cache_dir=cache)
+            model_prepare.prefetch_models(
+                "basic", downloader=hub, lister=hub.list_repo_files, cache_dir=cache
+            )
 
         self.assertEqual(hub.online_repositories(), [interrupted])
 
@@ -130,7 +163,10 @@ class ModelPrepareTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             hub = FakeHubCache(Path(temporary) / "fake")
             model_prepare.prefetch_models(
-                "advanced", downloader=hub, cache_dir=Path(temporary) / "hub"
+                "advanced",
+                downloader=hub,
+                lister=hub.list_repo_files,
+                cache_dir=Path(temporary) / "hub",
             )
 
         patterns = {
@@ -148,11 +184,16 @@ class ModelPrepareTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             cache = Path(temporary) / "hub"
             hub = FakeHubCache(Path(temporary) / "fake")
-            model_prepare.prefetch_models("advanced", downloader=hub, cache_dir=cache)
+            model_prepare.prefetch_models(
+                "advanced", downloader=hub, lister=hub.list_repo_files, cache_dir=cache
+            )
             hub.calls.clear()
             with patch.dict(model_prepare.DOWNLOAD_IGNORE_PATTERNS, clear=True):
                 model_prepare.prefetch_models(
-                    "advanced", downloader=hub, cache_dir=cache
+                    "advanced",
+                    downloader=hub,
+                    lister=hub.list_repo_files,
+                    cache_dir=cache,
                 )
 
         self.assertEqual(hub.online_repositories(), ["BAAI/bge-m3-unsupervised"])
@@ -163,12 +204,91 @@ class ModelPrepareTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             hub = FakeHubCache(Path(temporary) / "fake")
             fake_hub.snapshot_download = hub
+            fake_hub.list_repo_files = hub.list_repo_files
             with patch.dict(sys.modules, {"huggingface_hub": fake_hub}):
                 model_prepare.prefetch_models(
                     "basic", cache_dir=Path(temporary) / "hub"
                 )
 
         self.assertEqual(len(hub.online_repositories()), 2)
+
+    def test_a_partial_snapshot_returned_by_the_hub_is_not_certified(self):
+        """snapshot_download hands back a partial folder when the Hub drops out."""
+        partial = model_prepare.PROFILE_MODELS["basic"][0]
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "hub"
+            hub = FakeHubCache(Path(temporary) / "fake", partial_download_of={partial})
+            with self.assertRaisesRegex(RuntimeError, "incomplete"):
+                model_prepare.prefetch_models(
+                    "basic", downloader=hub, lister=hub.list_repo_files, cache_dir=cache
+                )
+            marker = model_prepare.completion_marker(
+                cache, partial, MODEL_REVISIONS[partial]
+            )
+
+            self.assertFalse(marker.exists())
+
+    def test_an_unreachable_hub_never_certifies_an_unverified_snapshot(self):
+        model_id = model_prepare.PROFILE_MODELS["basic"][0]
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "hub"
+            hub = FakeHubCache(Path(temporary) / "fake")
+            hub.snapshot(MODEL_REVISIONS[model_id]).mkdir(parents=True)
+            hub.reachable = False
+            with self.assertRaisesRegex(RuntimeError, "cannot verify"):
+                model_prepare.prefetch_models(
+                    "basic", downloader=hub, lister=hub.list_repo_files, cache_dir=cache
+                )
+            marker = model_prepare.completion_marker(
+                cache, model_id, MODEL_REVISIONS[model_id]
+            )
+
+            self.assertFalse(marker.exists())
+
+    def test_a_marker_older_releases_wrote_is_validated_again(self):
+        """Older markers were written even for partial snapshots; they prove nothing."""
+        model_id = model_prepare.PROFILE_MODELS["basic"][0]
+        revision = MODEL_REVISIONS[model_id]
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "hub"
+            hub = FakeHubCache(Path(temporary) / "fake")
+            hub.snapshot(revision).mkdir(parents=True)
+            (hub.snapshot(revision) / "config.json").touch()
+            legacy = model_prepare.completion_marker(cache, model_id, revision)
+            legacy.parent.mkdir(parents=True)
+            legacy.write_text("", encoding="utf-8")  # the pattern-only record
+            hub.reachable = False
+            with self.assertRaisesRegex(RuntimeError, "cannot verify"):
+                model_prepare.prefetch_models(
+                    "basic", downloader=hub, lister=hub.list_repo_files, cache_dir=cache
+                )
+            hub.reachable = True
+            hub.calls.clear()
+            model_prepare.prefetch_models(
+                "basic", downloader=hub, lister=hub.list_repo_files, cache_dir=cache
+            )
+            complete = all(
+                (hub.snapshot(revision) / name).exists() for name in REPOSITORY_FILES
+            )
+
+        self.assertIn(model_id, hub.online_repositories())
+        self.assertTrue(complete)
+
+    def test_a_file_pruned_after_verification_is_fetched_again(self):
+        model_id = model_prepare.PROFILE_MODELS["basic"][0]
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "hub"
+            hub = FakeHubCache(Path(temporary) / "fake")
+            model_prepare.prefetch_models(
+                "basic", downloader=hub, lister=hub.list_repo_files, cache_dir=cache
+            )
+            (hub.snapshot(MODEL_REVISIONS[model_id]) / "model.safetensors").unlink()
+            hub.calls.clear()
+            model_prepare.prefetch_models(
+                "basic", downloader=hub, lister=hub.list_repo_files, cache_dir=cache
+            )
+
+        self.assertEqual(hub.online_repositories(), [model_id])
 
     def test_revision_mismatch_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -178,6 +298,7 @@ class ModelPrepareTests(unittest.TestCase):
                 model_prepare.prefetch_models(
                     "basic",
                     downloader=lambda **_kwargs: str(wrong),
+                    lister=lambda *_args, **_kwargs: [],
                     cache_dir=Path(temporary) / "hub",
                 )
 
@@ -213,6 +334,7 @@ class ModelPrepareTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             hub = FakeHubCache(Path(temporary) / "fake")
             fake_hub.snapshot_download = hub
+            fake_hub.list_repo_files = hub.list_repo_files
             modules = {
                 "huggingface_hub": fake_hub,
                 "autotune_entrypoint": fake_autotune,

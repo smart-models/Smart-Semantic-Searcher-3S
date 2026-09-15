@@ -435,6 +435,20 @@ def _read_sysfs_text(path: Path) -> Optional[str]:
         return None
 
 
+def _cpu_list_text(cpus: list[int]) -> str:
+    """Write sorted CPU ids in sysfs list syntax, for example ``0-2,5``."""
+    ranges: list[str] = []
+    start = previous = cpus[0]
+    for cpu in [*cpus[1:], None]:
+        if cpu is not None and cpu == previous + 1:
+            previous = cpu
+            continue
+        ranges.append(str(start) if start == previous else f"{start}-{previous}")
+        if cpu is not None:
+            start = previous = cpu
+    return ",".join(ranges)
+
+
 def read_cpu_power_policy(
     cpu_ids: Iterable[int], *, sys_root: Path = Path("/sys")
 ) -> dict:
@@ -448,14 +462,16 @@ def read_cpu_power_policy(
         sys_root: Root of the sysfs tree, replaceable in tests.
 
     Returns:
-        Governor, energy preference and driver counts plus the highest maximum
-        frequency in MHz; ``available`` is false when cpufreq is not exposed.
+        Governor, energy preference and driver counts, the highest maximum
+        frequency in MHz, and the groups of CPUs sharing every stable setting
+        including their minimum and maximum frequency limits; ``available`` is
+        false when cpufreq is not exposed.
     """
     base = sys_root / "devices" / "system" / "cpu"
     governors: dict[str, int] = {}
     preferences: dict[str, int] = {}
     drivers: set[str] = set()
-    max_khz = 0
+    domains: dict[tuple, list[int]] = {}
     for cpu in sorted(set(cpu_ids)):
         cpufreq = base / f"cpu{cpu}" / "cpufreq"
         governor = _read_sysfs_text(cpufreq / "scaling_governor")
@@ -468,14 +484,36 @@ def read_cpu_power_policy(
         driver = _read_sysfs_text(cpufreq / "scaling_driver")
         if driver:
             drivers.add(driver)
-        with contextlib.suppress(TypeError, ValueError):
-            max_khz = max(max_khz, int(_read_sysfs_text(cpufreq / "scaling_max_freq")))
+        limits = []
+        for name in ("scaling_min_freq", "scaling_max_freq"):
+            try:
+                limits.append(int(_read_sysfs_text(cpufreq / name)))
+            except (TypeError, ValueError):
+                limits.append(None)
+        key = (governor, preference or None, driver or None, *limits)
+        domains.setdefault(key, []).append(cpu)
+    max_khz = max((key[4] for key in domains if key[4]), default=0)
     return {
         "available": bool(governors),
         "governors": governors,
         "energy_performance_preferences": preferences,
         "drivers": sorted(drivers),
         "max_frequency_mhz": round(max_khz / 1000) if max_khz else None,
+        # CPUs sharing every stable setting: a limit on some cores or a raised
+        # minimum changes this record, and so the fingerprint; live readings do not.
+        "frequency_domains": [
+            {
+                "cpus": _cpu_list_text(cpus),
+                "governor": governor,
+                "energy_performance_preference": preference,
+                "driver": driver,
+                "min_frequency_khz": minimum,
+                "max_frequency_khz": maximum,
+            }
+            for (governor, preference, driver, minimum, maximum), cpus in sorted(
+                domains.items(), key=lambda item: item[1][0]
+            )
+        ],
     }
 
 
@@ -597,6 +635,13 @@ def build_advanced_fingerprint(
     )
     cpu = dict(base["hardware"]["cpu"])
     cpu.update(_cpu_topology(proc_root))
+    # The frequency policy decides how fast the calibration cores may run, so a
+    # governor or energy-preference change must recalibrate. The live frequency
+    # stays out: it moves on every read.
+    cpu["power_policy"] = read_cpu_power_policy(
+        cpu.get("cpuset") or cpu.get("affinity_cpu_ids") or range(os.cpu_count() or 1),
+        sys_root=sys_root,
+    )
     software = dict(base["software"])
     software.update(
         {

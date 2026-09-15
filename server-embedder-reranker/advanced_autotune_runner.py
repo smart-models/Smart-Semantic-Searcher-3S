@@ -1098,6 +1098,71 @@ def evaluate_quality_capture(
     }
 
 
+# Selection sections each measured backend exercises. Any other backend
+# (requests, mixed) runs the whole pipeline, so every section matters to it.
+BACKEND_SELECTION_SECTIONS = {
+    "dense": ("dense", "schedule"),
+    "sparse": ("sparse", "schedule"),
+    "hybrid": ("dense", "sparse", "schedule"),
+    "reranker": ("reranker", "schedule"),
+}
+
+
+def stale_reference_backends(
+    measured_under: Mapping[str, Mapping[str, Any]],
+    selected: Mapping[str, Any],
+    target_backends: list[str],
+) -> list[str]:
+    """Return target backends whose reference ran under a different policy.
+
+    Args:
+        measured_under: Policy each backend's reference measurement ran under.
+        selected: Policy the next candidate starts from.
+        target_backends: Backends the candidate is compared on.
+
+    Returns:
+        Backends to re-measure under ``selected`` before a fair comparison.
+    """
+    current = selected.get("advanced", {})
+    stale = []
+    for backend in target_backends:
+        reference = measured_under.get(backend)
+        if reference is None:
+            continue
+        previous = reference.get("advanced", {})
+        sections = BACKEND_SELECTION_SECTIONS.get(backend) or set(current) | set(
+            previous
+        )
+        if any(previous.get(section) != current.get(section) for section in sections):
+            stale.append(backend)
+    return stale
+
+
+def _merged_measurements(
+    reference: Mapping[str, Any], payload: Mapping[str, Any]
+) -> list[dict]:
+    """Return the reference measurements with the payload's replacing their probes."""
+    measurements = {
+        (item["backend"], item["input_tokens"], item["batch_size"]): item
+        for item in reference.get("measurements", [])
+    }
+    for item in payload.get("measurements", []):
+        measurements[(item["backend"], item["input_tokens"], item["batch_size"])] = item
+    return list(measurements.values())
+
+
+def _deadline_skips(pending: list[Mapping[str, Any]]) -> list[dict]:
+    """Return the records of candidates left unrun by an exhausted deadline."""
+    return [
+        {
+            "candidate": item["name"],
+            "status": "skipped-deadline",
+            "reason": "prior isolated candidate exhausted the calibration deadline",
+        }
+        for item in pending
+    ]
+
+
 def evaluate_promotion(
     reference: Mapping[str, Any],
     candidate: Mapping[str, Any],
@@ -1502,7 +1567,7 @@ def calibrate(
     cpu_ids = (
         cpu.get("cpuset") or cpu.get("affinity_cpu_ids") or range(os.cpu_count() or 1)
     )
-    cpu_policy = read_cpu_power_policy(cpu_ids)
+    cpu_policy = cpu.get("power_policy") or read_cpu_power_policy(cpu_ids)
     measured_frequency = baseline_payload.get("cpu_frequency")
     host_cpu_power = {
         "policy": cpu_policy,
@@ -1533,6 +1598,11 @@ def calibrate(
             }
 
         champion_payload = baseline_payload
+        # The policy each backend's reference measurement was taken under.
+        measured_under: dict[str, Mapping[str, Any]] = {
+            item["backend"]: baseline_selected
+            for item in baseline_payload.get("measurements", [])
+        }
         baseline_template = candidate
         specs = tuning_candidate_specs(fingerprint, config)
         if _device_kind(fingerprint) == "cuda":
@@ -1604,10 +1674,17 @@ def calibrate(
                 )
                 continue
             remaining = deadline_seconds - (time.monotonic() - started)
+            stale_backends = stale_reference_backends(
+                measured_under, selected, list(spec["target_backends"])
+            )
             required_seconds = estimate_candidate_seconds(
                 isolated.duration_seconds,
                 list(spec["target_backends"]),
             ) + (final_canary_reserve if spec.get("defer_long_canary") else 0.0)
+            if stale_backends:
+                required_seconds += estimate_candidate_seconds(
+                    isolated.duration_seconds, stale_backends
+                )
             if remaining < required_seconds:
                 # Estimates depend on each candidate's backends, so a later one
                 # can still fit: skip this candidate instead of ending the search.
@@ -1620,6 +1697,66 @@ def calibrate(
                     }
                 )
                 continue
+            if stale_backends:
+                # The candidate starts from the promoted policy, so it must be
+                # compared with that policy re-measured, not with numbers taken
+                # before earlier promotions changed what these backends run.
+                reference_spec = {
+                    "name": f"{spec['name']}-reference",
+                    "target_backends": stale_backends,
+                    "changes": {},
+                    "defer_long_canary": spec.get("defer_long_canary", False),
+                }
+                refreshed = isolated_runner(
+                    candidate_command(
+                        materialise_candidate(
+                            baseline_template, selected, reference_spec
+                        ),
+                        script_dir=script_dir,
+                    ),
+                    timeout_seconds=max(
+                        1.0,
+                        remaining
+                        - (
+                            final_canary_reserve
+                            if spec.get("defer_long_canary")
+                            else 0.0
+                        ),
+                    ),
+                    cwd=script_dir,
+                    env=env,
+                    max_rss_bytes=max_rss,
+                )
+                reference_record = _result_record(refreshed)
+                reference_record.pop("quality_capture", None)
+                reference_record["candidate"] = reference_spec["name"]
+                reference_record["reference_for"] = spec["name"]
+                results.append(reference_record)
+                refreshed_payload = refreshed.payload or {}
+                if not refreshed.ok or not refreshed_payload.get("measurements"):
+                    results.append(
+                        {
+                            "candidate": spec["name"],
+                            "status": "skipped-stale-reference",
+                            "reason": (
+                                "the current policy could not be re-measured "
+                                "for a fair comparison"
+                            ),
+                        }
+                    )
+                    if refreshed.timed_out:
+                        results.extend(_deadline_skips(specs[spec_index + 1 :]))
+                        break
+                    continue
+                champion_payload = {
+                    **champion_payload,
+                    "measurements": _merged_measurements(
+                        champion_payload, refreshed_payload
+                    ),
+                }
+                for backend in stale_backends:
+                    measured_under[backend] = selected
+                remaining = deadline_seconds - (time.monotonic() - started)
             tuned = materialise_candidate(baseline_template, selected, spec)
             candidate_timeout = remaining - (
                 final_canary_reserve if spec.get("defer_long_canary") else 0.0
@@ -1654,17 +1791,7 @@ def calibrate(
                 }
                 results.append(candidate_record)
                 if isolated_candidate.timed_out:
-                    for pending in specs[spec_index + 1 :]:
-                        results.append(
-                            {
-                                "candidate": pending["name"],
-                                "status": "skipped-deadline",
-                                "reason": (
-                                    "prior isolated candidate exhausted the "
-                                    "calibration deadline"
-                                ),
-                            }
-                        )
+                    results.extend(_deadline_skips(specs[spec_index + 1 :]))
                     break
                 if search_family and spec.get("stop_family_on_rejection"):
                     stopped_families[search_family] = (
@@ -1696,25 +1823,12 @@ def calibrate(
             if promotion["promoted"]:
                 selected = candidate_payload.get("selected") or tuned["selected"]
                 merged = copy.deepcopy(champion_payload)
-                measurements = {
-                    (
-                        item["backend"],
-                        item["input_tokens"],
-                        item["batch_size"],
-                    ): item
-                    for item in merged.get("measurements", [])
-                }
-                for item in candidate_payload.get("measurements", []):
-                    measurements[
-                        (
-                            item["backend"],
-                            item["input_tokens"],
-                            item["batch_size"],
-                        )
-                    ] = item
+                measurements = _merged_measurements(merged, candidate_payload)
                 merged.update(candidate_payload)
-                merged["measurements"] = list(measurements.values())
+                merged["measurements"] = measurements
                 champion_payload = merged
+                for item in candidate_payload.get("measurements", []):
+                    measured_under[item["backend"]] = selected
             elif search_family and spec.get("stop_family_on_rejection"):
                 stopped_families[search_family] = (
                     f"{spec['name']} stopped on {promotion['reason']}"
@@ -1866,7 +1980,8 @@ def main(argv=None) -> int:
         )
         if argument is not None
     }
-    if args.max_seconds is not None and args.max_seconds != config.max_seconds:
+    if args.max_seconds is not None:
+        # Asking for a budget, even the default one, asks for a fixed limit.
         replacements["adaptive_budget"] = False
     if replacements:
         config = replace(config, **replacements)

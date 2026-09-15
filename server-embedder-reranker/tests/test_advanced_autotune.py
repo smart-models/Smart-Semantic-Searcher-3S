@@ -213,6 +213,79 @@ flags : avx2 f16c
             subject.fingerprint_digest(first), subject.fingerprint_digest(second)
         )
 
+    def test_cpu_power_policy_invalidates_but_live_frequency_does_not(self):
+        """A governor switch must recalibrate; a frequency reading must not."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cgroup, proc, sys_root = self._roots(root)
+            config = subject.AdvancedAutotuneConfig.from_env(
+                {"HF_HOME": str(root / "models")}
+            )
+
+            def digest(governor: str, current_khz: int) -> str:
+                for cpu in range(4):
+                    cpufreq = f"devices/system/cpu/cpu{cpu}/cpufreq"
+                    write(sys_root, f"{cpufreq}/scaling_governor", governor)
+                    write(
+                        sys_root,
+                        f"{cpufreq}/energy_performance_preference",
+                        "balance_performance",
+                    )
+                    write(sys_root, f"{cpufreq}/scaling_max_freq", "2700000")
+                    write(sys_root, f"{cpufreq}/scaling_cur_freq", str(current_khz))
+                return subject.fingerprint_digest(
+                    subject.build_advanced_fingerprint(
+                        config=config,
+                        env={"HF_HOME": str(root / "models")},
+                        hf_home=root / "models",
+                        source_root=root / "sources",
+                        cgroup_root=cgroup,
+                        proc_root=proc,
+                        sys_root=sys_root,
+                    )
+                )
+
+            powersave = digest("powersave", 800000)
+            powersave_faster = digest("powersave", 2600000)
+            performance = digest("performance", 800000)
+
+        self.assertEqual(powersave, powersave_faster)
+        self.assertNotEqual(powersave, performance)
+
+    def test_per_core_frequency_limits_invalidate_the_fingerprint(self):
+        """Capping some cores, or raising the minimum, changes what was measured."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cgroup, proc, sys_root = self._roots(root)
+            config = subject.AdvancedAutotuneConfig.from_env(
+                {"HF_HOME": str(root / "models")}
+            )
+
+            def digest(max_khz: list[int], min_khz: int = 800000) -> str:
+                for cpu, maximum in enumerate(max_khz):
+                    cpufreq = f"devices/system/cpu/cpu{cpu}/cpufreq"
+                    write(sys_root, f"{cpufreq}/scaling_governor", "powersave")
+                    write(sys_root, f"{cpufreq}/scaling_min_freq", str(min_khz))
+                    write(sys_root, f"{cpufreq}/scaling_max_freq", str(maximum))
+                return subject.fingerprint_digest(
+                    subject.build_advanced_fingerprint(
+                        config=config,
+                        env={"HF_HOME": str(root / "models")},
+                        hf_home=root / "models",
+                        source_root=root / "sources",
+                        cgroup_root=cgroup,
+                        proc_root=proc,
+                        sys_root=sys_root,
+                    )
+                )
+
+            uncapped = digest([2700000] * 4)
+            three_capped = digest([800000, 800000, 800000, 2700000])
+            raised_minimum = digest([2700000] * 4, min_khz=2400000)
+
+        self.assertNotEqual(uncapped, three_capped)
+        self.assertNotEqual(uncapped, raised_minimum)
+
     def test_gpu_identity_and_sm_count_are_included(self):
         properties = types.SimpleNamespace(
             name="RTX Test",

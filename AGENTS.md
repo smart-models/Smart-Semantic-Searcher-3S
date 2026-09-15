@@ -317,7 +317,7 @@ an exit code, so read its output rather than `$LASTEXITCODE`.
   reranker, **no ColBERT**).
 - A separate pre-start hardware autotuner (`autotune_entrypoint.py` dispatching
   to `basic_autotune*.py` / `advanced_autotune*.py`) fingerprints the CPU/GPU/
-  software stack, benchmarks runtime/batch/thread candidates under quality +
+  software stack (ADVANCED also the host CPU frequency policy), benchmarks runtime/batch/thread candidates under quality +
   stability + memory gates, and atomically persists the decision per profile.
   It **never edits `.env`**; a fingerprint change invalidates the persisted
   profile and forces recalibration. The same tuner never runs across both

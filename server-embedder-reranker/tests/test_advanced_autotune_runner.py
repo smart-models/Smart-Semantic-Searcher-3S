@@ -5,6 +5,8 @@ candidate ordering, the stability/memory gates and the final calibration
 are exercised without loading a model.
 """
 
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -462,6 +464,28 @@ class SearchSpaceTests(unittest.TestCase):
             deadline(fixed, baseline_seconds=700.0, planned_candidate_seconds=500.0),
             240.0,
         )
+
+    def test_an_explicit_cli_budget_is_always_a_fixed_limit(self):
+        """A --max-seconds equal to the default must not keep the adaptive ceiling."""
+        seen = []
+
+        def calibrate(**kwargs):
+            seen.append(kwargs["config"])
+            return {"action": "disabled"}
+
+        with (
+            patch.dict(sys.modules, {"torch": None}),
+            patch.dict("os.environ", {"SMART_EMBEDDER_AUTOTUNE": "quick"}, clear=True),
+            patch.object(runner, "build_advanced_fingerprint", return_value={}),
+            patch.object(runner, "calibrate", side_effect=calibrate),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            runner.main(["--max-seconds", "360"])
+            runner.main([])
+
+        self.assertEqual(seen[0].max_seconds, 360.0)
+        self.assertFalse(seen[0].adaptive_budget)
+        self.assertTrue(seen[1].adaptive_budget)
 
     def test_gpu_wait_puts_batch_and_coalescing_candidates_first(self):
         specs = [
@@ -1106,6 +1130,105 @@ class CalibrationTests(unittest.TestCase):
                 for record in result["results"][2:]
             )
         )
+
+    def test_candidate_is_compared_with_the_current_policy_not_the_baseline(self):
+        """A coalescing candidate inherits the promoted dense policy.
+
+        Its end-to-end reference must be re-measured under that policy, or the
+        dense promotion's gain is credited to request coalescing.
+        """
+
+        def measurement(backend, tokens_per_second):
+            return {
+                "backend": backend,
+                "input_tokens": 128,
+                "batch_size": 1,
+                "is_canary": False,
+                "p95_seconds": 1.0,
+                "coefficient_of_variation": 0.01,
+                "useful_tokens_per_second": tokens_per_second,
+            }
+
+        baseline = {
+            "candidate": "co-resident-safe-baseline",
+            "status": "passed",
+            "quality_passed": True,
+            "quality_capture": CandidateGateTests()._capture(),
+            "selected": schema.safe_advanced_defaults("cuda"),
+            "measurements": [
+                measurement("dense", 100.0),
+                measurement("requests", 100.0),
+            ],
+        }
+        specs = [
+            {
+                "name": "dense-geometric-batch-policy",
+                "target_backends": ["dense"],
+                "changes": {"dense": {"prefetch_batches": True}},
+            },
+            {
+                "name": "schedule-queue-batch-32",
+                "target_backends": ["requests"],
+                "changes": {"schedule": {"queue_batch": 32}},
+            },
+        ]
+        dense_selected = json.loads(json.dumps(baseline["selected"]))
+        dense_selected["advanced"]["dense"]["prefetch_batches"] = True
+        responses = [
+            isolated_result(payload=baseline),
+            isolated_result(
+                payload={
+                    **baseline,
+                    "candidate": "dense-geometric-batch-policy",
+                    "selected": dense_selected,
+                    "measurements": [measurement("dense", 200.0)],
+                }
+            ),
+            # The current policy (promoted dense batches, no coalescing).
+            isolated_result(
+                payload={**baseline, "measurements": [measurement("requests", 180.0)]}
+            ),
+            isolated_result(
+                payload={
+                    **baseline,
+                    "candidate": "schedule-queue-batch-32",
+                    "measurements": [measurement("requests", 150.0)],
+                }
+            ),
+        ]
+
+        def isolated_runner(*args, **kwargs):
+            if responses:
+                return responses.pop(0)
+            return isolated_result(
+                payload={**baseline, "candidate": "selected-final-long-canary"}
+            )
+
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(runner, "tuning_candidate_specs", return_value=specs),
+        ):
+            result = runner.calibrate(
+                config=self._config(
+                    Path(temporary) / "profile.json",
+                    SMART_EMBEDDER_AUTOTUNE_MAX_SECONDS="120",
+                ),
+                fingerprint=fingerprint(),
+                script_dir=SERVER_DIR,
+                isolated_runner=isolated_runner,
+            )
+
+        records = {record.get("candidate"): record for record in result["results"]}
+        self.assertTrue(
+            records["dense-geometric-batch-policy"]["promotion"]["promoted"]
+        )
+        self.assertEqual(
+            records["schedule-queue-batch-32-reference"]["reference_for"],
+            "schedule-queue-batch-32",
+        )
+        coalescing = records["schedule-queue-batch-32"]["promotion"]
+        self.assertFalse(coalescing["promoted"])
+        self.assertLess(coalescing["median_throughput_gain"], 0.0)
 
     def test_batch_family_stops_after_memory_or_quality_rejection(self):
         capture = CandidateGateTests()._capture()

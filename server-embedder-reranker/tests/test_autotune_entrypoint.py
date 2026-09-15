@@ -103,7 +103,18 @@ class AutotuneEntrypointTests(unittest.TestCase):
         self.assertTrue(
             any("advanced-hardware-profile.json" in value for value in command)
         )
-        self.assertIn("240.0", command)
+
+    def test_advanced_command_leaves_the_budget_to_the_environment(self):
+        """The runner reads the same environment; forwarding a default pins it."""
+        config = autotune_entrypoint.AdvancedAutotuneConfig.from_env(
+            {}, device_kind="cuda"
+        )
+
+        command = autotune_entrypoint.advanced_calibration_command(
+            config, script_dir=SERVER_DIR
+        )
+
+        self.assertNotIn("--max-seconds", command)
 
     def test_successful_prestart_returns_runner_payload(self):
         completed = subprocess.CompletedProcess(

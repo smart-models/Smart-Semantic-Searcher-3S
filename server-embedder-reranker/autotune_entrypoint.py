@@ -81,8 +81,8 @@ def advanced_calibration_command(
         config.objective,
         "--profile",
         config.profile_path,
-        "--max-seconds",
-        str(config.max_seconds),
+        # No --max-seconds: the runner resolves the budget from this same
+        # environment, the only place an explicit budget differs from the default.
         "--app-version",
         APP_VERSION,
     ]

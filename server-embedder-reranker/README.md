@@ -135,7 +135,7 @@ point 2.
 | Shared startup | `autotune_entrypoint.py` | Selects and runs the BASIC or ADVANCED pre-start tuner before Uvicorn. |
 | Shared tooling | `benchmark.py` | HTTP latency, throughput, token, padding and Prometheus benchmark matrix. |
 | Shared models | `model_revisions.py` | The immutable Hugging Face commit revision pinned for every model — the single place a model update is expressed. |
-| Shared startup | `model_prepare.py` | Prefetches each profile's models at exactly those revisions, refusing a revision mismatch rather than falling back to a branch. A local snapshot is reused only once a finished download has been recorded beside it (`.smart-embedder-complete/`), so a download interrupted mid-way resumes on the next start instead of passing as cached. `BAAI/bge-m3-unsupervised` is fetched without its weights: MILCO reads only that repository's tokenizer. |
+| Shared startup | `model_prepare.py` | Prefetches each profile's models at exactly those revisions, refusing a revision mismatch rather than falling back to a branch. A local snapshot is reused only once a finished download has been recorded beside it (`.smart-embedder-complete/`), so a download interrupted mid-way resumes on the next start instead of passing as cached. That record is the file inventory the Hub listed for the revision, written only once every listed file is present, and a snapshot is reused only while each recorded file still exists. When the Hub cannot be reached and no such record exists, preparation stops with an error rather than certifying whatever folder an interrupted download left. A record from an older release lists no files and is validated again, so the first start after upgrading needs Hub access. `BAAI/bge-m3-unsupervised` is fetched without its weights: MILCO reads only that repository's tokenizer. |
 | Shared startup | `model_bootstrap.py` | Init-container entry point: prepares the named volumes' ownership, then drops `CHOWN`/`SETUID`/`SETGID` before any model or network library is imported. |
 | Shared runtime | `vram_budget.py` | Device headroom accounting, the safe max-batch-token cap, and the guard that turns a CUDA allocation failure into a typed, tensor-free error. |
 | Shared runtime | `request_budget.py` | Token/output estimates and shared admission leases whose lifetime includes physical native work. |
@@ -973,6 +973,13 @@ A candidate whose estimate does not fit the remaining budget is recorded as
 `skipped-budget` and the search continues with the next one, so a cheaper later
 candidate (for example a reranker-only probe) is still measured.
 
+Each candidate starts from the policy promoted so far, and it is compared with
+that same policy. When an earlier promotion changed what one of its target
+backends runs (request traffic, for instance, runs the dense batch policy), that
+backend is first re-measured under the current policy, recorded as
+`<candidate>-reference`, and its cost counts against the budget. A candidate
+whose reference cannot be re-measured is recorded as `skipped-stale-reference`.
+
 On CUDA the calibrated padded-token budget per microbatch follows the same VRAM
 tier as the benchmark workloads: 8,192 tokens below 15 GiB, 16,384 from 15 GiB
 and 32,768 from 23 GiB. A larger microbatch is only persisted after the memory
@@ -986,16 +993,24 @@ every planned candidate, never below the default and never above that ceiling.
 The pre-start process allows the ceiling plus 60 s, and the persisted profile
 records the configured, planned and applied budget under `budget`. Setting
 `SMART_EMBEDDER_ADVANCED_AUTOTUNE_MAX_SECONDS` (or the shared budget) makes the
-budget a fixed limit again.
+budget a fixed limit again. Passing `--max-seconds` to
+`advanced_autotune_runner.py` directly also sets a fixed limit, whatever its
+value; the pre-start process never passes it.
 
 The profile also records the host's CPU power management under
 `host_cpu_power`: how many assigned CPUs use each frequency governor, energy
-performance preference and driver, their maximum frequency, and the median and
+performance preference and driver, their maximum frequency, the groups of CPUs
+sharing each of those settings with their minimum and maximum frequency limits
+(`frequency_domains`), and the median and
 maximum frequency sampled every 0.5 s on the core running the baseline probes.
 When that median is below half of the maximum, calibration adds a warning that
 the preparation container logs, and the serving process logs it again at every
 start with that profile: slow single-thread kernel dispatch then limits GPU
 throughput. The tuner only reads sysfs and never changes host power settings.
+Those settings, down to each group's minimum and maximum frequency limits, are
+part of the ADVANCED fingerprint, so changing them (for example switching to
+the `performance` governor or capping some cores) recalibrates on the next
+start; the sampled frequency is not.
 
 On CUDA the worker also samples GPU utilisation with `nvidia-smi` while the
 baseline probes run. A median below 50% (from at least four samples) means the
