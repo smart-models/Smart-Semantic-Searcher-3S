@@ -174,7 +174,7 @@ Not every browser test needs a stack. Three families live under
 
 | Family | Needs a stack? | How to run |
 |---|---|---|
-| `*.test.mjs` — pure model, harness, coverage-gate and telemetry tests (six files) | No | `npm run test:unit`, i.e. `node --test tests/*.test.mjs` |
+| `*.test.mjs` — pure model, harness, campaign-reporter, coverage-gate and telemetry tests (seven files) | No | `npm run test:unit`, i.e. `node --test tests/*.test.mjs` |
 | Intercepted Playwright specs — `application-state`, `application-reindex`, `application-accessibility`, `harness-browser`, and the UI-mock `tb-ui`, `tb-monitoring`, `tb-filter-validation` | No — a browser, no token, no Qdrant. They intercept the page, local assets and every API request, and abort unknown routes | `npx playwright test tests/application-state.spec.js tests/application-reindex.spec.js tests/application-accessibility.spec.js tests/harness-browser.spec.js --workers=1` |
 | The remaining live specs of the 32 (`a-*`, `b-*`, `c-*`, `d-*`, `e-*`, `tb-*-live`, `tb-payload-ids`, `tb-export-query`, `z*`, `*.e2e.spec.js`) | **Yes** | `npm test` — see below |
 

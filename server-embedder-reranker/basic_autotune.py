@@ -11,6 +11,7 @@ isolated execution, and the ``tune_cpu()``/``tune_gpu()`` search procedures.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import importlib.metadata
 import json
@@ -695,7 +696,11 @@ def profile_matches(
 
 
 class ProfileLock(AbstractContextManager):
-    """Cross-platform lock based on exclusive file creation."""
+    """Exclusive marker protected by a persistent OS advisory guard.
+
+    The guard stays on disk: unlinking a locked inode would let later callers
+    lock a different file. The OS releases ownership when its process exits.
+    """
 
     def __init__(
         self,
@@ -718,11 +723,73 @@ class ProfileLock(AbstractContextManager):
         self.stale_seconds = stale_seconds
         self.poll_seconds = poll_seconds
         self._acquired = False
+        self._guard_descriptor: int | None = None
 
     def __enter__(self) -> "ProfileLock":
         """Acquire the lock or raise after the configured timeout."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         deadline = time.monotonic() + self.timeout_seconds
+        self._acquire_guard(deadline)
+        try:
+            return self._acquire_marker(deadline)
+        except BaseException:
+            self._release_guard()
+            raise
+
+    def _acquire_guard(self, deadline: float) -> None:
+        """Serialize marker ownership, reclamation, and removal across processes."""
+        guard_path = self.path.with_name(self.path.name + ".guard")
+        descriptor = os.open(guard_path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            while True:
+                try:
+                    if os.name == "nt":
+                        import msvcrt
+
+                        os.lseek(descriptor, 0, os.SEEK_SET)
+                        msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+
+                        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError as exc:
+                    if exc.errno not in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
+                        raise
+                    self._wait(deadline)
+        except BaseException:
+            os.close(descriptor)
+            raise
+        self._guard_descriptor = descriptor
+
+    def _release_guard(self) -> None:
+        """Release OS ownership without removing the shared guard file."""
+        descriptor = self._guard_descriptor
+        if descriptor is None:
+            return
+        self._guard_descriptor = None
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+
+    def _wait(self, deadline: float) -> None:
+        """Wait between attempts while respecting the acquisition timeout."""
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"timed out waiting for profile lock {self.path}")
+        time.sleep(min(self.poll_seconds, remaining))
+
+    def _acquire_marker(self, deadline: float) -> "ProfileLock":
+        """Create the marker while its guard excludes concurrent reclamation."""
         while True:
             try:
                 descriptor = os.open(
@@ -738,29 +805,31 @@ class ProfileLock(AbstractContextManager):
                         continue
                 except FileNotFoundError:
                     continue
-                if time.monotonic() >= deadline:
-                    raise TimeoutError(
-                        f"timed out waiting for profile lock {self.path}"
-                    )
-                time.sleep(self.poll_seconds)
+                self._wait(deadline)
                 continue
             try:
-                os.write(
-                    descriptor,
-                    f"pid={os.getpid()} created={int(time.time())}\n".encode(),
-                )
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
+                try:
+                    os.write(
+                        descriptor,
+                        f"pid={os.getpid()} created={int(time.time())}\n".encode(),
+                    )
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
+            except BaseException:
+                self.path.unlink(missing_ok=True)
+                raise
             self._acquired = True
             return self
 
     def __exit__(self, exc_type, exc, traceback) -> None:
         """Release an acquired lock without suppressing body exceptions."""
-        if self._acquired:
-            with suppress(FileNotFoundError):
-                self.path.unlink()
+        try:
+            if self._acquired:
+                self.path.unlink(missing_ok=True)
+        finally:
             self._acquired = False
+            self._release_guard()
         return None
 
 

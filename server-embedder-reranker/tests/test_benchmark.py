@@ -410,6 +410,16 @@ class TestBenchmarkJsonReport(unittest.TestCase):
         self.assertEqual(payload["label"], "baseline")
         self.assertEqual(temporary_files, [])
 
+    def test_failed_replace_preserves_report_and_removes_temporary(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "baseline.json"
+            path.write_bytes(b"previous report")
+            with patch.object(benchmark.os, "replace", side_effect=OSError("disk")):
+                with self.assertRaisesRegex(OSError, "disk"):
+                    benchmark.write_json_report(path, {"runs": []})
+            self.assertEqual(path.read_bytes(), b"previous report")
+            self.assertEqual(list(path.parent.iterdir()), [path])
+
 
 class TestBenchmarkAuthentication(unittest.IsolatedAsyncioTestCase):
     """A missing or rejected token is reported before the run starts."""

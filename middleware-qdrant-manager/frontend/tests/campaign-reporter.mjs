@@ -1,4 +1,5 @@
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { basename, resolve } from 'node:path';
 import { bookCases, executionReport, executionSummary, mapCollectedTests } from './case-coverage.mjs';
 import { redact } from './telemetry.mjs';
@@ -34,10 +35,17 @@ export default class CampaignReporter {
   write(status) {
     mkdirSync(resolve(this.destination, '..'), { recursive: true });
     const mapping = mapCollectedTests(this.cases, this.collected);
-    writeFileSync(this.destination, JSON.stringify({ status, startedAt: this.startedAt,
+    const payload = JSON.stringify({ status, startedAt: this.startedAt,
       updatedAt: new Date().toISOString(), baseURL: BASE_URL,
       runId: process.env.QHM_E2E_RUN_ID || null, collected: this.collected,
       results: this.results, outcomes: executionSummary(this.results),
-      cases: executionReport(this.cases, this.collected, this.results, mapping, this.contract) }, null, 2));
+      cases: executionReport(this.cases, this.collected, this.results, mapping, this.contract) }, null, 2);
+    const temporary = `${this.destination}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(temporary, payload, { flag: 'wx' });
+      renameSync(temporary, this.destination);
+    } finally {
+      rmSync(temporary, { force: true });
+    }
   }
 }

@@ -291,7 +291,7 @@ def _qdrant_failure(exc: Exception, message: str) -> HTTPException:
     """
     status_code = getattr(exc, "status_code", None)
     if status_code not in {400, 422}:
-        return HTTPException(status_code=502, detail=f"{message}: {exc}")
+        return HTTPException(status_code=502, detail=message)
     reason = "rejected by Qdrant"
     content = getattr(exc, "content", None)
     if content:
@@ -316,7 +316,7 @@ async def list_collections(
     except Exception as e:
         collection_operations.labels(operation="list", status="error").inc()
         raise HTTPException(
-            status_code=502, detail=f"Qdrant collection list failed: {e}"
+            status_code=502, detail="Qdrant collection list failed"
         ) from e
     names = sorted(c.name for c in result.collections)
     collection_operations.labels(operation="list", status="ok").inc()

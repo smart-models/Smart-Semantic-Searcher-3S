@@ -345,13 +345,35 @@ class TestRequestProcessorLifecycle(unittest.IsolatedAsyncioTestCase):
         # future is ever completed by the processor (TB-LIFE-001).
         self.processor.queue = asyncio.Queue(maxsize=4)
         self.processor.max_batch_size = 2
+        # The default 10 ms window can expire between two ready queue.get()
+        # tasks on a loaded event loop; this test requires one two-request batch.
+        self.processor.accumulation_timeout = 1
         native_cancelled = self.submit("abandoned")
         survivor = self.submit("survives")
         await self.until(lambda: self.processor.queue.qsize() == 2)
         await self.processor.start_processing_loop()
         self.assertTrue(await asyncio.to_thread(self.backend.entered.wait, 2))
+        self.assertEqual(self.backend.calls, [["abandoned", "survives"]])
         queued_cancelled = self.submit("queued-then-cancelled")
-        await self.until(lambda: len(self.processor.response_futures) == 3)
+        # Registration precedes admission; wait until this request is actually
+        # queued and its producer has published the queue depth before cancelling.
+        await self.until(
+            lambda: (
+                self.processor.queue.qsize() == 1
+                and self.server.queue_size.value == 1
+                and len(self.processor.response_futures) == 3
+            )
+        )
+        self.assertEqual(len(self.processor.response_futures), 3)
+        queue_accounted = asyncio.Event()
+        set_queue_size = self.server.queue_size.set
+
+        def observe_queue_size(value):
+            set_queue_size(value)
+            if value == 0:
+                queue_accounted.set()
+
+        self.server.queue_size.set = observe_queue_size
         settled_after_cancel = []
 
         def guard(future):
@@ -374,7 +396,10 @@ class TestRequestProcessorLifecycle(unittest.IsolatedAsyncioTestCase):
                 await task
         self.backend.release.set()
         self.assertEqual((await survivor)["dense_vecs"], [[8.0, 1.0]])
-        await self.until(lambda: self.processor.queue.empty())
+        # wait_for(queue.get()) dequeues in a child task, before the processing
+        # loop resumes to update the gauge. Observe that completed update.
+        await asyncio.wait_for(queue_accounted.wait(), timeout=2)
+        self.assertTrue(self.processor.queue.empty())
         self.assertEqual(settled_after_cancel, [])
         self.assertEqual(self.processor.response_futures, {})
         self.assertEqual(self.server.active_requests.value, 0)

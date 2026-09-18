@@ -168,7 +168,7 @@ Every Unix flag has a PowerShell parameter with the same name in PascalCase.
 | `--no-frontend` | `-NoFrontend` | `up`, `config` | configured `EXPOSE_FRONTEND` | Disable the middleware console. Requires the middleware. |
 | `--no-build` | `-NoBuild` | `up` | off | Reuse the existing images. |
 | `--wait` | `-Wait` | `up` | off | Block until the health checks pass. |
-| `--wait-timeout <s>` | `-WaitTimeout <s>` | `up` | `1800` | Seconds to wait. Implies `--wait`. Compose's own default is `0`, which means *wait forever*. Services that depend on the Smart Embedder start only after its preparation container exits, and an unset ADVANCED quick calibration may run for up to 1,080 s on CPU (720 s on CUDA) before the slowest health check's 300 s start period, so 1800 covers a first start and still lets it fail honestly. |
+| `--wait-timeout <s>` | `-WaitTimeout <s>` | `up` | `1800` | Positive integer seconds to wait. Zero is rejected. Implies `--wait`. Compose's own default is `0`, which means *wait forever*. Services that depend on the Smart Embedder start only after its preparation container exits, and an unset ADVANCED quick calibration may run for up to 1,080 s on CPU (720 s on CUDA) before the slowest health check's 300 s start period, so 1800 covers a first start and still lets it fail honestly. |
 | `--skip-verify` | `-SkipVerify` | `up` | off | Do not run the configuration verification before building. |
 | `--gpu-device <device>` | `-GpuDevice <device>` | `up`, `config`, `build`, `pull` | unset | Select one physical GPU by index, UUID or unique UUID prefix. |
 | `--show-secrets` | `-ShowSecrets` | `config` | off | Print credential values in cleartext. Warns on stderr when used. |

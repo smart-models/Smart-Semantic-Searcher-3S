@@ -498,15 +498,50 @@ test("TB-MON-006 — a poll held across two intervals never overlaps; away/back 
   const base = mock.statsCalls();
   for (let index = 0; index < 3; index++) await tick(page, 1, mock);
   expect(mock.statsCalls()).toBe(base + 3);
-  // A slow failed sample released after a fresh healthy tick must not win.
+  // Observe consumption of this poll's five response bodies. A MessageChannel
+  // task runs after the promise continuations that decide whether it can render;
+  // frozen-clock advancement alone does not wait for those continuations.
+  await page.evaluate(() => {
+    const remaining = new Set(["/livez", "/readyz", "/health", "/stats", "/metrics"]);
+    const readText = Response.prototype.text;
+    window.restoreMonitorResponseReader = () => { Response.prototype.text = readText; };
+    window.monitorPollSettled = new Promise((resolve) => {
+      Response.prototype.text = async function (...args) {
+        const text = await readText.apply(this, args);
+        const pathname = new URL(this.url).pathname;
+        // The deliberately newer Re-test response must not settle the old poll.
+        if (pathname !== "/health" || this.status === 503) remaining.delete(pathname);
+        if (remaining.size === 0) {
+          window.restoreMonitorResponseReader();
+          const channel = new MessageChannel();
+          channel.port1.onmessage = () => {
+            channel.port1.close(); channel.port2.close(); resolve();
+          };
+          channel.port2.postMessage(null);
+        }
+        return text;
+      };
+    });
+  });
+  // Re-test starts a newer health request while the old monitor poll is held.
+  // Merely observing the existing HEALTHY label would not establish staleness.
   const stale = mock.deferReply("GET", "/health");
-  await tick(page);
-  await stale.started;
-  await expect(page.locator("#conn-health-status")).toHaveText("HEALTHY");
-  stale.resolve({ status: "unhealthy", qdrant: "unreachable", embedder: "unreachable" }, 503);
-  await tick(page);
-  await expect(page.locator("#mon-badges .metric-value")).toHaveText(["UP", "UP", "UP", "UP", "UP"]);
-  await expect(page.locator("#conn-health-status")).toHaveText("HEALTHY");
+  try {
+    await tick(page);
+    await stale.started;
+    mock.state.profile = "advanced";
+    await page.locator("#conn-retest").click();
+    await expect(page.locator("#conn-health-status")).toHaveText("HEALTHY");
+    await expect(page.locator("#conn-health-detail")).toContainText("[advanced]");
+    stale.resolve({ status: "unhealthy", qdrant: "unreachable", embedder: "unreachable" }, 503);
+    await page.evaluate(() => window.monitorPollSettled);
+    await expect(page.locator("#mon-badges .metric-value")).toHaveText(["UP", "UP", "UP", "UP", "UP"]);
+    await expect(page.locator("#conn-health-status")).toHaveText("HEALTHY");
+    await expect(page.locator("#conn-health-detail")).toContainText("[advanced]");
+  } finally {
+    stale.resolve({});
+    await page.evaluate(() => window.restoreMonitorResponseReader());
+  }
   finish(mock);
 });
 

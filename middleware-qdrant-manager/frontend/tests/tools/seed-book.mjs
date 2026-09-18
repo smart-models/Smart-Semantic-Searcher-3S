@@ -8,9 +8,15 @@
 //   node tests/tools/seed-book.mjs --only e2e_book_filters
 import { cleanupOwnedCollection, fixtureName, setupCall as call } from "../harness.mjs";
 import { pathToFileURL } from "node:url";
+import { deepStrictEqual } from "node:assert";
 
 export const uuid = (i) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
 export const day = (i) => new Date(Date.UTC(2026, 0, i)).toISOString();
+
+export function verifyStoredPayload(name, point, payload) {
+  const expected = { ...point.payload, text: point.text };
+  deepStrictEqual(payload, expected, `${name}: point ${point.point_id} payload differs from the generator`);
+}
 const themes = ["cooking", "space", "music", "sports", "programming"];
 
 export function filterPoint(i) {
@@ -142,10 +148,7 @@ export async function seedBookFixture(logical, { points, indexes } = BOOK_FIXTUR
   if (stored.size !== points.length) throw new Error(`${name}: scrolled ${stored.size} points, expected ${points.length}`);
   for (const point of points) {
     const payload = stored.get(point.point_id);
-    const expected = { ...point.payload, text: point.text };
-    if (JSON.stringify(payload, Object.keys(payload).sort()) !== JSON.stringify(expected, Object.keys(expected).sort())) {
-      throw new Error(`${name}: point ${point.point_id} payload differs from the generator`);
-    }
+    verifyStoredPayload(name, point, payload);
   }
   console.log(`${name}: ${upserted} points, ${indexes.length} indexes, read back and verified`);
   return name;

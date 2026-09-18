@@ -220,6 +220,21 @@ def test_parse_api_tokens_never_echoes_the_token_for_a_label_error():
     assert "s3cret" not in str(excinfo.value)
 
 
+@pytest.mark.parametrize(
+    "label", ["secret-remainder:alice", "@secret-remainder", "secret-remainder invalid"]
+)
+def test_invalid_label_does_not_echo_a_secret_remainder_at_startup(label):
+    with pytest.raises(ConfigError) as caught:
+        load_settings(
+            _env_file=None,
+            **{**BASE_ENV, "MCP_API_TOKENS": f"synthetic-token-prefix:{label}"},
+        )
+    rendered = str(caught.value)
+    assert "MCP_API_TOKENS" in rendered
+    assert "synthetic-token-prefix" not in rendered
+    assert "secret-remainder" not in rendered
+
+
 # --- Optional authentication: an empty list is legitimate only behind the
 # per-service flag, and only on a loopback publish address. ---
 

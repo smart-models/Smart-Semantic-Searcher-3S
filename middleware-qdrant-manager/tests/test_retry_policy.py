@@ -63,6 +63,11 @@ async def _embedder_client(handler, **overrides):
 # --- parse_retry_after -------------------------------------------------------
 
 
+@pytest.mark.parametrize("value", ["²", "١", "１２"])
+def test_retry_after_rejects_non_ascii_digits(value):
+    assert parse_retry_after(value) is None
+
+
 def test_delta_seconds_form_is_read_as_seconds():
     assert parse_retry_after("2") == 2.0
 

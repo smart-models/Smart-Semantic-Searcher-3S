@@ -545,11 +545,21 @@ class CandidateGateTests(unittest.TestCase):
     """The gates a candidate must clear before it can be promoted."""
 
     def _capture(self):
-        items = [*quality.QUERIES, *quality.DOCUMENTS]
-        dense = {item.id: [1.0] + [0.0] * 1023 for item in items}
-        sparse = {item.id: {"1": 1.0, "30522": 0.5} for item in items}
+        dense = {}
+        sparse = {}
+        for index, document in enumerate(quality.DOCUMENTS):
+            dense[document.id] = [0.0] * 1024
+            dense[document.id][index] = 1.0
+            sparse[document.id] = {str(index): 1.0, str(30522 + index): 0.5}
+        for query in quality.QUERIES:
+            relevant = query.relevant_document_ids[0]
+            dense[query.id] = list(dense[relevant])
+            sparse[query.id] = dict(sparse[relevant])
         reranker = {
-            query.id: {document.id: 0.5 for document in quality.DOCUMENTS}
+            query.id: {
+                document.id: 0.9 if document.id in query.relevant_document_ids else 0.1
+                for document in quality.DOCUMENTS
+            }
             for query in quality.QUERIES
         }
         return {
@@ -572,6 +582,27 @@ class CandidateGateTests(unittest.TestCase):
         self.assertTrue(passed["passed"])
         self.assertFalse(rejected["passed"])
         self.assertTrue(any("LexEcho" in item for item in rejected["failures"]))
+
+    def test_malformed_capture_rejects_without_raising(self):
+        reference = self._capture()
+        malformed = [None, [], {}, {"suite_version": quality.QUALITY_SUITE_VERSION}]
+        for field, value in (
+            ("dense", None),
+            ("sparse", {key: [] for key in reference["sparse"]}),
+            ("reranker", {key: {} for key in reference["reranker"]}),
+            ("milco_source_view", "false"),
+            ("milco_top_k", "invalid"),
+            ("source_vocab_start", float("inf")),
+        ):
+            malformed.append({**reference, field: value})
+        invalid_number = self._capture()
+        invalid_number["dense"][quality.QUERIES[0].id][0] = "invalid"
+        malformed.append(invalid_number)
+        for capture in malformed:
+            with self.subTest(capture_type=type(capture).__name__):
+                self.assertFalse(
+                    runner.evaluate_quality_capture(reference, capture)["passed"]
+                )
 
     def test_promotion_requires_three_percent_and_p95_tolerance(self):
         baseline = {
@@ -819,6 +850,7 @@ class CalibrationTests(unittest.TestCase):
                 "candidate": "co-resident-safe-baseline",
                 "status": "passed",
                 "quality_passed": True,
+                "quality_capture": CandidateGateTests()._capture(),
                 "selected": selected,
                 "memory": {"peak_fraction": 0.8},
                 "measurements": [],
@@ -846,6 +878,36 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(first["action"], "calibrated")
         self.assertEqual(loaded["selected"], selected)
         self.assertEqual(second["action"], "reused")
+
+    def test_missing_or_malformed_baseline_capture_never_persists(self):
+        malformed = CandidateGateTests()._capture()
+        malformed["dense"][quality.QUERIES[0].id][0] = "invalid"
+        for capture in (
+            None,
+            [],
+            {},
+            {"suite_version": quality.QUALITY_SUITE_VERSION},
+            malformed,
+        ):
+            with self.subTest(capture=capture), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "profile.json"
+                payload = {
+                    "status": "passed",
+                    "quality_passed": True,
+                    "selected": schema.safe_advanced_defaults("cuda"),
+                }
+                if capture is not None:
+                    payload["quality_capture"] = capture
+                result = runner.calibrate(
+                    config=self._config(path),
+                    fingerprint=fingerprint(),
+                    script_dir=SERVER_DIR,
+                    isolated_runner=lambda *args, **kwargs: isolated_result(
+                        payload=payload
+                    ),
+                )
+                self.assertEqual(result["action"], "fallback")
+                self.assertFalse(path.exists())
 
     def test_timeout_and_memory_kill_are_visible_and_never_persisted(self):
         for isolated, expected in (

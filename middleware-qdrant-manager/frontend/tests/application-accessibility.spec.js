@@ -20,6 +20,18 @@ for (const [width, zoom] of [[320, 1], [768, 1], [1440, 1], [1440, 2]]) {
 import { openConsole, openPoints } from "./application-fixtures.js";
 import { A, operations, openOperation, matches } from "./application-fixtures.js";
 
+test("mobile filter group toolbars use two columns", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 1000 });
+  await openConsole(page);
+  await page.locator("#ql-filter-group-add").click();
+  const toolbars = page.locator(".filter-group-card.no-min-should .filter-group-toolbar");
+  await expect(toolbars.first()).toBeVisible();
+  const columns = await toolbars.evaluateAll((elements) => elements.map((element) =>
+    getComputedStyle(element).gridTemplateColumns.split(" ").length));
+  expect(columns.length).toBeGreaterThan(0);
+  expect(columns.every((count) => count === 2)).toBe(true);
+});
+
 const jsonInputs = { upsert: "up-payload", batch: "bt-json", "filtered delete": "delf-json", "filtered-delete count": "delf-json", "payload-filter count": "pl-filter-json", "payload point merge": "pl-json", "payload point replace": "pl-json", "payload filter merge": "pl-json", "payload filter keys": "pl-filter-json", "payload filter clear": "pl-filter-json", count: "cnt-json" };
 for (const op of operations) {
   test(`${op.name}: errors can be read and pending state is explained`, async ({ page }) => {

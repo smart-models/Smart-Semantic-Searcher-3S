@@ -75,6 +75,14 @@ def test_describe_vulnerability_never_raises(monkeypatch):
     assert vd.vulnerability_identity("GHSA-x") == ("GHSA-x", "")
 
 
+@pytest.mark.parametrize("aliases", [None, 42, "CVE-invalid", {"CVE-invalid": 1}])
+def test_vulnerability_identity_ignores_malformed_aliases(monkeypatch, aliases):
+    monkeypatch.setattr(
+        vd, "_get_json", lambda url: {"aliases": aliases, "summary": "Advisory"}
+    )
+    assert vd.vulnerability_identity("GHSA-x") == ("GHSA-x", "Advisory")
+
+
 def test_sbom_document_is_minimal_cyclone(tmp_path):
     doc = vd.sbom_document("svc", [("BPackage", "1.0"), ("apkg", "2.0")])
 

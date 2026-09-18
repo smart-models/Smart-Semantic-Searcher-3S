@@ -568,8 +568,10 @@ export function buildFilterCondition(row, schema = "keyword") {
         bounds[upperOp] = value;
       }
     }
-    const lower = bounds.gt ?? bounds.gte;
-    const upper = bounds.lt ?? bounds.lte;
+    const lowerValue = bounds.gt ?? bounds.gte;
+    const upperValue = bounds.lt ?? bounds.lte;
+    const lower = schema === "datetime" && lowerValue !== undefined ? Date.parse(lowerValue) : lowerValue;
+    const upper = schema === "datetime" && upperValue !== undefined ? Date.parse(upperValue) : upperValue;
     if (lower !== undefined && upper !== undefined && lower > upper) {
       return bad("range lower bound cannot exceed upper bound.");
     }

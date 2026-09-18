@@ -372,8 +372,9 @@ upstream scroll page, Python object overhead and response copies, so it is not
 a physical memory ceiling. The walk is not a transactional collection snapshot.
 `EXPORT_MAX_CONCURRENT` (default 1) admits that many exports per app process;
 excess requests receive 503 with `Retry-After: 1`, before counting or scrolling.
-Cancellation drains an active serializer before releasing its reservation and
-never publishes a late file.
+Cancellation drains an active serializer or filesystem worker before releasing
+its reservation and never publishes a late file. File preparation and durability
+flushes run outside the event loop; publication uses one atomic rename.
 `POST /points/export` is exempt from the per-request timeout
 middleware: a whole-collection walk is many sequential scroll pages, so the
 request clock is the wrong bound for it. The point, byte and concurrency

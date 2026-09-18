@@ -126,7 +126,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # API does not render as a document, so it does not need them.
             response = await call_next(request)
             path = request.url.path
-            if path == "/" or path.startswith("/assets/"):
+            is_console_html = response.headers.get("content-type", "").startswith(
+                "text/html"
+            ) and path not in {"/docs", "/redoc", "/docs/oauth2-redirect"}
+            if path == "/" or path.startswith("/assets/") or is_console_html:
                 for header, value in _CONSOLE_SECURITY_HEADERS.items():
                     response.headers.setdefault(header, value)
             return response

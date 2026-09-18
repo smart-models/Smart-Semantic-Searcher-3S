@@ -253,6 +253,19 @@ def test_invalid_token_configuration_hides_the_supplied_value():
     assert "MIDDLEWARE_API_TOKENS" in rendered
 
 
+@pytest.mark.parametrize(
+    "label", ["secret-remainder:alice", "@secret-remainder", "secret-remainder invalid"]
+)
+def test_invalid_label_does_not_echo_any_part_of_a_token(label):
+    with pytest.raises(ValidationError) as caught:
+        _settings(MIDDLEWARE_API_TOKENS=f"synthetic-token-prefix:{label}")
+    rendered = str(caught.value)
+    assert "MIDDLEWARE_API_TOKENS" in rendered
+    assert "synthetic-token-prefix" not in rendered
+    assert "secret-remainder" not in rendered
+    assert "input_value" not in rendered
+
+
 def test_empty_token_list_with_flag_disables_auth():
     settings = _settings(
         MIDDLEWARE_API_TOKENS="", MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL=True

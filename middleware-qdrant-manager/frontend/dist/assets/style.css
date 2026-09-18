@@ -781,7 +781,9 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--muted); box-s
   .filter-row > .btn-icon { justify-self: end; }
   .filter-group-card { margin-left: 0; padding: 0.55rem; }
   .filter-group-toolbar,
-  .filter-group-card:not(.is-nested) .filter-group-toolbar {
+  .filter-group-card:not(.is-nested) .filter-group-toolbar,
+  .filter-group-card.is-nested.no-min-should .filter-group-toolbar,
+  .filter-group-card:not(.is-nested).no-min-should .filter-group-toolbar {
     grid-template-columns: 1fr 1fr;
   }
   .filter-group-title { order: -1; grid-column: 1 / -1; }

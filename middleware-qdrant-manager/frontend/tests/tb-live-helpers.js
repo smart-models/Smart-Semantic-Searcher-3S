@@ -12,6 +12,9 @@ export const SCHEMA = { dense_on_disk: true, sparse_on_disk: true, on_disk_paylo
 // and `reserve()` waits for room instead of letting a 429 fail an oracle.
 const WINDOW_MS = 60_000;
 const BUDGET = Number(process.env.QHM_E2E_RATE_BUDGET || 270);
+if (!Number.isSafeInteger(BUDGET) || BUDGET <= 0) {
+  throw new Error("QHM_E2E_RATE_BUDGET must be a positive integer");
+}
 const EXEMPT = new Set(["/", "/docs", "/health", "/livez", "/metrics", "/openapi.json", "/readyz", "/redoc", "/stats"]);
 const stamps = [];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -28,6 +31,9 @@ export function trackRequests(page) {
 }
 
 export async function reserve(count = 1) {
+  if (!Number.isSafeInteger(count) || count < 0 || count > BUDGET) {
+    throw new Error(`Reservation must be an integer between 0 and ${BUDGET}`);
+  }
   for (;;) {
     const now = Date.now();
     while (stamps.length && stamps[0] < now - WINDOW_MS) stamps.shift();

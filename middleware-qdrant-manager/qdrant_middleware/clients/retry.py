@@ -53,7 +53,7 @@ def parse_retry_after(raw: str | None, *, now: datetime | None = None) -> float 
     if raw is None:
         return None
     value = raw.strip()
-    if value.isdigit():
+    if value.isascii() and value.isdigit():
         seconds = float(value)
     else:
         try:

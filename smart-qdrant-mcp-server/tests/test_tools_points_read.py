@@ -76,6 +76,25 @@ async def test_scroll_returns_the_upstream_cursor(call, routes):
     assert payload["next_offset"] == "cursor-2"
 
 
+async def test_scroll_terminal_cursor_overrides_total_and_offset(call, routes):
+    routes.add(
+        "POST",
+        "/points/scroll",
+        body={**SCROLLED, "total": 100, "next_page_offset": None},
+    )
+    out = await call("qdrant_scroll_points", offset="last-uuid", response_format="json")
+    payload = json.loads(out)
+    assert payload["has_more"] is False
+    assert payload["next_offset"] is None
+
+
+async def test_scroll_zero_is_a_valid_cursor(call, routes):
+    routes.add("POST", "/points/scroll", body={**SCROLLED, "next_page_offset": 0})
+    payload = json.loads(await call("qdrant_scroll_points", response_format="json"))
+    assert payload["has_more"] is True
+    assert payload["next_offset"] == 0
+
+
 async def test_scroll_accepts_a_cursor_offset(call, routes):
     routes.add("POST", "/points/scroll", body=SCROLLED)
     await call("qdrant_scroll_points", offset="cursor-2")

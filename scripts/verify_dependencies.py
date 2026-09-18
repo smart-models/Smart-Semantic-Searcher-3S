@@ -157,12 +157,12 @@ def vulnerability_identity(vuln_id: str) -> tuple[str, str]:
     if not isinstance(detail, dict):
         return vuln_id, ""
     raw_aliases = detail.get("aliases", [])
+    if not isinstance(raw_aliases, list):
+        raw_aliases = []
     cves = sorted(
         alias
         for alias in raw_aliases
-        if isinstance(raw_aliases, list)
-        and isinstance(alias, str)
-        and alias.startswith("CVE")
+        if isinstance(alias, str) and alias.startswith("CVE")
     )
     canonical = cves[0] if cves else vuln_id
     summary = str(detail.get("summary") or "").strip()

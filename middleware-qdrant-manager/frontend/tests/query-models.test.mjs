@@ -401,6 +401,21 @@ test("custom range and values-count preserve inclusive/exclusive bounds", () => 
   assert.deepEqual(count.values_count, { gte: 2, lt: 5 });
 });
 
+test("datetime ranges compare instants across timezone offsets", () => {
+  const lower = "2026-01-01T10:00:00+02:00";
+  const upper = "2026-01-01T09:00:00Z";
+  const [condition, error] = buildFilterCondition(filterRow({
+    fieldName: "created", op: "range", rawValue: lower, rawValue2: upper,
+  }), "datetime");
+  assert.equal(error, null);
+  assert.deepEqual(condition.range, { gte: lower, lte: upper });
+  const [reversed, reversedError] = buildFilterCondition(filterRow({
+    fieldName: "created", op: "range", rawValue: upper, rawValue2: lower,
+  }), "datetime");
+  assert.equal(reversed, null);
+  assert.match(reversedError, /cannot exceed/);
+});
+
 test("JSON list input keeps keyword values containing commas", () => {
   const [condition, error] = buildFilterCondition(filterRow({
     op: "any",

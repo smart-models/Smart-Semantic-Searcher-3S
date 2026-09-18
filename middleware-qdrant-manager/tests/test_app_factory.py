@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -142,6 +143,34 @@ def test_console_assets_carry_defense_in_depth_headers():
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert response.headers["referrer-policy"] == "no-referrer"
+
+
+@pytest.mark.parametrize(
+    "path", ["/console/history", "/console/history/", "/unknown/path"]
+)
+def test_spa_fallback_carries_the_same_headers_as_root(path):
+    client = TestClient(create_app(_console_settings()))
+    root = client.get("/")
+    fallback = client.get(path)
+    assert fallback.status_code == 200
+    assert fallback.headers["content-type"].startswith("text/html")
+    for header in (
+        "content-security-policy",
+        "referrer-policy",
+        "x-frame-options",
+        "x-content-type-options",
+    ):
+        assert fallback.headers[header] == root.headers[header]
+
+
+@pytest.mark.parametrize("path", ["/docs", "/redoc", "/docs/oauth2-redirect"])
+def test_swagger_documents_keep_their_existing_header_policy(path):
+    settings = _console_settings()
+    settings.expose_middleware_swagger = True
+    response = TestClient(create_app(settings)).get(path)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "content-security-policy" not in response.headers
 
 
 def test_script_src_is_not_widened_by_the_style_allowance():

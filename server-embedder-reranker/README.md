@@ -857,6 +857,12 @@ volume. Later starts reuse that profile. A hardware/software change, or a
 change to tuning mode, objective, runtime, compile policy or compile mode,
 invalidates it.
 
+Profile writers hold an OS lock for their entire critical section. Its
+`.lock.guard` sidecar stays on disk; its presence alone does not mean a writer
+is active. The OS releases ownership when the writer exits, while the temporary
+`.lock` marker retains bounded stale recovery. Do not remove a guard file while
+writers may be running.
+
 **Configuration precedence:** explicit `BGE_*`/thread overrides → a valid
 hardware profile → conservative device-aware defaults. **The tuner never
 rewrites `.env`.** If calibration fails or times out, Uvicorn still starts with

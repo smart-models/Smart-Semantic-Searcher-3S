@@ -72,7 +72,7 @@ import {
   summarizeIngestIndexResult,
   applyIngestFieldMapping,
   validateQueryState,
-} from "/assets/models.js?v=72";
+} from "/assets/models.js?v=73";
 
 // ── DOM helpers ───────────────────────────────────────────────────────────────
 

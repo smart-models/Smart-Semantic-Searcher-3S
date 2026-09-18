@@ -715,7 +715,9 @@ def resolve_settings(
     # --wait-timeout has no meaning without --wait, and Compose itself rejects
     # the combination, so passing it implies --wait rather than erroring.
     wait_timeout = _normalise(cli.get("wait-timeout"))
-    if wait_timeout and not wait_timeout.isdigit():
+    if wait_timeout and not (
+        wait_timeout.isascii() and wait_timeout.isdigit() and wait_timeout.strip("0")
+    ):
         raise ConfigurationError(
             f"--wait-timeout must be a positive integer, got '{wait_timeout}'."
         )

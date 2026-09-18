@@ -126,7 +126,9 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
             middleware itself is unreachable.
         """
         try:
-            health = await ctx.client.request("GET", "/health")
+            health = await ctx.client.request(
+                "GET", "/health", accepted_statuses=frozenset({503})
+            )
             alive = await _probe(ctx, "/livez")
             ready = await _probe(ctx, "/readyz")
             stats = await ctx.client.request("GET", "/stats")

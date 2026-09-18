@@ -147,6 +147,13 @@ def test_retry_after_rejects_non_rfc_values(value):
     assert _retry_after_delay(response) is None
 
 
+@pytest.mark.parametrize("value", ["²", "١", "１２"])
+def test_retry_after_rejects_non_ascii_digits(value):
+    # HTTP header bytes are decoded using latin-1 by httpx when needed.
+    response = httpx.Response(429, headers={b"Retry-After": value.encode("utf-8")})
+    assert _retry_after_delay(response) is None
+
+
 async def test_route_queue_is_consumed_not_replayed(client, routes):
     routes.add("GET", "/y", body={"n": 1})
     routes.add("GET", "/y", body={"n": 2})

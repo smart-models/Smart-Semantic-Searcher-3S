@@ -11,6 +11,21 @@ import { fileURLToPath } from 'node:url';
 const execute = promisify(execFile);
 const frontend = fileURLToPath(new URL('../', import.meta.url));
 
+test('impossible rate reservations reject promptly', async () => {
+  for (const count of ['11', '-1', 'NaN', '1.5']) {
+    await assert.rejects(execute(process.execPath, ['--input-type=module', '-e',
+      `const {reserve} = await import('./tests/tb-live-helpers.js'); await reserve(${count});`],
+    { cwd: frontend, timeout: 10000, env: { ...process.env, QHM_E2E_RATE_BUDGET: '10' } }),
+    (error) => error.code === 1 && error.stderr.includes('Reservation must be'));
+  }
+  for (const budget of ['0', '-1', 'NaN', '1.5', ' ']) {
+    await assert.rejects(execute(process.execPath, ['--input-type=module', '-e',
+      "await import('./tests/tb-live-helpers.js');"],
+    { cwd: frontend, timeout: 10000, env: { ...process.env, QHM_E2E_RATE_BUDGET: budget } }),
+    (error) => error.code === 1 && error.stderr.includes('must be a positive integer'));
+  }
+});
+
 test('book fixture helpers can be imported without a CLI filename or live setup', async () => {
   const { stdout } = await execute(process.execPath, ['--input-type=module', '-e',
     "const {filterPoint} = await import('./tests/tools/seed-book.mjs'); console.log(filterPoint(1).point_id);"],
@@ -22,10 +37,21 @@ test('book fixture helpers can be imported without a CLI filename or live setup'
   (error) => error.code === 1 && error.stderr.includes('Unknown book fixture unknown-fixture'));
 });
 
+test('book verification rejects nested payload drift', async () => {
+  const { verifyStoredPayload } = await import('./tools/seed-book.mjs');
+  const point = { point_id: '7', text: 'text', payload: { geo: { lat: 45, lon: 9 }, nested: [{ value: 1 }] } };
+  verifyStoredPayload('fixture', point, { text: point.text, ...point.payload });
+  for (const change of [{ geo: { lat: 46, lon: 9 } }, { nested: [{ value: 2 }] }, { geo: {} }]) {
+    assert.throws(() => verifyStoredPayload('fixture', point, { text: point.text, ...point.payload, ...change }), /payload differs/);
+  }
+  assert.throws(() => verifyStoredPayload('fixture', point, undefined), /payload differs/);
+});
+
 test('TB-HAR-001/002/005: real tools share the guarded origin and stop at failed prerequisites', async () => {
   const collections = new Map([['protected', new Set(['1'])]]);
   const calls = [];
   let failure = null;
+  let partial = null;
   const server = createServer(async (request, response) => {
     let raw = '';
     for await (const chunk of request) raw += chunk;
@@ -45,8 +71,9 @@ test('TB-HAR-001/002/005: real tools share the guarded origin and stop at failed
       collections.set(body.collection_name, new Set());
     } else if (path === '/points/batch') {
       for (const point of body.points) collections.get(body.collection_name).add(point.point_id);
+      data = { ok: true, upserted: body.points.length };
     } else if (path.endsWith('/payload-indexes')) {
-      data = { indexes: [] };
+      data = { indexes: [], failed: [] };
     } else if (path.endsWith('/reindex')) {
       data = { collection_name: name, job: null, task_running: false };
     } else if (request.method === 'DELETE') {
@@ -55,6 +82,7 @@ test('TB-HAR-001/002/005: real tools share the guarded origin and stop at failed
       if (!collections.has(name)) response.statusCode = 404;
       data = { points_count: collections.get(name)?.size ?? 0 };
     }
+    if (partial?.(request.method, path)) data = { upserted: 0, failed: ['field'] };
     response.end(JSON.stringify(data));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -100,6 +128,16 @@ test('TB-HAR-001/002/005: real tools share the guarded origin and stop at failed
       await assert.rejects(run('seed'), /returned 500/);
       assert.ok(fail(calls.at(-1).method, calls.at(-1).path));
       failure = null;
+    }
+    for (const fail of [
+      (method, path) => method === 'POST' && path === '/points/batch',
+      (method, path) => method === 'POST' && path.endsWith('/payload-indexes'),
+    ]) {
+      const { run } = await campaign();
+      partial = fail;
+      await assert.rejects(run('seed'), /seed count mismatch|creation failed/);
+      assert.ok(fail(calls.at(-1).method, calls.at(-1).path));
+      partial = null;
     }
   } finally {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

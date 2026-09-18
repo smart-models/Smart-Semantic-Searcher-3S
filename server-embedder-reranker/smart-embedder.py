@@ -897,13 +897,13 @@ def parse_api_tokens(raw: str, variable: str) -> Dict[str, str]:
             raise ValueError(f"{variable} has an entry that is not token:label")
         if label.startswith(RESERVED_LABEL_PREFIX):
             raise ValueError(
-                f"{variable} label {label!r} must not start with "
+                f"{variable} label must not start with "
                 f"{RESERVED_LABEL_PREFIX!r}; that prefix is reserved for the "
                 "credentials services present to each other"
             )
         if not LABEL_PATTERN.match(label):
             raise ValueError(
-                f"{variable} label {label!r} must match [A-Za-z0-9._-]+. A label "
+                f"{variable} label must match [A-Za-z0-9._-]+. A label "
                 "containing ':' usually means the token itself contains ':', "
                 "which this format cannot express"
             )

@@ -21,6 +21,7 @@ import asyncio
 import json
 import os
 import statistics
+import tempfile
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -1075,12 +1076,20 @@ def write_json_report(path: Path, payload: Dict[str, Any]) -> None:
     """Persist a benchmark report atomically to avoid partial calibration data."""
     path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(
-        json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
-        encoding="utf-8",
+    descriptor, name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
     )
-    os.replace(temporary, path)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(
+                json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+            )
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def render_verdict(results: List[ScenarioResult]) -> str:

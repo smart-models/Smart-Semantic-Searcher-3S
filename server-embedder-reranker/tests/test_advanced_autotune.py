@@ -94,6 +94,33 @@ class AdvancedAutotuneConfigTests(unittest.TestCase):
 class AdvancedFingerprintTests(unittest.TestCase):
     """What the advanced fingerprint covers, and what invalidates it."""
 
+    def test_cache_requires_metadata_for_every_required_model(self):
+        complete = {
+            name: {"model_id": model_id, "cached": True}
+            for name, model_id in subject.ADVANCED_MODEL_IDS.items()
+        }
+        self.assertEqual(subject.models_are_cached({"models": complete}), (True, []))
+        for models in (None, {}, [], {"dense": complete["dense"]}):
+            with self.subTest(models=models):
+                cached, missing = subject.models_are_cached({"models": models})
+                self.assertFalse(cached)
+                self.assertIn(subject.ADVANCED_MODEL_IDS["sparse"], missing)
+        self.assertFalse(subject.models_are_cached({})[0])
+        for metadata in (
+            None,
+            [],
+            {},
+            {"cached": True},
+            {"model_id": "wrong-model", "cached": True},
+            {"model_id": subject.ADVANCED_MODEL_IDS["sparse"], "cached": "false"},
+        ):
+            with self.subTest(metadata=metadata):
+                cached, missing = subject.models_are_cached(
+                    {"models": {**complete, "sparse": metadata}}
+                )
+                self.assertFalse(cached)
+                self.assertEqual(missing, [subject.ADVANCED_MODEL_IDS["sparse"]])
+
     def _roots(self, root: Path) -> tuple[Path, Path, Path]:
         cgroup = root / "cgroup"
         proc = root / "proc"

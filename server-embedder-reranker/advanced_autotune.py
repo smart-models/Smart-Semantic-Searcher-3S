@@ -884,14 +884,16 @@ def models_are_cached(fingerprint: Mapping[str, Any]) -> tuple[bool, list[str]]:
     Returns:
         A readiness flag and the identifiers of any missing models.
     """
-    models = fingerprint.get("models", {})
-    missing = (
-        [
-            str(value.get("model_id", name))
-            for name, value in models.items()
-            if not value.get("cached")
-        ]
-        if isinstance(models, Mapping)
-        else list(ADVANCED_MODEL_IDS.values())
-    )
+    models = fingerprint.get("models")
+    if not isinstance(models, Mapping):
+        return False, list(ADVANCED_MODEL_IDS.values())
+    missing = []
+    for name, model_id in ADVANCED_MODEL_IDS.items():
+        metadata = models.get(name)
+        if (
+            not isinstance(metadata, Mapping)
+            or metadata.get("model_id") != model_id
+            or metadata.get("cached") is not True
+        ):
+            missing.append(model_id)
     return not missing, missing

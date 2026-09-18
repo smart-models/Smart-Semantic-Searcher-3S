@@ -81,6 +81,23 @@ async def test_not_ready_is_reported_without_raising(call, routes):
     assert payload["ready"] is False
 
 
+async def test_unhealthy_health_response_keeps_dependency_details(
+    call, routes, settings
+):
+    for _ in range(settings.retry_attempts):
+        routes.add(
+            "GET", "/health", status=503, body={**HEALTH, "qdrant": "unreachable"}
+        )
+    routes.add("GET", "/livez", body={"status": "alive"})
+    routes.add("GET", "/readyz", status=503, body={"status": "not_ready"})
+    routes.add("GET", "/stats", body=STATS)
+    result = await call("qdrant_check_health", response_format="json")
+    assert not result.is_error
+    payload = json.loads(result)
+    assert payload["ready"] is False
+    assert payload["qdrant"] == "unreachable"
+
+
 async def test_calls_all_four_endpoints(call, routes):
     arm(routes)
     await call("qdrant_check_health")

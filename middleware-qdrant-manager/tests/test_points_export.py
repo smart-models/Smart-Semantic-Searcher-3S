@@ -11,6 +11,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from qdrant_middleware.api.dependencies import get_qdrant_client
+from qdrant_middleware.api.routers import points
 from qdrant_middleware.core.config import Settings
 from qdrant_middleware.main import create_app
 
@@ -310,3 +311,124 @@ def test_export_fsyncs_the_payload_before_publishing_it(tmp_path):
     assert response.status_code == 200
     # The payload fsync happens before the rename into place.
     assert calls[:2] == ["fsync", "replace"]
+
+
+@pytest.mark.parametrize(
+    "cancel, worker_fails", [(False, False), (True, False), (True, True)]
+)
+async def test_export_disk_write_keeps_loop_responsive_and_capacity_reserved(
+    tmp_path, monkeypatch, cancel, worker_fails
+):
+    """A blocked file flush cannot stall requests or outlive its reservation."""
+    entered, release = asyncio.Event(), threading.Event()
+    loop = asyncio.get_running_loop()
+    loop_thread = threading.get_ident()
+    original_fsync = points.os.fsync
+    destination = tmp_path / "existing.json"
+    destination.write_text("original", encoding="utf-8")
+    monkeypatch.setattr(points, "export_target", lambda *args: destination)
+
+    def blocked_fsync(fd):
+        assert threading.get_ident() != loop_thread
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(5)
+        if worker_fails:
+            raise OSError("flush failed during cancellation")
+        return original_fsync(fd)
+
+    monkeypatch.setattr(points.os, "fsync", blocked_fsync)
+    app = _app(tmp_path)
+    app.dependency_overrides[get_qdrant_client] = lambda: FakeQdrant()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        pending = asyncio.create_task(client.post("/points/export", json={}))
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+            assert not pending.done()
+            assert destination.read_text(encoding="utf-8") == "original"
+            if cancel:
+                pending.cancel()
+            refused = await client.post("/points/export", json={})
+            assert refused.status_code == 503
+            assert app.state.runtime.active_exports == 1
+            assert not pending.done()
+            if cancel:
+                pending.cancel()
+            release.set()
+            if cancel:
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(pending, 2)
+                assert destination.read_text(encoding="utf-8") == "original"
+            else:
+                assert (await asyncio.wait_for(pending, 2)).status_code == 200
+                assert json.loads(destination.read_text())["metadata"]["n_chunks"] == 1
+            assert app.state.runtime.active_exports == 0
+            assert list(tmp_path.iterdir()) == [destination]
+        finally:
+            release.set()
+            await asyncio.gather(pending, return_exceptions=True)
+
+
+@pytest.mark.parametrize("failure", ["fsync", "replace"])
+def test_export_disk_failure_preserves_existing_destination(
+    tmp_path, monkeypatch, failure
+):
+    """Failed preparation or publication cleans up only the temporary file."""
+    destination = tmp_path / "existing.json"
+    destination.write_bytes(b"original")
+    monkeypatch.setattr(points, "export_target", lambda *args: destination)
+
+    def fail(*args):
+        raise OSError("disk failure")
+
+    monkeypatch.setattr(points.os, failure, fail)
+    app = _app(tmp_path)
+    app.dependency_overrides[get_qdrant_client] = lambda: FakeQdrant()
+    response = TestClient(app).post("/points/export", json={})
+    assert response.status_code == 502
+    assert destination.read_bytes() == b"original"
+    assert list(tmp_path.iterdir()) == [destination]
+    assert app.state.runtime.active_exports == 0
+
+
+async def test_cancel_after_export_publication_drains_directory_sync(
+    tmp_path, monkeypatch
+):
+    """Already published exports retain their lease until durability work ends."""
+    entered, release = asyncio.Event(), threading.Event()
+    loop = asyncio.get_running_loop()
+    loop_thread = threading.get_ident()
+
+    def blocked_directory_sync(root):
+        assert threading.get_ident() != loop_thread
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(5)
+
+    monkeypatch.setattr(points, "_sync_export_directory", blocked_directory_sync)
+    app = _app(tmp_path)
+    app.dependency_overrides[get_qdrant_client] = lambda: FakeQdrant()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        pending = asyncio.create_task(client.post("/points/export", json={}))
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+            published = list(tmp_path.iterdir())
+            assert len(published) == 1
+            original_bytes = published[0].read_bytes()
+            assert json.loads(original_bytes)["metadata"]["n_chunks"] == 1
+            pending.cancel()
+            refused = await client.post("/points/export", json={})
+            assert refused.status_code == 503
+            assert not pending.done()
+            assert app.state.runtime.active_exports == 1
+            release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(pending, 2)
+            assert app.state.runtime.active_exports == 0
+            assert list(tmp_path.iterdir()) == published
+            assert published[0].read_bytes() == original_bytes
+        finally:
+            release.set()
+            await asyncio.gather(pending, return_exceptions=True)

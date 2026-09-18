@@ -105,33 +105,11 @@ def build_server(
     """
     client = MiddlewareClient(settings, transport=transport)
     token_verifier = build_token_verifier(settings, transport=auth_transport)
-    ctx = ToolContext(client=client, settings=settings)
-
-    @asynccontextmanager
-    async def lifespan(_server: MCPServer) -> AsyncIterator[None]:
-        """Close the ``MiddlewareClient`` this function builds, on shutdown.
-
-        Without this, the container's ``httpx.AsyncClient`` connection pool
-        (and its open sockets) lives until the process is killed — nothing
-        outside of tests ever called ``aclose()``. ``MCPServer`` enters this
-        context once per session (in-memory or over streamable HTTP) and
-        exits it when that session ends, so ``client.aclose()`` runs on
-        ordinary shutdown, not just on error.
-
-        Tests that build a server with this function and close the client
-        themselves (``await ctx.client.aclose()`` in ``conftest.py`` and
-        ``test_tools_query.py``) are unaffected: ``httpx.AsyncClient.aclose``
-        is idempotent (it no-ops once ``self._state`` is already
-        ``CLOSED``), so closing it a second time here — whether this
-        lifespan ran first or their explicit call did — is harmless.
-        """
-        try:
-            yield None
-        finally:
-            await client.aclose()
-            close_verifier = getattr(token_verifier, "aclose", None)
-            if close_verifier is not None:
-                await close_verifier()
+    ctx = ToolContext(
+        client=client,
+        settings=settings,
+        close_auth=getattr(token_verifier, "aclose", None),
+    )
 
     mcp = MCPServer(
         "smart_qdrant_mcp",
@@ -139,7 +117,6 @@ def build_server(
         instructions=_SERVER_INSTRUCTIONS,
         token_verifier=token_verifier,
         auth=build_auth_settings(settings),
-        lifespan=lifespan,
     )
     monitoring.register(mcp, ctx)
     query.register(mcp, ctx)
@@ -186,13 +163,27 @@ def create_app():
         "inbound auth: %s",
         ", ".join(labels) if labels else "disabled (no tokens configured)",
     )
-    mcp, _ctx = build_server(settings)
-    return mcp.streamable_http_app(
+    mcp, ctx = build_server(settings)
+    app = mcp.streamable_http_app(
         transport_security=TransportSecuritySettings(
             allowed_hosts=settings.allowed_hosts,
             allowed_origins=settings.allowed_origins,
         )
     )
+
+    transport_lifespan = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(application) -> AsyncIterator[None]:
+        """Keep shared pools alive across sessions and close at app shutdown."""
+        try:
+            async with transport_lifespan(application):
+                yield
+        finally:
+            await ctx.aclose()
+
+    app.router.lifespan_context = lifespan
+    return app
 
 
 def __getattr__(name: str):

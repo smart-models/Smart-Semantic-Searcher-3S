@@ -54,6 +54,7 @@ for (const spec of PLAN) {
   if (spec.points > 0) {
     const pts = Array.from({ length: spec.points }, (_, k) => point(k + 1));
     const up = await call("POST", "/points/batch", { collection_name: spec.name, points: pts });
+    if (up.data?.upserted !== pts.length) throw new Error(`${spec.name}: seed count mismatch`);
     console.log(`  seed ${spec.points} pts: ${up.status} ${JSON.stringify(up.data).slice(0, 120)}`);
   }
   if (spec.indexes) {
@@ -61,7 +62,9 @@ for (const spec of PLAN) {
       const item = { field_name: field, field_schema: schema };
       if (spec.phrase && schema === "text") item.phrase_matching = true;
       const ix = await call("POST", `/collections/${spec.name}/payload-indexes`, { indexes: [item] });
-      if (!ix.ok) console.log(`  index ${field}/${schema}: ${ix.status} ${JSON.stringify(ix.data).slice(0, 160)}`);
+      if (!Array.isArray(ix.data?.failed) || ix.data.failed.length) {
+        throw new Error(`${spec.name}: index ${field}/${schema} creation failed`);
+      }
     }
     console.log(`  indexes done`);
   }

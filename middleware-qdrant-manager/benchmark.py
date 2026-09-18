@@ -1,7 +1,8 @@
 """Qdrant Middleware end-to-end benchmark.
 
 Exercises every available endpoint. Creates an isolated test collection,
-runs all scenarios, then deletes it.
+runs all scenarios, then deletes it. Refuses a pre-existing collection and
+only seeds or deletes after creation of the requested collection is confirmed.
 
 Endpoint coverage:
   COLLECTIONS  POST /collections, GET /collections, GET /collections/{name},
@@ -961,15 +962,60 @@ async def _run_once(
     return result
 
 
+@dataclass
+class CollectionOwnership:
+    """Track confirmed creation even when later setup is interrupted."""
+
+    created: bool = False
+
+
 async def run_setup(
     client: httpx.AsyncClient,
     base_url: str,
     collection: str,
     timeout: float,
+    ownership: Optional[CollectionOwnership] = None,
 ) -> List[ScenarioResult]:
     """Create the bench collection and seed all data the scenarios rely on."""
     print(section("Setup"))
     results: List[ScenarioResult] = []
+
+    async def create_owned(client, base_url):
+        """Seed only after an unambiguous creation acknowledgement."""
+        start = time.perf_counter()
+        try:
+            existing = await client.get(
+                f"{base_url}/collections/{collection}", timeout=timeout
+            )
+            if existing.status_code != 404:
+                return Sample(0, False, existing.status_code, "collection unavailable")
+            response = await client.post(
+                f"{base_url}/collections",
+                json={
+                    "collection_name": collection,
+                    "recreate": False,
+                    **BENCH_COLLECTION_OPTIONS,
+                },
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            data = response.json()
+            created = (
+                isinstance(data, dict)
+                and data.get("created") is True
+                and data.get("ok") is True
+                and data.get("collection_name") == collection
+            )
+            if ownership is not None:
+                ownership.created = created
+            return Sample(
+                (time.perf_counter() - start) * 1000,
+                created,
+                response.status_code,
+                "" if created else "creation not confirmed",
+            )
+        except (httpx.HTTPError, ValueError):
+            return Sample(0, False, error="creation not confirmed")
 
     # POST /collections
     results.append(
@@ -977,15 +1023,7 @@ async def run_setup(
             client,
             base_url,
             "create_collection",
-            make_post(
-                "/collections",
-                {
-                    "collection_name": collection,
-                    "recreate": False,
-                    **BENCH_COLLECTION_OPTIONS,
-                },
-                timeout,
-            ),
+            create_owned,
         )
     )
     if not results[-1].samples[0].ok:
@@ -1565,14 +1603,15 @@ async def main_async(args: argparse.Namespace) -> int:
         setup_results: List[ScenarioResult] = []
         teardown_results: List[ScenarioResult] = []
         setup_ok = False
+        ownership = CollectionOwnership()
         pre_metrics = post_metrics = ""
 
-        # Teardown runs in `finally` so the test collection is always deleted —
-        # even on an exception or Ctrl+C mid-benchmark (no orphaned collection).
+        # Once creation is acknowledged, teardown is attempted even if setup
+        # or benchmarking is interrupted. An ambiguous response grants no ownership.
         try:
             # ── Setup ───────────────────────────────────────────────────────
             setup_results = await run_setup(
-                client, args.url, BENCH_COLLECTION, args.timeout
+                client, args.url, BENCH_COLLECTION, args.timeout, ownership
             )
             setup_ok = all(r.samples[0].ok for r in setup_results)
 
@@ -1610,10 +1649,11 @@ async def main_async(args: argparse.Namespace) -> int:
                     except Exception:
                         pass
         finally:
-            # ── Teardown (always runs) ──────────────────────────────────────
-            teardown_results = await run_teardown(
-                client, args.url, BENCH_COLLECTION, args.timeout
-            )
+            # ── Teardown of this run's confirmed collection ────────────────
+            if ownership.created:
+                teardown_results = await run_teardown(
+                    client, args.url, BENCH_COLLECTION, args.timeout
+                )
 
     # ── Print results ────────────────────────────────────────────────────────
     print(section("Setup results"))

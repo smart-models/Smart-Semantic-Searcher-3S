@@ -66,6 +66,28 @@ def test_payload_path_root_rejects_invalid_syntax(path):
         payload_path_root(path)
 
 
+@pytest.mark.parametrize("selector", ["²", "١", "１２", "1²"])
+def test_non_ascii_array_selectors_fail_before_qdrant(selector):
+    path = f"metadata.items[{selector}].value"
+    with pytest.raises(ValueError, match="invalid array selector"):
+        qdrant_filter_index_path(path)
+    with pytest.raises(ValueError, match="invalid array selector"):
+        points.PayloadKeysDeleteRequest(keys=[path])
+
+
+@pytest.mark.parametrize("selector", ["", "0", "12", "001"])
+def test_ascii_array_selectors_remain_valid(selector):
+    path = f"metadata.items[{selector}].value"
+    assert qdrant_filter_index_path(path) == path
+    assert points.PayloadKeysDeleteRequest(keys=[path]).keys == [path]
+
+
+def test_unicode_digits_remain_valid_inside_literal_field_names():
+    path = '"metadata[²]"'
+    assert payload_path_root(path) == "metadata[²]"
+    assert qdrant_filter_index_path(path) == '"metadata[\\u00b2]"'
+
+
 @pytest.mark.parametrize("path", ["text", '"text"', "text[0]", "text[].value"])
 def test_protected_text_paths_are_rejected_by_the_shared_route_guard(path):
     """Quoted and nested paths cannot bypass protected payload ownership."""

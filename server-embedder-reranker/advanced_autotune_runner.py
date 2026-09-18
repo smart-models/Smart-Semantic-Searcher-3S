@@ -32,6 +32,7 @@ from advanced_autotune import (
     save_advanced_profile,
 )
 from advanced_autotune_quality import (
+    DOCUMENTS,
     QUALITY_SUITE_VERSION,
     evaluate_dense,
     evaluate_reranker,
@@ -1049,9 +1050,32 @@ def final_long_canary_candidate(
     return candidate
 
 
-def evaluate_quality_capture(
-    reference: Mapping[str, Any], candidate: Mapping[str, Any]
-) -> dict:
+def _validate_quality_capture(capture: Any) -> None:
+    """Reject incomplete worker evidence before numerical comparison."""
+    if not isinstance(capture, Mapping):
+        raise ValueError("quality capture must be an object")
+    for backend in ("dense", "sparse", "reranker"):
+        if not isinstance(capture.get(backend), Mapping):
+            raise ValueError(f"missing or invalid {backend} quality outputs")
+    if not all(isinstance(value, (list, tuple)) for value in capture["dense"].values()):
+        raise ValueError("dense quality outputs must contain vectors")
+    if not all(isinstance(value, Mapping) for value in capture["sparse"].values()):
+        raise ValueError("sparse quality outputs must contain weight mappings")
+    document_ids = {document.id for document in DOCUMENTS}
+    if not all(
+        isinstance(value, Mapping) and set(value) == document_ids
+        for value in capture["reranker"].values()
+    ):
+        raise ValueError("reranker quality outputs must cover every document")
+    if not isinstance(capture.get("milco_source_view"), bool):
+        raise ValueError("missing or invalid MILCO source view")
+    for field in ("milco_top_k", "source_vocab_start"):
+        value = capture.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"missing or invalid {field}")
+
+
+def evaluate_quality_capture(reference: Any, candidate: Any) -> dict:
     """Evaluate dense, sparse, and reranker captures as one quality gate.
 
     Args:
@@ -1061,6 +1085,18 @@ def evaluate_quality_capture(
     Returns:
         Per-backend metrics and a combined pass/failure decision.
     """
+    try:
+        _validate_quality_capture(reference)
+        _validate_quality_capture(candidate)
+        return _evaluate_validated_capture(reference, candidate)
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return {"passed": False, "failures": ["invalid or incomplete quality capture"]}
+
+
+def _evaluate_validated_capture(
+    reference: Mapping[str, Any], candidate: Mapping[str, Any]
+) -> dict:
+    """Apply the existing numerical gates to structurally valid captures."""
     if (
         reference.get("suite_version") != QUALITY_SUITE_VERSION
         or candidate.get("suite_version") != QUALITY_SUITE_VERSION
@@ -1912,6 +1948,13 @@ def calibrate(
                 results.append(canary_record)
                 if not canary_passed:
                     selected = baseline_selected
+    else:
+        return {
+            "action": "fallback",
+            "reason": "safe baseline returned no quality capture",
+            "results": results,
+            "search_space": search_space,
+        }
 
     profile = make_advanced_profile(
         fingerprint=fingerprint,

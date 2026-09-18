@@ -20,7 +20,7 @@ from mcp.server import MCPServer
 from pydantic import BaseModel, ConfigDict, Field
 
 from smart_qdrant_mcp.context import ToolContext
-from smart_qdrant_mcp.errors import error_result
+from smart_qdrant_mcp.errors import MiddlewareError, error_result
 from smart_qdrant_mcp.formatting import (
     ResponseFormat,
     StructuredToolResult,
@@ -137,7 +137,22 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
             raw = await ctx.client.request("POST", "/points/export", json=body)
         except Exception as exc:  # -> agent message
             return error_result(exc)
-        payload = raw if isinstance(raw, dict) else {}
+        if (
+            not isinstance(raw, dict)
+            or raw.get("ok") is not True
+            or not isinstance(raw.get("collection_name"), str)
+            or type(raw.get("n_chunks")) is not int
+            or raw["n_chunks"] < 0
+            or type(raw.get("bytes")) is not int
+            or raw["bytes"] < 0
+            or "path" not in raw
+            or (raw["path"] is not None and not isinstance(raw["path"], str))
+            or (raw["n_chunks"] > 0 and not raw["path"])
+        ):
+            return error_result(
+                MiddlewareError(502, "Invalid export response", "/points/export")
+            )
+        payload = raw
         return render(
             payload,
             params.response_format,

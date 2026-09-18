@@ -1,5 +1,7 @@
 """Whole-collection export: the request it sends and what it renders back."""
 
+import pytest
+
 from smart_qdrant_mcp.tools.export import ExportCollectionInput
 
 RESULT = {
@@ -9,6 +11,15 @@ RESULT = {
     "path": "/app/middleware-qdrant-manager/exports/docs_export_x.json",
     "bytes": 1234,
 }
+
+
+@pytest.mark.parametrize(
+    "body", [[], {}, {**RESULT, "ok": False}, {**RESULT, "n_chunks": "42"}]
+)
+async def test_malformed_success_is_an_error(call, routes, body):
+    routes.add("POST", "/points/export", body=body)
+    result = await call("qdrant_export_collection")
+    assert result.is_error is True
 
 
 async def test_export_always_asks_for_the_file_destination(call, routes):

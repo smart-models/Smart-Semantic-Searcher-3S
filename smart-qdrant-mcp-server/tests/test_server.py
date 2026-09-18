@@ -1,8 +1,11 @@
 """Server assembly: registration, naming, and annotation completeness."""
 
 import re
+from contextlib import nullcontext
 from pathlib import Path
+from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from smart_qdrant_mcp import __version__
@@ -24,6 +27,85 @@ async def test_server_is_named_smart_qdrant_mcp(mcp_server):
 async def test_server_reports_its_application_version(mcp_server):
     assert mcp_server.version == __version__
     assert mcp_server.version != "unknown"
+
+
+async def test_ending_one_session_keeps_shared_client_usable(mcp_server, routes):
+    from mcp.client import Client
+
+    async with Client(mcp_server) as first:
+        await first.list_tools()
+    routes.add("GET", "/collections", body={"collections": []})
+    async with Client(mcp_server) as second:
+        result = await second.call_tool("qdrant_list_collections", {"params": {}})
+        assert not result.is_error
+
+
+@pytest.mark.parametrize("fail_request", [False, True])
+async def test_app_shutdown_closes_pools_after_overlapping_sessions(
+    monkeypatch, routes, fail_request
+):
+    from mcp.client import Client
+
+    from smart_qdrant_mcp import server as server_module
+    from smart_qdrant_mcp.config import load_settings
+
+    settings = load_settings(
+        _env_file=None,
+        MCP_API_TOKENS="",
+        MCP_AUTH_MODE="oauth",
+        MCP_MIDDLEWARE_URL="http://middleware:6336",
+        MIDDLEWARE_CLIENT_TOKEN="middleware-test-token",
+        MCP_OAUTH_ISSUER_URL="https://auth.example.com",
+        MCP_OAUTH_RESOURCE_SERVER_URL="https://mcp.example.com/mcp",
+        MCP_OAUTH_INTROSPECTION_URL="https://auth.example.com/introspect",
+        MCP_OAUTH_CLIENT_ID="test-client",
+        MCP_OAUTH_CLIENT_SECRET="test-secret",
+    )
+    middleware_transport = routes.transport()
+    auth_transport = httpx.MockTransport(lambda _: httpx.Response(200, json={}))
+    for transport in (middleware_transport, auth_transport):
+        monkeypatch.setattr(transport, "aclose", AsyncMock(wraps=transport.aclose))
+    server, ctx = server_module.build_server(
+        settings, transport=middleware_transport, auth_transport=auth_transport
+    )
+    monkeypatch.setattr(server_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(server_module, "build_server", lambda _: (server, ctx))
+    app = server_module.create_app()
+    expected_error = pytest.RaisesGroup(
+        pytest.RaisesExc(RuntimeError, match="application failed")
+    )
+    with expected_error if fail_request else nullcontext():
+        async with app.router.lifespan_context(app):
+            async with Client(server) as surviving:
+                async with Client(server) as departing:
+                    await departing.list_tools()
+                middleware_transport.aclose.assert_not_awaited()
+                auth_transport.aclose.assert_not_awaited()
+                routes.add("GET", "/collections", body={"collections": []})
+                result = await surviving.call_tool(
+                    "qdrant_list_collections", {"params": {}}
+                )
+                assert not result.is_error
+            middleware_transport.aclose.assert_not_awaited()
+            auth_transport.aclose.assert_not_awaited()
+            if fail_request:
+                raise RuntimeError("application failed")
+    middleware_transport.aclose.assert_awaited_once()
+    auth_transport.aclose.assert_awaited_once()
+
+
+async def test_auth_pool_closes_even_when_middleware_close_fails(settings):
+    from types import SimpleNamespace
+
+    from smart_qdrant_mcp.context import ToolContext
+
+    client = SimpleNamespace(aclose=AsyncMock(side_effect=RuntimeError("close failed")))
+    close_auth = AsyncMock()
+    ctx = ToolContext(client=client, settings=settings, close_auth=close_auth)
+    with pytest.raises(RuntimeError, match="close failed"):
+        await ctx.aclose()
+    client.aclose.assert_awaited_once()
+    close_auth.assert_awaited_once()
 
 
 def test_application_version_matches_container_metadata_default():

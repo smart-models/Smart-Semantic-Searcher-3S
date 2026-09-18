@@ -612,8 +612,20 @@ class VectorReindexManager:
                 with_vectors=False,
             )
             if not records:
-                await self._finalize(client, collection_name, settings, job)
-                return
+                async with self._lock(collection_name):
+                    _, _, _, current = await get_embedding_metadata_state(
+                        client, collection_name, settings
+                    )
+                    if current is None or current.job_id != job.job_id:
+                        # A different owner now controls this collection. Do not
+                        # finalize it or mark its replacement job as failed.
+                        return
+                    if current == job:
+                        await self._finalize(client, collection_name, settings, job)
+                        return
+                # A control may have arrived while the scroll was in flight.
+                # The next iteration owns pause/cancel handling and cleanup.
+                continue
 
             texts = []
             for record in records:

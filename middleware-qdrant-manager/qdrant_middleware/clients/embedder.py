@@ -12,6 +12,7 @@ FastAPI routes use the per-app dependency in ``api.dependencies`` so
 
 import asyncio
 import json
+import math
 from dataclasses import dataclass
 import httpx
 from fastapi import HTTPException
@@ -166,6 +167,8 @@ class EmbedderClient:
                 description="Smart Embedder models",
             )
             data = response.json()
+            if not isinstance(data, dict):
+                raise ValueError("expected object")
             return EmbedderContractInfo(
                 contract=EmbeddingContract.model_validate(
                     data.get("embedding_contract")
@@ -174,14 +177,12 @@ class EmbedderClient:
                 reranker=data.get("reranker"),
             )
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
-            raise HTTPException(
-                503, f"Smart Embedder contract unavailable: {exc}"
-            ) from exc
+            raise HTTPException(503, "Smart Embedder contract unavailable") from exc
         except _EmbedderHTTPError as exc:
-            raise HTTPException(503, str(exc)) from exc
+            raise HTTPException(503, "Smart Embedder contract unavailable") from exc
         except (KeyError, TypeError, ValueError) as exc:
             raise HTTPException(
-                503, f"Smart Embedder returned an invalid embedding contract: {exc}"
+                503, "Smart Embedder returned an invalid embedding contract"
             ) from exc
 
     async def embed(self, texts: list[str]) -> list[EmbeddingResult]:
@@ -206,7 +207,24 @@ class EmbedderClient:
             async with semaphore:
                 return await self._embed_batch(batch)
 
-        batch_results = await asyncio.gather(*(_embed_with_sem(b) for b in batches))
+        tasks = [asyncio.create_task(_embed_with_sem(b)) for b in batches]
+        batch_group = asyncio.gather(*tasks)
+        try:
+            # Own cancellation here so a cancelled caller does not cancel
+            # children once through gather and again during their cleanup.
+            batch_results = await asyncio.shield(batch_group)
+        except BaseException:
+            for task in tasks:
+                task.cancel()
+            drained = asyncio.gather(batch_group, *tasks, return_exceptions=True)
+            while not drained.done():
+                try:
+                    await asyncio.shield(drained)
+                except asyncio.CancelledError:
+                    # Repeated caller cancellation must not interrupt the
+                    # children's cleanup or replace the original failure.
+                    continue
+            raise
         results: list[EmbeddingResult] = []
         for batch_result in batch_results:
             results.extend(batch_result)
@@ -254,25 +272,39 @@ class EmbedderClient:
                     description="Smart Embedder rerank",
                 )
             except httpx.ConnectError as e:
-                raise HTTPException(
-                    502, f"Smart Embedder server unreachable: {e}"
-                ) from e
+                raise HTTPException(502, "Smart Embedder server unreachable") from e
             except httpx.TimeoutException as e:
-                raise HTTPException(502, f"Smart Embedder server timeout: {e}") from e
+                raise HTTPException(502, "Smart Embedder server timeout") from e
             except _EmbedderHTTPError as e:
                 if e.status_code in PASSTHROUGH_HTTP_STATUS:
                     detail = _passthrough_detail(e)
                     if detail is not None:
                         raise HTTPException(e.status_code, detail) from None
-                raise HTTPException(502, str(e)) from e
+                raise HTTPException(
+                    502, "Smart Embedder upstream request failed"
+                ) from e
 
-            data = response.json()
-            results.extend(
-                RerankResult(
-                    index=batch_start + int(item["index"]), score=float(item["score"])
-                )
-                for item in data["results"]
-            )
+            try:
+                data = response.json()
+                items = data["results"]
+                if not isinstance(items, list) or len(items) != len(batch):
+                    raise ValueError("rerank count mismatch")
+                indexes = [item["index"] for item in items]
+                if any(type(index) is not int for index in indexes) or set(
+                    indexes
+                ) != set(range(len(batch))):
+                    raise ValueError("invalid rerank indices")
+                for item in items:
+                    score = item["score"]
+                    if type(score) not in (int, float) or not math.isfinite(score):
+                        raise ValueError("invalid rerank score")
+                    results.append(
+                        RerankResult(batch_start + item["index"], float(score))
+                    )
+            except (KeyError, TypeError, ValueError, OverflowError) as exc:
+                raise HTTPException(
+                    502, "Smart Embedder returned invalid rerank results"
+                ) from exc
 
         return sorted(results, key=lambda item: item.score, reverse=True)
 
@@ -312,32 +344,53 @@ class EmbedderClient:
                 description="Smart Embedder embed",
             )
         except httpx.ConnectError as e:
-            raise HTTPException(502, f"Smart Embedder server unreachable: {e}") from e
+            raise HTTPException(502, "Smart Embedder server unreachable") from e
         except httpx.TimeoutException as e:
-            raise HTTPException(502, f"Smart Embedder server timeout: {e}") from e
+            raise HTTPException(502, "Smart Embedder server timeout") from e
         except _EmbedderHTTPError as e:
-            raise HTTPException(502, str(e)) from e
+            raise HTTPException(502, "Smart Embedder upstream request failed") from e
 
-        data = response.json()
-        fingerprint = data.get("embedding_contract_fingerprint")
-        dense_model = data.get("dense_model_name")
-        sparse_model = data.get("sparse_model_name")
-        results: list[EmbeddingResult] = []
-        for item in data["data"]:
-            emb = item["embeddings"]
-            sparse_raw = emb["sparse"]
-            results.append(
-                EmbeddingResult(
-                    dense=emb["dense"],
-                    sparse=SparseVector(
-                        indices=sparse_raw["indices"],
-                        values=sparse_raw["values"],
-                    ),
-                    contract_fingerprint=fingerprint,
-                    dense_model_name=dense_model,
-                    sparse_model_name=sparse_model,
+        try:
+            data = response.json()
+            if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+                raise ValueError("expected embedding data")
+            if len(data["data"]) != len(texts):
+                raise ValueError("embedding count mismatch")
+            fingerprint = data.get("embedding_contract_fingerprint")
+            dense_model = data.get("dense_model_name")
+            sparse_model = data.get("sparse_model_name")
+            results: list[EmbeddingResult] = []
+            for item in data["data"]:
+                emb = item["embeddings"]
+                dense = emb["dense"]
+                if (
+                    not isinstance(dense, list)
+                    or not dense
+                    or any(
+                        type(value) not in (int, float) or not math.isfinite(value)
+                        for value in dense
+                    )
+                ):
+                    raise ValueError("invalid dense vector")
+                sparse_raw = emb["sparse"]
+                if len(sparse_raw["indices"]) != len(sparse_raw["values"]):
+                    raise ValueError("sparse vector length mismatch")
+                results.append(
+                    EmbeddingResult(
+                        dense=emb["dense"],
+                        sparse=SparseVector(
+                            indices=sparse_raw["indices"],
+                            values=sparse_raw["values"],
+                        ),
+                        contract_fingerprint=fingerprint,
+                        dense_model_name=dense_model,
+                        sparse_model_name=sparse_model,
+                    )
                 )
-            )
+        except (KeyError, TypeError, ValueError, AttributeError, OverflowError) as exc:
+            raise HTTPException(
+                502, "Smart Embedder returned invalid embeddings"
+            ) from exc
         return results
 
     async def close(self) -> None:

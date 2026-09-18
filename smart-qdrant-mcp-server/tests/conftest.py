@@ -133,7 +133,7 @@ async def mcp_server(settings, routes):
 
     server, ctx = build_server(settings, transport=routes.transport())
     yield server
-    await ctx.client.aclose()
+    await ctx.aclose()
 
 
 @pytest.fixture

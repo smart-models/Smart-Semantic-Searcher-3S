@@ -15,6 +15,7 @@ from qdrant_middleware.main import create_app
 from qdrant_middleware.repositories.qdrant_collections import (
     EmbeddingContractViolation,
     get_embedding_metadata_state,
+    patch_embedding_metadata,
     require_collection_mutable,
     require_embedding_fingerprint,
 )
@@ -566,6 +567,65 @@ async def test_pause_cannot_be_overwritten_by_an_in_flight_checkpoint():
     assert paused is not None
     assert paused.status == "paused"
     assert paused.processed_points < len(client.points)
+
+
+@pytest.mark.parametrize("control", [None, "paused", "cancelled", "replaced"])
+async def test_empty_final_scroll_respects_concurrent_control(control):
+    """A terminal empty page must not overwrite an acknowledged control."""
+
+    class EmptyFinalPageStore(_Qdrant):
+        """Return a final cursor, then hold its empty page until released."""
+
+        def __init__(self):
+            super().__init__([{"text": "one"}, {"text": "two"}])
+            self.block_empty = False
+            self.entered = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def scroll(self, **kwargs):
+            records, offset = await super().scroll(**kwargs)
+            if records and offset is None:
+                return records, len(self.points)
+            if not records and self.block_empty:
+                self.entered.set()
+                await self.release.wait()
+            return records, offset
+
+    client = EmptyFinalPageStore()
+    manager = VectorReindexManager()
+    settings = _settings()
+    started = await manager.start(client, _Embedder(), "docs", settings)
+    client.block_empty = True
+    try:
+        await asyncio.wait_for(client.entered.wait(), 2)
+        if control == "replaced":
+            _, _, _, current = await get_embedding_metadata_state(
+                client, "docs", settings
+            )
+            replacement = current.model_copy(update={"job_id": "replacement"})
+            await patch_embedding_metadata(
+                client, "docs", settings=settings, reindex_job=replacement
+            )
+        elif control is not None:
+            await manager.set_control_status(client, "docs", settings, control)
+    finally:
+        client.release.set()
+        await asyncio.wait_for(_wait_for_worker(manager), 2)
+    _, contract, active, job = await get_embedding_metadata_state(
+        client, "docs", settings
+    )
+    if control == "replaced":
+        assert job == replacement
+    else:
+        assert job.status == (control or "completed")
+    assert active == (started.source_vectors if control else started.target_vectors)
+    assert contract == (started.source_contract if control else started.target_contract)
+    if control:
+        assert "dense" not in client.deleted_names
+        assert "sparse" not in client.deleted_names
+    if control == "cancelled":
+        assert started.target_vectors.dense in client.deleted_names
+        assert started.target_vectors.sparse in client.deleted_names
 
 
 @pytest.mark.asyncio

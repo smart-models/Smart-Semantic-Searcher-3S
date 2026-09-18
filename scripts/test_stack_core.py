@@ -597,10 +597,11 @@ def test_wait_timeout_is_absent_without_wait():
     assert "--wait-timeout" not in argv_of(plan_for("up", hardware="cpu"), -1)
 
 
-def test_wait_timeout_must_be_numeric():
+@pytest.mark.parametrize("value", ["soon", "0", "000", "-1", "²", "١"])
+def test_wait_timeout_must_be_numeric(value):
     """A non-numeric timeout is refused with a message naming the flag."""
     with pytest.raises(ConfigurationError) as error:
-        plan_for("up", hardware="cpu", **{"wait-timeout": "soon"})
+        plan_for("up", hardware="cpu", **{"wait-timeout": value})
     assert "--wait-timeout must be a positive integer" in str(error.value)
 
 

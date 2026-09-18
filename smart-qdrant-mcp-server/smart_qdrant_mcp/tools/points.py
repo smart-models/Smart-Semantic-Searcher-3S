@@ -804,6 +804,8 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
             limit=params.limit,
             next_offset=data.get("next_page_offset"),
         )
+        page["next_offset"] = data.get("next_page_offset")
+        page["has_more"] = page["next_offset"] is not None
         payload = {"collection_name": data.get("collection_name"), **page}
         return render(
             payload,

@@ -32,7 +32,9 @@ def payload_path_root(path: str) -> str:
         if path[index] == "[":
             closing = path.find("]", index + 1)
             selector = path[index + 1 : closing] if closing >= 0 else None
-            if closing < 0 or (selector != "" and not selector.isdigit()):
+            if closing < 0 or (
+                selector != "" and not (selector.isascii() and selector.isdigit())
+            ):
                 raise ValueError("payload path has an invalid array selector")
             index = closing + 1
             continue

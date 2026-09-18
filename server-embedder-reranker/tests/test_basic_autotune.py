@@ -6,6 +6,7 @@ candidate.
 """
 
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -335,6 +336,73 @@ class ProfilePersistenceTests(unittest.TestCase):
             old = time.time() - 100
             os.utime(lock_path, (old, old))
             with autotune.ProfileLock(lock_path, stale_seconds=1):
+                self.assertTrue(lock_path.exists())
+            self.assertFalse(lock_path.exists())
+
+    def test_lock_metadata_failure_releases_created_marker(self):
+        for operation in ("write", "fsync"):
+            with (
+                self.subTest(operation=operation),
+                tempfile.TemporaryDirectory() as tmp,
+            ):
+                lock_path = Path(tmp) / "profile.lock"
+                with patch.object(autotune.os, operation, side_effect=OSError("disk")):
+                    with self.assertRaisesRegex(OSError, "disk"):
+                        with autotune.ProfileLock(lock_path):
+                            self.fail("failed metadata must not grant ownership")
+                self.assertFalse(lock_path.exists())
+                with autotune.ProfileLock(lock_path, timeout_seconds=0):
+                    self.assertTrue(lock_path.exists())
+
+    def test_old_active_lock_cannot_be_reclaimed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_path = Path(tmp) / "profile.lock"
+            with autotune.ProfileLock(lock_path):
+                old = time.time() - 100
+                os.utime(lock_path, (old, old))
+                with self.assertRaises(TimeoutError):
+                    with autotune.ProfileLock(
+                        lock_path,
+                        stale_seconds=1,
+                        timeout_seconds=0,
+                    ):
+                        self.fail("a running owner must retain the lock")
+
+    def test_process_lock_survives_age_and_recovers_after_owner_crash(self):
+        script = """
+import os
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from basic_autotune import ProfileLock
+path = Path(sys.argv[2])
+with ProfileLock(path):
+    os.utime(path, (1, 1))
+    print('owned', flush=True)
+    sys.stdin.readline()
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_path = Path(tmp) / "profile.lock"
+            with subprocess.Popen(
+                [sys.executable, "-c", script, str(SERVER_DIR), str(lock_path)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            ) as owner:
+                try:
+                    self.assertEqual(owner.stdout.readline().strip(), "owned")
+                    with self.assertRaises(TimeoutError):
+                        with autotune.ProfileLock(
+                            lock_path,
+                            stale_seconds=0,
+                            timeout_seconds=0,
+                        ):
+                            self.fail("the other process still owns this lock")
+                finally:
+                    owner.kill()
+                    owner.communicate(timeout=10)
+            with autotune.ProfileLock(lock_path, stale_seconds=0, timeout_seconds=0):
                 self.assertTrue(lock_path.exists())
             self.assertFalse(lock_path.exists())
 

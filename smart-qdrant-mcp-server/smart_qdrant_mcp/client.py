@@ -43,7 +43,7 @@ def _retry_after_delay(
     if raw is None:
         return None
     value = raw.strip()
-    if value.isdigit():
+    if value.isascii() and value.isdigit():
         seconds = float(value)
     else:
         try:
@@ -164,6 +164,7 @@ class MiddlewareClient:
         json: dict | None = None,
         params: dict | None = None,
         retryable: bool | None = None,
+        accepted_statuses: frozenset[int] = frozenset(),
     ) -> object:
         """Call the middleware and return the decoded JSON body."""
         should_retry = (
@@ -176,7 +177,8 @@ class MiddlewareClient:
             params=params,
             retryable=should_retry,
         )
-        self._raise_for_status(response, path)
+        if response.status_code not in accepted_statuses:
+            self._raise_for_status(response, path)
         if not response.content:
             return {}
         return response.json()

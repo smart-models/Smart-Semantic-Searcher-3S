@@ -81,6 +81,23 @@ class ParseApiTokensTests(unittest.TestCase):
         match = self.ns["match_bearer_token"]
         self.assertIsNone(match("café", {"t1": "alice"}))
 
+    def test_invalid_labels_never_echo_a_secret_remainder(self):
+        parse = self.ns["parse_api_tokens"]
+        for label in (
+            "secret-remainder:alice",
+            "@secret-remainder",
+            "secret-remainder invalid",
+        ):
+            with self.subTest(label=label):
+                with self.assertRaises(ValueError) as caught:
+                    parse(
+                        f"synthetic-token-prefix:{label}", "SMART_EMBEDDER_API_TOKENS"
+                    )
+                rendered = str(caught.exception)
+                self.assertIn("SMART_EMBEDDER_API_TOKENS", rendered)
+                self.assertNotIn("synthetic-token-prefix", rendered)
+                self.assertNotIn("secret-remainder", rendered)
+
     def test_matches_any_entry_and_returns_its_label(self):
         match = self.ns["match_bearer_token"]
         self.assertEqual(match("t2", {"t1": "alice", "t2": "bob"}), "bob")

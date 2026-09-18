@@ -47,7 +47,7 @@ _WINDOWS_PATH_RE = re.compile(r"^[A-Za-z]:\\")
 # letter or a dot in the host part so ordinary "12:30"-style tokens are left
 # alone.
 _HOST_PORT_RE = re.compile(
-    r"^(?=[A-Za-z0-9.\-]*[A-Za-z.])[A-Za-z0-9.\-]+:[0-9]+(?:/\S*)?$"
+    r"^(?=[A-Za-z0-9._\-]*[A-Za-z.])[A-Za-z0-9._\-]+:[0-9]+(?:/\S*)?$"
 )
 # Punctuation a sentence commonly wraps a fragment in -- never "/", which is
 # part of the Unix-path fragment itself, so a leading or trailing slash must
@@ -166,7 +166,7 @@ def _redact_token(token: str) -> str:
         return "[redacted]"
     if ".py" in lowered:
         return "[redacted]"
-    if "/app/" in token:
+    if "/app/" in lowered:
         return "[redacted]"
 
     leading, core, trailing = _strip_punctuation(token)

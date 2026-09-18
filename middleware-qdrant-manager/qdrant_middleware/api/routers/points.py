@@ -1569,14 +1569,8 @@ async def scroll_points(
     )
 
 
-def _write_export_atomically(document, settings) -> tuple[str, int]:
-    """Write the export next to its final name, then rename it into place.
-
-    A reader must never see a half-written export, and a failed write must not
-    leave a plausible-looking file behind. The rename is also made durable:
-    the payload is fsync'd before the rename and the directory after it, so a
-    power loss cannot leave a zero-length file under the final name.
-    """
+def _prepare_export_file(document, settings) -> tuple[str, Path, int]:
+    """Write and fsync a temporary export without publishing its final name."""
     root = settings.export_data_root
     root.mkdir(parents=True, exist_ok=True)
     payload = document.text.encode("utf-8")
@@ -1589,24 +1583,69 @@ def _write_export_atomically(document, settings) -> tuple[str, int]:
             # before the rename publishes the file under its final name.
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temp_path, target)
-        # Make the rename itself durable: without fsync on the containing
-        # directory the new directory entry can still be lost on a power cut.
-        # Directory fsync is POSIX-only; on other platforms (where only the
-        # test suite runs, not the Linux container) it is a no-op.
-        if os.name == "posix":
-            directory_fd = os.open(str(root), os.O_RDONLY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
     except BaseException:
         # Leaving a .tmp behind would look like a partial export to anyone
         # listing the directory.
         if os.path.exists(temp_path):
             os.unlink(temp_path)
         raise
-    return str(target), len(payload)
+    return temp_path, target, len(payload)
+
+
+def _sync_export_directory(root: Path) -> None:
+    """Make the published directory entry durable on POSIX filesystems."""
+    if os.name == "posix":
+        directory_fd = os.open(str(root), os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+
+
+async def _await_export_io(task):
+    """Drain a native filesystem worker before releasing the export lease."""
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        # Cancelling an await cannot stop a running thread. Repeated cancellation
+        # must not abandon the worker or release capacity while it still runs.
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        if not task.cancelled():
+            task.exception()
+        raise
+
+
+async def _write_export_atomically(document, settings) -> tuple[str, int]:
+    """Prepare off-loop and publish only while the request is still active."""
+    prepared = asyncio.create_task(
+        asyncio.to_thread(_prepare_export_file, document, settings)
+    )
+    try:
+        temp_path, target, size = await _await_export_io(prepared)
+        # No await separates successful preparation from publication. A cancelled
+        # preparation is drained and cleaned up in finally, never published later.
+        os.replace(temp_path, target)
+        await _await_export_io(
+            asyncio.create_task(
+                asyncio.to_thread(_sync_export_directory, settings.export_data_root)
+            )
+        )
+        return str(target), size
+    finally:
+        # Even when the request was cancelled, the drained preparation may have
+        # succeeded. Retrieve its path so that no unpublished temporary survives.
+        if (
+            prepared.done()
+            and not prepared.cancelled()
+            and prepared.exception() is None
+        ):
+            Path(prepared.result()[0]).unlink(missing_ok=True)
 
 
 @router.post(
@@ -1685,7 +1724,7 @@ async def export_collection(
         )
 
     try:
-        path, size = _write_export_atomically(document, settings)
+        path, size = await _write_export_atomically(document, settings)
     except OSError as exc:
         # An unwritable export root (missing mount, full disk) is a dependency
         # failure like any other, and the documented contract for a failed

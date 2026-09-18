@@ -7,17 +7,33 @@ import hashlib
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 
 def sha256_file(path: Path) -> str:
     """Return the SHA-256 digest of one evidence file."""
+    return _file_evidence(path)[1]
+
+
+def _file_evidence(path: Path) -> tuple[int, str]:
+    """Measure and hash the same stream, rejecting changes during the read."""
     digest = hashlib.sha256()
+    size = 0
     with path.open("rb") as stream:
+        before = os.fstat(stream.fileno())
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            size += len(chunk)
             digest.update(chunk)
-    return digest.hexdigest()
+        after = os.fstat(stream.fileno())
+    if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
+        after.st_size,
+        after.st_mtime_ns,
+        after.st_ctime_ns,
+    ) or size != after.st_size:
+        raise OSError(f"evidence changed while hashing: {path}")
+    return size, digest.hexdigest()
 
 
 def build_manifest(
@@ -36,11 +52,12 @@ def build_manifest(
         relative = path.relative_to(root).as_posix()
         if relative == output_name:
             continue
+        size, digest = _file_evidence(path)
         files.append(
             {
                 "path": relative,
-                "bytes": path.stat().st_size,
-                "sha256": sha256_file(path),
+                "bytes": size,
+                "sha256": digest,
             }
         )
     return {
@@ -73,7 +90,18 @@ def main(argv: list[str] | None = None) -> int:
         commit=args.commit,
     )
     output = args.root / args.output_name
-    output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    descriptor, name = tempfile.mkstemp(
+        dir=output.parent, prefix=f".{output.name}.", suffix=".tmp"
+    )
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(json.dumps(manifest, indent=2) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, output)
+    finally:
+        temporary.unlink(missing_ok=True)
     if manifest["missing"]:
         print(
             f"[ERROR] missing release evidence: {', '.join(manifest['missing'])}",
