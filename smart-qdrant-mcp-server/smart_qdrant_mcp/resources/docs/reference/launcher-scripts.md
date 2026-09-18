@@ -91,7 +91,7 @@ tests. Read their parser and exit-code handling before invoking them: an audit
 can require network access, and a synchronization option can write lock files.
 The [dependency directory guide](../requirements/README.md) explains input
 ownership; this README remains the command/procedure reference. GitHub workflow
-wiring is described in [.github/README.md](../.github/README.md).
+wiring is described in [.github/AGENTS.md](../.github/AGENTS.md).
 
 ## Interface reference
 

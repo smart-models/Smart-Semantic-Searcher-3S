@@ -47,7 +47,7 @@ Client ────────────────────────�
 | `scripts/` | What the launchers and CI call: the shared planner `stack_core.py` with its host GPU probe `stack_gpu_probe.py`; the preflight verifiers `verify_token_config.py` and `verify_compose_security.py`; `verify_dependencies.py` (network-dependent OSV/SBOM audit) with `security_constraints.py` and `render_dependency_audit_issue.py` beside it; the release gate `release_evidence.py`; the shared fixture helper `stack_test_support.py`; and their tests. |
 | `stack.ps1` / `stack.sh` | **At the repository root.** The only supported way to build/start/stop the stack. |
 | `requirements/` | Human-maintained direct pins (`middleware.txt`, `embedder-cpu.txt`, `embedder-gpu.txt`, `embedder-base.txt`, `shared.txt`, `mcp.txt`, `dev.txt`, `ci.txt`), the `security-constraints.txt` floor applied over them, and `locks/` transitive constraints applied only inside Docker builds. [`requirements/README.md`](requirements/README.md) is its reference. |
-| `.github/` | Three workflows, `dependabot.yml` and the operator release checklist, documented in [`.github/README.md`](.github/README.md): `workflows/ci.yml` (every push to `main` and every PR), `workflows/dependency-audit.yml` (weekly OSV/SBOM cron that opens, updates and closes one deduplicated issue), `workflows/release-check.yml` (manual release checks and evidence), and `RELEASE_CHECKLIST.md`. Add a job to `ci.yml` when you add a suite. |
+| `.github/` | Three workflows, `dependabot.yml` and the operator release checklist, documented in [`.github/AGENTS.md`](.github/AGENTS.md): `workflows/ci.yml` (every push to `main` and every PR), `workflows/dependency-audit.yml` (weekly OSV/SBOM cron that opens, updates and closes one deduplicated issue), `workflows/release-check.yml` (manual release checks and evidence), and `RELEASE_CHECKLIST.md`. Add a job to `ci.yml` when you add a suite. |
 | `compose.yml` / `Dockerfile` | Multi-target build (`middleware`, `smart-qdrant-mcp`, `smart-embedder-cpu`, `smart-embedder-gpu`, plus non-network-facing `*-init-*` prep containers per hardware profile). |
 | `compose.embedder-private.yml` | One-purpose overlay the launchers add when `EXPOSE_SMART_EMBEDDER_PORT=false`; withdraws the host port publish with `ports: !reset []` (a plain `ports: []` would concatenate, not replace). |
 | `compose.gpu-device.yml` | Single physical GPU overlay; both GPU init and serving reservations use the UUID resolved by the launcher planner. |
@@ -69,7 +69,7 @@ truth for its subject; none repeats another.
 | Educational browser guides: startup, `.env`, console workflow, architecture, hybrid search, embedding models. | [`guide/README.md`](guide/README.md) |
 | The console test suites — which need a stack, which are intercepted, which are destructive. | [`middleware-qdrant-manager/frontend/tests/README.md`](middleware-qdrant-manager/frontend/tests/README.md) |
 | Dependency pins, lock regeneration, which image target a package affects. | [`requirements/README.md`](requirements/README.md) |
-| CI, the scheduled dependency audit, the release gate and its evidence. | [`.github/README.md`](.github/README.md) and [`.github/RELEASE_CHECKLIST.md`](.github/RELEASE_CHECKLIST.md) |
+| CI, the scheduled dependency audit, the release gate and its evidence. | [`.github/AGENTS.md`](.github/AGENTS.md) and [`.github/RELEASE_CHECKLIST.md`](.github/RELEASE_CHECKLIST.md) |
 | Staging a corpus file for ingest (an operator step, not an MCP one). | [`smart-qdrant-mcp-server/docs/ingest-patterns.md`](smart-qdrant-mcp-server/docs/ingest-patterns.md) |
 | Every environment variable, with its shipped default. | `.env.example` (versioned, exhaustive) |
 
@@ -226,7 +226,7 @@ procedure live in [`.github/RELEASE_CHECKLIST.md`](.github/RELEASE_CHECKLIST.md)
 
 The launcher linters and actionlint are external verification tools. The
 actionlint version and archive checksum are pinned in the CI lint job; see
-[`.github/README.md`](.github/README.md#verification). Install the launcher
+[`.github/AGENTS.md`](.github/AGENTS.md#verification). Install the launcher
 linters once: `winget install koalaman.shellcheck`
 and `Install-Module PSScriptAnalyzer -Scope CurrentUser`. Both must report
 nothing; `Invoke-ScriptAnalyzer` signals findings by **printing** them, not by
@@ -564,7 +564,7 @@ Things that have already cost time here.
 | `.env.example` | The exhaustive, versioned configuration template. |
 | `scripts/README.md` | The launcher reference. |
 | `requirements/README.md` | The dependency-pin and lock reference. |
-| `.github/README.md` | CI, the scheduled dependency audit, and the release gate. |
+| `.github/AGENTS.md` | CI, the scheduled dependency audit, and the release gate. |
 | `.mcp.json` | Client-side MCP registration for this repo, pointing at `http://127.0.0.1:6337/mcp` with `${MCP_TOKEN}`. Ships **disabled**; it configures a client, not the server. |
 | `.gitattributes` | The line-ending contract. Everything is LF in the index, then forced per type in the working tree — `stack.sh` with CRLF fails at the shebang. Do not weaken it to fix a local diff. |
 | `.dockerignore` | Keeps caches, `.env` and test material out of every build context. |

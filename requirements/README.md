@@ -118,7 +118,7 @@ synchronizer rather than hand-maintaining two conflicting constraint layers.
 ## Related documents
 
 - [Repository change-risk rules](../AGENTS.md)
-- [Automation and release evidence](../.github/README.md)
+- [Automation and release evidence](../.github/AGENTS.md)
 - [Middleware](../middleware-qdrant-manager/README.md)
 - [Embedder](../server-embedder-reranker/README.md)
 - [MCP server](../smart-qdrant-mcp-server/README.md)
