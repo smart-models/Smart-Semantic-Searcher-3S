@@ -11,3 +11,23 @@ datasets==5.0.1
 
 # CVE-2026-71554; required through qdrant-client -> httpx[http2].
 h2==4.4.1
+
+# CVE-2026-84381; required through mcp 2.0.0 -> httpx2 (which pins it exactly).
+httpcore2==2.12.0
+
+# CVE-2026-84378/84379/84380/84381/84382; required transitively by mcp 2.0.0.
+httpx2==2.12.0
+
+# Deliberately NOT overridden: CVE-2026-69112 (accelerate, sharded-checkpoint
+# weight_map path traversal), pinned by the embedder locks at 1.14.0.
+#
+# No released accelerate contains the fix. The advisory's own OSV range says
+# ``last_affected: 1.14.0``, so pinning 1.15.0 would silence the audit while the
+# vulnerable code is still present: src/accelerate/utils/modeling.py in v1.15.0
+# joins weight_map entries with os.path.join and no containment check, exactly
+# as in v1.14.0. Both referenced upstream PRs (#4070, #4138) were closed
+# unmerged, and neither appears in the v1.15.0 commit list.
+#
+# Re-check when a release lands that sanitises the entry path; until then the
+# dependency audit is expected to report this one finding. Exposure here is
+# limited to checkpoints pulled from Hugging Face at pinned revisions.
