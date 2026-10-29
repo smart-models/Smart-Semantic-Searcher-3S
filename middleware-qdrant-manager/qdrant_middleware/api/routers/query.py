@@ -9,7 +9,7 @@ in this router.
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from qdrant_client import AsyncQdrantClient
 
 from qdrant_middleware.api.dependencies import (
@@ -38,6 +38,7 @@ router = APIRouter(prefix="/query", tags=["QUERY"])
 @router.post("/search", response_model=QueryResponse)
 async def search(
     request: QueryRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     embedder: EmbedderClient = Depends(get_embedder_client),
@@ -52,6 +53,7 @@ async def search(
         fusion_query = _build_fusion_query(request)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+    http_request.state.log_collection = request.collection_name
 
     try:
         embeddings = await embedder.embed([request.query])
@@ -88,6 +90,8 @@ async def search(
         vector_names=vector_names,
     )
     if not request.rerank or not hits:
-        return _build_response(request, hits, reranked=False, candidates=len(hits))
-
-    return await _rerank_hits(request, hits, embedder, settings)
+        response = _build_response(request, hits, reranked=False, candidates=len(hits))
+    else:
+        response = await _rerank_hits(request, hits, embedder, settings)
+    http_request.state.log_points = response.returned
+    return response

@@ -399,6 +399,36 @@ the middleware — not from `describe_error`'s HTTP-status mapping:
 Both are documented, with every other error string this server produces, in the
 `docs://troubleshooting` resource.
 
+### One log line per tool call
+
+Every tool call ends with one INFO line in `docker logs smart-qdrant-mcp`,
+whatever the outcome:
+
+```
+INFO:     tool 'qdrant_search' ok 0.4s
+```
+
+The outcome is `ok` only when the result does not carry `is_error`: a failure
+the tool reports (`is_error=true`) and an error the SDK raises — argument
+validation, an unknown tool name — both log `error`. The duration has one
+decimal. The name is written with `repr`, so a client-chosen name stays on one
+line. **The arguments are never logged:** they carry query text, chunk text,
+payloads, filters and confirm values. Resource reads and prompts are not
+logged.
+
+Uvicorn's access line for every HTTP request stays — client address, method,
+path and status — but never its query string: `configure_package_logging()`
+filters `uvicorn.access` so nothing after the `?` reaches a handler.
+
+```
+INFO:     127.0.0.1:58909 - "POST /mcp HTTP/1.1" 200 OK
+```
+
+The line is written by the process serving the container. A copy of the
+package run any other way — for example a local stdio launch wired into a
+desktop client — logs to that process's own stderr, and its calls never
+appear in `docker logs`.
+
 ## Capabilities and limits
 
 **You can:**

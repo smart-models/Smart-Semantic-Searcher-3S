@@ -57,6 +57,17 @@ _CONSOLE_SECURITY_HEADERS = {
 }
 
 
+class _DropAccessLogQuery(logging.Filter):
+    """Drop the query string from uvicorn's access line, keeping the line."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Rewrite ``(client, method, path_with_query, version, status)``."""
+        args = record.args
+        if isinstance(args, tuple) and len(args) == 5 and isinstance(args[2], str):
+            record.args = (*args[:2], args[2].split("?", 1)[0], *args[3:])
+        return True
+
+
 def configure_package_logging() -> None:
     """Attach one stream handler to this package's logger, at INFO.
 
@@ -67,7 +78,13 @@ def configure_package_logging() -> None:
     effective ACL logged at startup would exist in the code and nowhere in the
     output. Scoped to this package rather than the root logger so enabling it
     does not also turn on INFO for httpx and qdrant-client.
+
+    It also filters uvicorn's access line down to client, method, path and
+    status: the query string is never logged.
     """
+    access_logger = logging.getLogger("uvicorn.access")
+    if not any(isinstance(f, _DropAccessLogQuery) for f in access_logger.filters):
+        access_logger.addFilter(_DropAccessLogQuery())
     package_logger = logging.getLogger("qdrant_middleware")
     if package_logger.handlers:
         return

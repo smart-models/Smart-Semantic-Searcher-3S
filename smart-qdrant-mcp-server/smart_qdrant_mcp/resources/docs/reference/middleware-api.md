@@ -674,6 +674,36 @@ These hold regardless of configuration.
   point mutations that could invalidate it. The per-collection coordinator
   serializes the admission check with the mutation itself, closing the
   start-versus-write race without blocking unrelated collections.
+- **One log line per operation** — every request whose method is not `GET`,
+  `HEAD` or `OPTIONS` ends with one INFO line from the outermost layer, in
+  `docker logs qdrant-middleware`, whatever the outcome: 401, 413, 429, 503,
+  504 and 5xx included, and a cancelled request with `status=-`.
+
+  ```
+  INFO:     operation POST /points/ingest-chunks: caller=alice status=200 collection=docs points=120 duration=0.842s
+  ```
+
+  `caller` is the matched token label, `-` when auth is disabled or the request
+  was rejected. `collection` is the one the route resolved, or the
+  `{collection_name}` path parameter; `-` when neither was reached. `points` is
+  set only on success: written by ingest and upsert, deleted, matched by a
+  filtered delete or payload write, counted by `/points/count`, returned by
+  search, scroll and retrieve, exported by `/points/export`; `-` on errors, on
+  facet, on single-point payload writes and on collection-level operations.
+  The path is `request.url.path`, never the query string; its parameters are
+  identifiers (collection, point id, payload field name), and control
+  characters in path and collection are removed or escaped, so a client-chosen
+  value cannot forge a second line. **Never logged:** the query string, query
+  text, chunk text, payloads, filters, file names or paths, tokens. Reads get
+  no operation line.
+- **Uvicorn's access line keeps everything but the query string** — every
+  request, reads included, still logs client address, method, path and status;
+  `configure_package_logging()` filters `uvicorn.access` so nothing after the
+  `?` reaches a handler.
+
+  ```
+  INFO:     127.0.0.1:58892 - "POST /query/search HTTP/1.1" 401 Unauthorized
+  ```
 
 ## Capabilities and limits
 

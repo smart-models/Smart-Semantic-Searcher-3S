@@ -364,6 +364,7 @@ async def test_create_endpoint_preserves_embedder_contract_http_status(
     with pytest.raises(HTTPException) as exc:
         await create_collection_endpoint(
             request,
+            http_request=SimpleNamespace(state=SimpleNamespace()),
             client=SimpleNamespace(),
             settings=_settings(),
             embedder=UnavailableEmbedder(),

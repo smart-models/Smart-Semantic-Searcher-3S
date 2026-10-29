@@ -1003,6 +1003,7 @@ def _load_and_validate_chunks(path: Path, settings: Settings) -> list[dict[str, 
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest_chunks(
     request: IngestRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -1015,11 +1016,12 @@ async def ingest_chunks(
     ``_run_ingest``. See that function for the embed/upsert/prune contract.
     """
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     batch_size = _resolve_batch_size(request.batch_size, settings)
     path = _validate_ingest_path(request.file_path, settings)
     chunks = await asyncio.to_thread(_load_and_validate_chunks, path, settings)
     sid = request.source_id or path.stem
-    return await _run_ingest(
+    response = await _run_ingest(
         chunks=chunks,
         collection_name=collection_name,
         batch_size=batch_size,
@@ -1035,11 +1037,14 @@ async def ingest_chunks(
         coordinator=coordinator,
         manager=manager,
     )
+    http_request.state.log_points = response.ingested
+    return response
 
 
 @router.post("/ingest-chunks", response_model=IngestResponse)
 async def ingest_inline_chunks(
     request: IngestChunksRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -1054,9 +1059,10 @@ async def ingest_inline_chunks(
     filename to derive it from.
     """
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     batch_size = _resolve_batch_size(request.batch_size, settings)
     chunks = _validate_chunks(request.chunks, settings)
-    return await _run_ingest(
+    response = await _run_ingest(
         chunks=chunks,
         collection_name=collection_name,
         batch_size=batch_size,
@@ -1072,6 +1078,8 @@ async def ingest_inline_chunks(
         coordinator=coordinator,
         manager=manager,
     )
+    http_request.state.log_points = response.ingested
+    return response
 
 
 @dataclass(frozen=True)
@@ -1399,6 +1407,7 @@ async def _run_ingest(
 @router.post("/count", response_model=CountPointsResponse)
 async def count_points(
     request: CountPointsRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
 ):
@@ -1410,6 +1419,7 @@ async def count_points(
     returns the fast approximate estimate.
     """
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     try:
         count_filter = build_qdrant_filter(request.filters, settings=settings)
     except ValueError as e:
@@ -1423,6 +1433,7 @@ async def count_points(
         "count points",
         settings,
     )
+    http_request.state.log_points = result.count
     return CountPointsResponse(
         ok=True,
         collection_name=collection_name,
@@ -1434,6 +1445,7 @@ async def count_points(
 @router.post("/facet", response_model=FacetPointsResponse)
 async def facet_points(
     request: FacetPointsRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
 ):
@@ -1443,6 +1455,7 @@ async def facet_points(
     the 400 it raises is passed through as-is rather than guessed at here.
     """
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     try:
         facet_filter = build_qdrant_filter(request.filters, settings=settings)
     except ValueError as e:
@@ -1486,11 +1499,13 @@ async def facet_points(
 @router.post("/scroll", response_model=ScrollPointsResponse)
 async def scroll_points(
     request: ScrollPointsRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
 ):
     """Return a page of filtered points without embedding or vector search."""
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     try:
         scroll_filter = build_qdrant_filter(request.filters, settings=settings)
     except ValueError as e:
@@ -1560,6 +1575,7 @@ async def scroll_points(
     results = [
         ScrolledPoint(id=str(point.id), payload=point.payload or {}) for point in points
     ]
+    http_request.state.log_points = len(results)
     return ScrollPointsResponse(
         collection_name=collection_name,
         returned=len(results),
@@ -1677,6 +1693,7 @@ async def export_collection(
     returned as an attachment; both paths emit identical bytes.
     """
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     count_result = await _qdrant(
         lambda: client.count(collection_name=collection_name, exact=True),
         "count points for export",
@@ -1708,6 +1725,7 @@ async def export_collection(
         raise HTTPException(status_code=413, detail=str(exc)) from exc
 
     if request.destination == "body":
+        http_request.state.log_points = document.n_chunks
         return Response(
             content=document.text,
             media_type="application/json",
@@ -1715,6 +1733,7 @@ async def export_collection(
         )
 
     if document.n_chunks == 0:
+        http_request.state.log_points = 0
         return ExportCollectionResponse(
             ok=True,
             collection_name=collection_name,
@@ -1732,6 +1751,7 @@ async def export_collection(
         raise HTTPException(
             502, f"failed to write the export under {settings.export_data_root}: {exc}"
         ) from exc
+    http_request.state.log_points = document.n_chunks
     return ExportCollectionResponse(
         ok=True,
         collection_name=collection_name,
@@ -1744,6 +1764,7 @@ async def export_collection(
 @router.post("", response_model=UpsertPointResponse)
 async def upsert_point(
     request: UpsertPointRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -1757,6 +1778,7 @@ async def upsert_point(
     a Smart Embedder call.
     """
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     pid = _normalize_point_id(request.point_id)
     if request.update_mode != "upsert":
         exists = pid in await _existing_point_ids(
@@ -1766,6 +1788,7 @@ async def upsert_point(
             request.update_mode == "update_only" and not exists
         )
         if skip:
+            http_request.state.log_points = 0
             return UpsertPointResponse(
                 ok=True,
                 point_id=request.point_id,
@@ -1808,6 +1831,7 @@ async def upsert_point(
             "upsert point",
             settings=settings,
         )
+    http_request.state.log_points = 1
     return UpsertPointResponse(
         ok=True,
         point_id=request.point_id,
@@ -1818,6 +1842,7 @@ async def upsert_point(
 @router.post("/batch", response_model=BatchUpsertResponse)
 async def batch_upsert_points(
     request: BatchUpsertRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -1831,6 +1856,7 @@ async def batch_upsert_points(
     Smart Embedder call.
     """
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     ids = [_normalize_point_id(item.point_id) for item in request.points]
     kept = list(zip(request.points, ids))
     skipped = 0
@@ -1841,6 +1867,7 @@ async def batch_upsert_points(
         skipped = len(request.points) - len(kept)
 
     if not kept:
+        http_request.state.log_points = 0
         return BatchUpsertResponse(
             ok=True, upserted=0, collection_name=collection_name, skipped=skipped
         )
@@ -1883,6 +1910,7 @@ async def batch_upsert_points(
             "batch upsert",
             settings=settings,
         )
+    http_request.state.log_points = len(points)
     return BatchUpsertResponse(
         ok=True,
         upserted=len(points),
@@ -1944,11 +1972,13 @@ class RetrievePointsResponse(BaseModel):
 @router.post("/retrieve", response_model=RetrievePointsResponse)
 async def retrieve_points(
     request: RetrievePointsRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
 ):
     """Retrieve many points by id in one call (missing ids are omitted)."""
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     ids = [_normalize_point_id(i) for i in request.ids]
     results = await _qdrant(
         lambda: client.retrieve(
@@ -1960,6 +1990,7 @@ async def retrieve_points(
         "retrieve points",
         settings=settings,
     )
+    http_request.state.log_points = len(results)
     return RetrievePointsResponse(
         collection_name=collection_name,
         returned=len(results),
@@ -1991,6 +2022,7 @@ class DeleteResponse(BaseModel):
 @router.delete("/{point_id}", response_model=DeleteResponse)
 async def delete_point(
     point_id: str,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -2009,6 +2041,7 @@ async def delete_point(
     satisfied.
     """
     collection_name = resolve_collection_name(collection_name, settings)
+    http_request.state.log_collection = collection_name
     async with mutation_scope(client, collection_name, settings, coordinator, manager):
         pid = _normalize_point_id(point_id)
         existing = await _existing_point_ids(client, collection_name, [pid], settings)
@@ -2021,9 +2054,9 @@ async def delete_point(
             "delete point",
             settings=settings,
         )
-    return DeleteResponse(
-        ok=True, deleted=1 if pid in existing else 0, collection_name=collection_name
-    )
+    deleted = 1 if pid in existing else 0
+    http_request.state.log_points = deleted
+    return DeleteResponse(ok=True, deleted=deleted, collection_name=collection_name)
 
 
 class BulkDeleteResponse(BaseModel):
@@ -2037,6 +2070,7 @@ class BulkDeleteResponse(BaseModel):
 @router.delete("", response_model=BulkDeleteResponse)
 async def bulk_delete_points(
     request: BulkDeleteRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -2053,6 +2087,7 @@ async def bulk_delete_points(
     endpoint's 404-on-miss never would for the same selector='ids' delete.
     """
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     async with mutation_scope(client, collection_name, settings, coordinator, manager):
         ids = [_normalize_point_id(i) for i in request.ids]
         existing = await _existing_point_ids(client, collection_name, ids, settings)
@@ -2066,12 +2101,14 @@ async def bulk_delete_points(
             settings=settings,
         )
         deleted = len({i for i in ids if i in existing})
+    http_request.state.log_points = deleted
     return BulkDeleteResponse(ok=True, deleted=deleted, collection_name=collection_name)
 
 
 @router.post("/delete-by-filter", response_model=BulkDeleteResponse)
 async def delete_points_by_filter(
     request: DeleteByFilterRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -2085,6 +2122,7 @@ async def delete_points_by_filter(
     were removed.
     """
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     async with mutation_scope(client, collection_name, settings, coordinator, manager):
         try:
             scroll_filter = build_qdrant_filter(request.filters, settings=settings)
@@ -2111,6 +2149,7 @@ async def delete_points_by_filter(
             "delete by filter",
             settings=settings,
         )
+    http_request.state.log_points = matched
     return BulkDeleteResponse(ok=True, deleted=matched, collection_name=collection_name)
 
 
@@ -2126,6 +2165,7 @@ class PayloadUpdateResponse(BaseModel):
 async def patch_payload(
     point_id: str,
     request: PayloadUpdateRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -2134,6 +2174,7 @@ async def patch_payload(
     """Merge the given fields into an existing point's payload (404 if missing)."""
     _reject_payload_text(request.payload)
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     async with mutation_scope(client, collection_name, settings, coordinator, manager):
         pid, _existing = await _retrieve_point_or_404(
             client, collection_name, point_id, settings, with_payload=False
@@ -2157,6 +2198,7 @@ async def patch_payload(
 async def put_payload(
     point_id: str,
     request: PayloadUpdateRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -2169,6 +2211,7 @@ async def put_payload(
     """
     _reject_payload_text(request.payload)
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     async with mutation_scope(client, collection_name, settings, coordinator, manager):
         pid, existing = await _retrieve_point_or_404(
             client, collection_name, point_id, settings, with_payload=True
@@ -2197,6 +2240,7 @@ async def put_payload(
 async def delete_payload_keys(
     point_id: str,
     request: PayloadKeysDeleteRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -2213,6 +2257,7 @@ async def delete_payload_keys(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     async with mutation_scope(client, collection_name, settings, coordinator, manager):
         pid, _existing = await _retrieve_point_or_404(
             client, collection_name, point_id, settings, with_payload=False
@@ -2236,6 +2281,7 @@ async def delete_payload_keys(
 async def clear_payload(
     point_id: str,
     request: ClearPayloadRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -2248,6 +2294,7 @@ async def clear_payload(
     fields that were present. 404 if the point does not exist.
     """
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     async with mutation_scope(client, collection_name, settings, coordinator, manager):
         pid, existing = await _retrieve_point_or_404(
             client, collection_name, point_id, settings, with_payload=True
@@ -2306,6 +2353,7 @@ async def _resolve_payload_filter(
 @router.patch("/payload", response_model=PayloadFilterUpdateResponse)
 async def patch_payload_by_filter(
     request: PayloadFilterUpdateRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -2320,6 +2368,7 @@ async def patch_payload_by_filter(
     """
     _reject_payload_text(request.payload)
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     async with mutation_scope(client, collection_name, settings, coordinator, manager):
         payload_filter, matched = await _resolve_payload_filter(
             request.filters, collection_name, client, settings
@@ -2334,6 +2383,7 @@ async def patch_payload_by_filter(
             "set payload by filter",
             settings=settings,
         )
+    http_request.state.log_points = matched
     return PayloadFilterUpdateResponse(
         ok=True, matched=matched, collection_name=collection_name
     )
@@ -2342,6 +2392,7 @@ async def patch_payload_by_filter(
 @router.post("/payload/delete-keys", response_model=PayloadFilterUpdateResponse)
 async def delete_payload_keys_by_filter(
     request: PayloadFilterKeysDeleteRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -2357,6 +2408,7 @@ async def delete_payload_keys_by_filter(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     async with mutation_scope(client, collection_name, settings, coordinator, manager):
         payload_filter, matched = await _resolve_payload_filter(
             request.filters, collection_name, client, settings
@@ -2371,6 +2423,7 @@ async def delete_payload_keys_by_filter(
             "delete payload keys by filter",
             settings=settings,
         )
+    http_request.state.log_points = matched
     return PayloadFilterUpdateResponse(
         ok=True, matched=matched, collection_name=collection_name
     )
@@ -2379,6 +2432,7 @@ async def delete_payload_keys_by_filter(
 @router.post("/payload/clear", response_model=PayloadFilterUpdateResponse)
 async def clear_payload_by_filter(
     request: PayloadFilterClearRequest,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     coordinator: Annotated[MutationCoordinator, Depends(get_mutation_coordinator)],
@@ -2392,6 +2446,7 @@ async def clear_payload_by_filter(
     response reports how many points matched.
     """
     collection_name = resolve_collection_name(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     async with mutation_scope(client, collection_name, settings, coordinator, manager):
         payload_filter, matched = await _resolve_payload_filter(
             request.filters, collection_name, client, settings
@@ -2414,6 +2469,7 @@ async def clear_payload_by_filter(
                 "clear payload by filter",
                 settings=settings,
             )
+    http_request.state.log_points = matched
     return PayloadFilterUpdateResponse(
         ok=True, matched=matched, collection_name=collection_name
     )

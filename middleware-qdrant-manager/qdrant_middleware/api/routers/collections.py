@@ -371,6 +371,7 @@ async def verify_collection_endpoint(
 ):
     """Report whether a collection matches the expected schema (never repairs)."""
     collection_name = _resolve_collection(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     schema = _schema_from_options(request)
     try:
         report = await collection_report(
@@ -393,6 +394,7 @@ async def verify_collection_endpoint(
 @router.post("", response_model=OperationResponse)
 async def create_collection_endpoint(
     request: CollectionOptions,
+    http_request: Request,
     client: Annotated[AsyncQdrantClient, Depends(get_qdrant_client)],
     settings: Annotated[Settings, Depends(get_request_settings)],
     embedder: Annotated[EmbedderClient, Depends(get_embedder_client)],
@@ -405,6 +407,7 @@ async def create_collection_endpoint(
     name. Existing collections with non-repairable schema drift yield a 409.
     """
     collection_name = _resolve_collection(request.collection_name, settings)
+    http_request.state.log_collection = collection_name
     if request.recreate and request.confirm_recreate != collection_name:
         raise HTTPException(
             status_code=400,

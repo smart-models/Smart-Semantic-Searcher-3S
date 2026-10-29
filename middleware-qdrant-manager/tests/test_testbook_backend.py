@@ -165,6 +165,7 @@ async def test_skipped_update_modes_invoke_no_embedding_or_upsert(
             points=[{"point_id": str(i), "text": f"text-{i}"} for i in (1, 2)],
             update_mode=mode,
         ),
+        SimpleNamespace(state=SimpleNamespace()),
         store,
         _settings(),
         coordinator,

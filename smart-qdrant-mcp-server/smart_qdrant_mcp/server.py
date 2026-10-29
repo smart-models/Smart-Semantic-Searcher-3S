@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import logging
+import time
 import httpx
 from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
@@ -87,6 +88,26 @@ that must run in a specific order.
 """
 
 
+class _ToolLoggingServer(MCPServer):
+    """``MCPServer`` that logs one line per tool call: name, outcome, duration."""
+
+    async def call_tool(self, name, arguments, context=None):
+        """Run the tool; a returned ``is_error`` and a raised error both log error."""
+        outcome = "error"
+        started_at = time.perf_counter()
+        try:
+            result = await super().call_tool(name, arguments, context)
+            if not getattr(result, "is_error", False):
+                outcome = "ok"
+            return result
+        finally:
+            # Never the arguments: they carry queries, texts, payloads and
+            # confirm values. %r keeps a client-chosen name on one line.
+            logger.info(
+                "tool %r %s %.1fs", name, outcome, time.perf_counter() - started_at
+            )
+
+
 def build_server(
     settings: Settings,
     *,
@@ -111,7 +132,7 @@ def build_server(
         close_auth=getattr(token_verifier, "aclose", None),
     )
 
-    mcp = MCPServer(
+    mcp = _ToolLoggingServer(
         "smart_qdrant_mcp",
         version=__version__,
         instructions=_SERVER_INSTRUCTIONS,
@@ -133,6 +154,17 @@ def build_server(
     return mcp, ctx
 
 
+class _DropAccessLogQuery(logging.Filter):
+    """Drop the query string from uvicorn's access line, keeping the line."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Rewrite ``(client, method, path_with_query, version, status)``."""
+        args = record.args
+        if isinstance(args, tuple) and len(args) == 5 and isinstance(args[2], str):
+            record.args = (*args[:2], args[2].split("?", 1)[0], *args[3:])
+        return True
+
+
 def configure_package_logging() -> None:
     """Attach one stream handler to this package's logger, at INFO.
 
@@ -140,7 +172,13 @@ def configure_package_logging() -> None:
     effective-ACL line below would be dropped by logging's last-resort handler,
     which ignores anything below WARNING. Scoped to this package so enabling it
     does not also turn on INFO for httpx and the MCP SDK.
+
+    It also filters uvicorn's access line down to client, method, path and
+    status: the query string is never logged.
     """
+    access_logger = logging.getLogger("uvicorn.access")
+    if not any(isinstance(f, _DropAccessLogQuery) for f in access_logger.filters):
+        access_logger.addFilter(_DropAccessLogQuery())
     package_logger = logging.getLogger("smart_qdrant_mcp")
     if package_logger.handlers:
         return

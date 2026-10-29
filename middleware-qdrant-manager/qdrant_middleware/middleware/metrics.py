@@ -1,12 +1,19 @@
 """Prometheus metrics and request timeout instrumentation."""
 
 import asyncio
+import logging
 import time
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge, Histogram, Info
 from starlette.status import HTTP_504_GATEWAY_TIMEOUT
+
+logger = logging.getLogger(__name__)
+
+# Reads are not operations: logging them would bury the operation lines under
+# console polling and health probes.
+_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 requests_total = Counter(
     "qdrant_manager_requests_total",
@@ -44,6 +51,35 @@ def metric_endpoint(request: Request) -> str:
     return "unmatched"
 
 
+def _one_line(value) -> str:
+    """Escape control characters so a client-chosen value cannot split a line."""
+    return str(value).encode("unicode_escape").decode("ascii")
+
+
+def log_operation(request: Request, status, duration: float) -> None:
+    """Log one finished operation: caller, outcome, identifiers and counts.
+
+    Routes publish ``request.state.log_collection`` and ``log_points``; a
+    collection named in the path is used when the route set none. Only the
+    path is logged, never the query string, and never a query text, payload,
+    file name or token.
+    """
+    state = request.state
+    collection = getattr(state, "log_collection", None) or request.path_params.get(
+        "collection_name", "-"
+    )
+    logger.info(
+        "operation %s %s: caller=%s status=%s collection=%s points=%s duration=%.3fs",
+        request.method,
+        _one_line(request.url.path),
+        getattr(state, "auth_label", "-"),
+        status,
+        _one_line(collection),
+        getattr(state, "log_points", "-"),
+        duration,
+    )
+
+
 class TimeoutMetricsMiddleware:
     """Own and cancel the ASGI handler before emitting a timeout response."""
 
@@ -63,6 +99,8 @@ class TimeoutMetricsMiddleware:
         recorded = False
         handler = None
         headers = None
+        # "-" survives only when no response started: a cancelled request.
+        response_status = "-"
 
         def record(status=None):
             """Count a response once, retaining header-time latency semantics."""
@@ -80,7 +118,9 @@ class TimeoutMetricsMiddleware:
 
         async def observed_send(message):
             """Record the first response start without buffering its body."""
+            nonlocal response_status
             if message["type"] == "http.response.start":
+                response_status = message["status"]
                 headers_started.set()
                 record(message["status"])
             await send(message)
@@ -109,6 +149,8 @@ class TimeoutMetricsMiddleware:
                 await handler
         except Exception:
             record(500)
+            if not headers_started.is_set():
+                response_status = 500
             raise
         finally:
             pending = [task for task in (headers, handler) if task is not None]
@@ -118,3 +160,7 @@ class TimeoutMetricsMiddleware:
             if pending:
                 await asyncio.gather(*pending, return_exceptions=True)
             record()
+            if request.method not in _READ_METHODS:
+                log_operation(
+                    request, response_status, time.perf_counter() - started_at
+                )

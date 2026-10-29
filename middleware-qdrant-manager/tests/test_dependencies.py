@@ -1,5 +1,7 @@
 """Tests for FastAPI dependencies: bearer auth and lazy embedder creation."""
 
+import io
+import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
@@ -222,12 +224,19 @@ def test_auth_disabled_serves_without_a_header():
     assert client.get("/collections").status_code == 503
 
 
-def test_the_matched_label_is_logged_and_the_token_is_not(caplog):
+def test_the_matched_label_is_logged_and_the_token_is_not():
+    # Read the package's real handler: caplog listens on the root logger, which
+    # propagate=False keeps these records away from.
     client = _auth_client(MIDDLEWARE_API_TOKENS="s3cret-token:alice")
-    with caplog.at_level("INFO", logger="qdrant_middleware.api.dependencies"):
+    handler = logging.getLogger("qdrant_middleware").handlers[0]
+    buffer = io.StringIO()
+    previous = handler.setStream(buffer)
+    try:
         client.get("/collections", headers={"Authorization": "Bearer s3cret-token"})
-    assert "alice" in caplog.text
-    assert "s3cret-token" not in caplog.text
+    finally:
+        handler.setStream(previous)
+    assert "request authenticated: alice" in buffer.getvalue()
+    assert "s3cret-token" not in buffer.getvalue()
 
 
 def test_a_non_ascii_token_is_a_401_not_a_500():
