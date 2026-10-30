@@ -13,7 +13,7 @@ COPY requirements/ requirements/
 RUN pip install --upgrade \
         -c requirements/locks/middleware-py311-linux.txt \
         pip==26.2.0 \
-        setuptools==83.0.0 \
+        setuptools==84.2.1 \
         wheel==0.46.2 \
     && pip install --no-compile \
         -r requirements/middleware.txt \
@@ -58,7 +58,7 @@ COPY requirements/ requirements/
 RUN pip install --upgrade \
         -c requirements/locks/mcp-py311-linux.txt \
         pip==26.2.0 \
-        setuptools==83.0.0 \
+        setuptools==84.2.1 \
         wheel==0.46.2 \
     && pip install --no-compile \
         -r requirements/mcp.txt \
@@ -103,7 +103,7 @@ COPY requirements/ requirements/
 RUN pip install --upgrade \
         -c requirements/locks/embedder-cpu-py311-linux.txt \
         pip==26.2.0 \
-        setuptools==83.0.0 \
+        setuptools==84.2.1 \
         wheel==0.46.2
 RUN --mount=type=cache,target=/root/.cache/pip \
     PIP_NO_CACHE_DIR=0 pip install --no-compile \
@@ -179,7 +179,7 @@ COPY requirements/ requirements/
 RUN pip install --upgrade \
         -c requirements/locks/embedder-gpu-py310-linux.txt \
         pip==26.2.0 \
-        setuptools==83.0.0 \
+        setuptools==84.2.1 \
         wheel==0.46.2
 RUN --mount=type=cache,target=/root/.cache/pip \
     PIP_NO_CACHE_DIR=0 pip install --no-compile \

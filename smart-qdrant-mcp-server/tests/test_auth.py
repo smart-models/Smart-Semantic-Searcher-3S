@@ -105,6 +105,14 @@ def test_oauth_settings_publish_real_resource_metadata():
     assert auth.required_scopes == ["qdrant:read", "qdrant:write"]
 
 
+def test_oauth_settings_leave_the_audience_check_to_the_verifier():
+    """The SDK's resource check would compare against the URL, not the audience."""
+    settings = load_settings(**OAUTH_ENV, _env_file=None)
+    auth = build_auth_settings(settings)
+    assert auth is not None
+    assert auth.validate_token_resource is False
+
+
 async def test_oauth_introspection_accepts_valid_token():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"].startswith("Basic ")

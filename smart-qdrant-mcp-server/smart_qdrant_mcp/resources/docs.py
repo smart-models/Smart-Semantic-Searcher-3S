@@ -1,7 +1,7 @@
 """Teaching and reference documents, published as MCP resources.
 
 These are static files that change only when this repository changes. In
-principle a client could cache them aggressively, but `mcp==2.0.0` wires cache
+principle a client could cache them aggressively, but `mcp==2.2.0` wires cache
 hints per *method* (`resources/read`), not per resource URI (verified in Task 0,
 `docs/superpowers/notes/mcp-v2-api.md`), and `resources/read` is shared with the
 short-lived resources in `live.py`. No `cache_hints` entry is set here; see

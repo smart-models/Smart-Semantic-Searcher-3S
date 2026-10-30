@@ -42,7 +42,7 @@ Client / MCP client → smart-qdrant-mcp (MCP, 6337) → middleware-qdrant-manag
 - Not a Qdrant or Smart Embedder client. It never talks to either directly.
 - Not internet-facing. See [Invariants](#invariants).
 
-Built on `mcp==2.0.0`, whose installed SDK reports `2026-07-28` as its latest
+Built on `mcp==2.2.0`, whose installed SDK reports `2026-07-28` as its latest
 protocol version and `2025-11-25` as its latest handshake version
 (`mcp.types.version.LATEST_MODERN_VERSION` / `LATEST_HANDSHAKE_VERSION`); both
 are in `SUPPORTED_PROTOCOL_VERSIONS`, so a client negotiating either succeeds.
@@ -272,7 +272,7 @@ with why.
 Twenty-one static documents (`docs://...`, `smart_qdrant_mcp/resources/docs/`)
 plus three live-state proxies (`qhm://...`,
 `smart_qdrant_mcp/resources/live.py`) — 24 total. None are cached:
-`mcp==2.0.0` configures cache hints per JSON-RPC method (all of
+`mcp==2.2.0` configures cache hints per JSON-RPC method (all of
 `resources/read`), not per URI, and that method is shared between the two
 kinds, so caching one would mis-cache the other.
 
@@ -765,7 +765,7 @@ index list) rather than by trusting any single tool run — see
 single-value answers, no question names a tool directly).
 
 The harness itself (`evals/harness/`) is vendored from the `mcp-builder` skill
-with one runtime patch for `mcp==2.0.0`'s renamed streamable-HTTP client API —
+with one runtime patch for `mcp` 2.x's renamed streamable-HTTP client API —
 see [`evals/harness/README.md`](evals/harness/README.md).
 
 The seed script targets `mcp_eval`, outside the console's `e2e_` campaign

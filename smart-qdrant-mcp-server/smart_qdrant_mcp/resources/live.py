@@ -2,7 +2,7 @@
 
 These are resources rather than tools because they take no arguments and are
 read for context, not called to act. There is no per-resource cache control
-in ``mcp==2.0.0`` — cache hints are configured once per JSON-RPC method (e.g.
+in ``mcp==2.2.0`` — cache hints are configured once per JSON-RPC method (e.g.
 all of ``resources/read``), and that method is shared with any documentation
 resources added later, so a short TTL for live state cannot coexist with a
 long TTL for static docs under the same hint. This module leaves

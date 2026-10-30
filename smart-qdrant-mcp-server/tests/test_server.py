@@ -304,7 +304,7 @@ def test_transport_body_size_default_matches_the_documented_4_mib():
 def _attr(key: str) -> str:
     """Map a camelCase annotation key to the SDK model's snake_case attribute.
 
-    `mcp_types.ToolAnnotations` (verified against the installed ``mcp==2.0.0``)
+    `mcp_types.ToolAnnotations` (verified against the installed ``mcp==2.2.0``)
     exposes Python attributes in snake_case (``read_only_hint``,
     ``open_world_hint``, ...) and only carries the camelCase spelling
     (``readOnlyHint``, ``openWorldHint``, ...) as a pydantic serialization

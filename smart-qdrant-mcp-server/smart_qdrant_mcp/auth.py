@@ -239,8 +239,11 @@ def build_auth_settings(settings: Settings) -> AuthSettings | None:
             resource_server_url=None,
             required_scopes=[],
         )
+    # The introspection verifier already enforces the expected audience, which
+    # need not equal the resource URL the SDK's own check would compare against.
     return AuthSettings(
         issuer_url=settings.oauth_issuer_url,
         resource_server_url=settings.oauth_resource_server_url,
         required_scopes=settings.oauth_required_scopes,
+        validate_token_resource=False,
     )

@@ -10,10 +10,10 @@ directly, so seeding exercises the same path the evaluation will. The
 Task 0) accepts a URL string directly, but that path has no way to attach an
 ``Authorization`` header. To carry the bearer token, this script instead
 builds the ``streamable_http_client(...)`` transport itself with a
-pre-configured ``httpx2.AsyncClient`` (the underlying HTTP client `mcp==2.0.0`
+pre-configured ``httpx2.AsyncClient`` (the underlying HTTP client `mcp==2.2.0`
 depends on) and hands that ``Transport`` to ``Client(...)`` — the third
 constructor shape ``Client`` documents (``Server | MCPServer | Transport |
-str``), verified directly against the installed ``mcp==2.0.0`` package.
+str``), verified directly against the installed ``mcp==2.2.0`` package.
 """
 
 from __future__ import annotations

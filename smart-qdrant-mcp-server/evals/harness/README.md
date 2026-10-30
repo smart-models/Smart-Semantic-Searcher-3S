@@ -54,7 +54,8 @@ this checkout).
 ## The applied patch
 
 `connections.py`'s HTTP transport used a v1-era client API that no longer
-exists in `mcp==2.0.0`, the version this repository pins everywhere else. Two
+exists in `mcp` 2.x. It was written against 2.0.0; the repository now pins 2.2.0,
+whose transport signatures are unchanged. Two
 things differ between the vendored skill's assumed API and the real one:
 
 1. **The function was renamed.**
@@ -89,8 +90,8 @@ never touches the transport layer.
 
 **`requirements.txt`.** The `mcp>=1.1.0` floor was bumped to `mcp>=2.0.0`,
 since the patched code assumes the 2.x API shape. (The pre-patch code would
-have been fine on 1.x; this project only ships `mcp==2.0.0`, so the floor now
-matches what is installed everywhere else.)
+have been fine on 1.x; this project ships `mcp` 2.x, so the floor matches the API the patch
+assumes.)
 
 ## Capabilities and limits
 

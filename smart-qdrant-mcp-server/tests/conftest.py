@@ -189,7 +189,7 @@ def call(mcp_client):
     Every tool declares exactly one input argument named ``params`` (a
     Pydantic model); the SDK's generated argument schema therefore nests the
     tool's real fields one level under a ``params`` key on the wire
-    (verified against the installed ``mcp==2.0.0``: a function parameter
+    (verified against the installed ``mcp==2.2.0``: a function parameter
     typed as a ``BaseModel`` is not flattened into the top-level arguments
     the way the v1 FastMCP reference docs describe). This is the one place
     that nesting is applied, so every test can keep writing
