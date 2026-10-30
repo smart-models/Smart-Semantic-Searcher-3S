@@ -129,6 +129,8 @@ async def test_server_has_instructions(mcp_server):
     assert "response_format" in mcp_server.instructions
     assert "confirm" in mcp_server.instructions
     assert "pagination" in mcp_server.instructions.lower()
+    assert "smart-qdrant-mcp skill" in mcp_server.instructions
+    assert "docs://reference/smart-qdrant-skill" in mcp_server.instructions
 
 
 async def test_every_declared_tool_is_registered(mcp_client):

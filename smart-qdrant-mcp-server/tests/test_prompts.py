@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from smart_qdrant_mcp.resources.docs import DOC_RESOURCES
+from smart_qdrant_mcp.resources.docs import DOC_RESOURCES, published_documents
 from smart_qdrant_mcp.server import (
     SERVER_CONFIRM_TOOL_NAMES,
     SERVER_FILESYSTEM_TOOL_NAMES,
@@ -191,7 +191,7 @@ async def test_server_instructions_only_name_real_tools_and_documents(mcp_client
     assert mentioned_names <= listed_tools | listed_prompts
     assert mentioned_names - listed_prompts <= set(TOOL_ROUTES)
     assert mentioned_documents
-    assert mentioned_documents <= set(DOC_RESOURCES)
+    assert mentioned_documents <= set(published_documents())
 
 
 async def test_server_confirmation_claims_match_real_tool_schemas(mcp_client):

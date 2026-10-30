@@ -2,5 +2,6 @@
 pytest==9.1.1
 pytest-asyncio==1.4.0
 ruff==0.15.11
-# Parse workflow contracts in scripts/test_ci_workflow.py; no runtime image use.
+# Parse workflow contracts in scripts/test_ci_workflow.py and the skill frontmatter
+# in smart-qdrant-mcp-server/tests/test_resources_docs.py; no runtime image use.
 PyYAML==6.0.3

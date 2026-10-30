@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 from mcp import MCPError
 
 from smart_qdrant_mcp.resources.docs import (
@@ -171,6 +172,27 @@ def test_every_app_document_matches_its_repository_original(file_name):
     assert copied.read_bytes() == original.read_bytes(), (
         f"{file_name} has drifted from {APP_DOCUMENT_ORIGINS[file_name]}; re-copy it"
     )
+
+
+def test_skill_description_triggers_on_every_qdrant_call():
+    """The skill's frontmatter makes it the companion of every ``qdrant_*`` call.
+
+    A host decides whether to load a skill from its ``description`` alone, so a
+    description that names only searches and ingests leaves health checks and
+    listings running without the skill's rules.
+    """
+    skill = Path(__file__).parents[2] / "smart-skill/smart-qdrant-mcp/SKILL.md"
+    if not skill.is_file():
+        pytest.skip(f"{skill} is outside this checkout")
+    frontmatter = yaml.safe_load(skill.read_text(encoding="utf-8").split("---", 2)[1])
+    description = frontmatter["description"]
+
+    assert frontmatter["name"] == "smart-qdrant-mcp"
+    assert len(description) <= 1024
+    assert not description.startswith("Use when")
+    assert "Use when" in description
+    assert "any `qdrant_*` tool" in description
+    assert re.search(r"\b(I|you|your)\b", description, re.IGNORECASE) is None
 
 
 @pytest.mark.parametrize(

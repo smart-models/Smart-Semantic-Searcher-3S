@@ -42,6 +42,10 @@ One skill lives here today:
 |---|---|
 | [`smart-qdrant-mcp/`](smart-qdrant-mcp/SKILL.md) | Using the 28 `qdrant_*` tools of [`smart-qdrant-mcp-server`](../smart-qdrant-mcp-server/README.md): hybrid-search tuning, ingest discipline, destructive-operation gates, error recovery. |
 
+The skill applies to every `qdrant_*` call, a health check as much as an
+ingest, and the server's own handshake `instructions` ask the agent to load it
+before the first call.
+
 ## Mental model
 
 Four facts explain every design decision in this directory.
@@ -63,8 +67,11 @@ Four facts explain every design decision in this directory.
    once, above the list, so path-reading hosts still resolve the files.
 4. **The skill can drift and nothing will catch it.** The server's test suite
    fails when a *prompt or doc resource* names something that no longer exists,
-   but no test watches this directory. Alignment is a maintenance discipline —
-   see [Invariants](#invariants).
+   and `smart-qdrant-mcp-server/tests/test_resources_docs.py` pins this skill's
+   frontmatter (`name` and `description`) and keeps the server's packaged copies
+   of `SKILL.md` and this README byte-identical. No test checks that the skill
+   body agrees with what the tools actually do: that alignment is a maintenance
+   discipline — see [Invariants](#invariants).
 
 ## Map of the code
 
