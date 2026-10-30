@@ -4,12 +4,15 @@ All arguments go under `params`. Every tool accepts `response_format`:
 `"markdown"` (default) or `"json"` — pick `json` whenever you need exact
 values (scores, ids, pagination cursors, `embedder_profile`), markdown when
 reading results. `collection_name` is optional (falls back to the
-server default) on the read/search/ingest/export/upsert tools and
-`qdrant_verify_collection`; it is **required** everywhere else — every
-collection-lifecycle, payload-index, and reindex tool, `qdrant_get_collection`,
+server default) on the read/search/ingest/export/upsert tools,
+`qdrant_verify_collection`, `qdrant_create_collection`, `qdrant_set_payload`
+and `qdrant_delete_payload_keys`; it is **required** everywhere else —
+`qdrant_get_collection`, `qdrant_update_schema_toggles`,
+`qdrant_delete_collection`, every payload-index and reindex tool,
 `qdrant_delete_points`, `qdrant_clear_payload` — and on any gated call
-(`recreate=true`, `mode="replace"`, `replace_source=true`), where the `confirm`
-must be checked against a name the caller actually gave.
+(`recreate=true`, `mode="replace"`; `replace_source=true` needs an explicit
+`source_id` instead), where the `confirm` must be checked against a value the
+caller actually gave.
 
 Coverage contract: these 28 tools expose **every request parameter of the
 middleware's 42 REST endpoints**. The only deliberate exceptions: the
@@ -53,11 +56,11 @@ default for this call only.
 | `rrf_k` | Qdrant's own default (2) | Only valid with `fusion="rrf"`. Smoothing constant: small k sharpens the top-rank advantage, large k (canonical paper value 60, typical range 40–80) flattens it. Change it only with evaluation evidence. |
 | `rrf_weights` | equal | Only valid with `fusion="rrf"`. Exactly two non-negative floats, **positional: `[dense, sparse]`**. Upweight sparse (e.g. `[1.0, 1.5]`) for identifier/keyword-heavy corpora, dense for natural-language QA. |
 | `rerank` | `true` | The cross-encoder reads query + document together in one pass — the single biggest precision lever. Keep on for quality; set `false` for cheap broad sweeps. |
-| `rerank_top_k` | 20 (max 200) | Cost/precision knob: only this many fused hits pay the reranker's per-candidate forward pass. Must be `≤ candidate_limit` (else 400). 10 for precision-first, larger for recall. |
+| `rerank_top_k` | 20 (max 200) | Cost/precision knob: only this many fused hits pay the reranker's per-candidate forward pass. Must be `≤ candidate_limit` (else 422, shown as `Error: invalid request — …`). 10 for precision-first, larger for recall. |
 | `rerank_normalize` | `true` | Keep on: reranker scores come back on a comparable 0–1 scale. |
 | `filters` | none | Pre-filters **both** retrievers before fusion — hits only compete inside the filtered subset. Index every key you filter on (`qdrant_create_payload_index`); unindexed keys may scan or be refused by Qdrant strict mode. Grammar: `docs://reference/filters`. |
 | `with_payload` | all fields | Omitting it dumps every payload field of every hit into context. Pass e.g. `["text", "source_id"]`. |
-| `offset` | 0 | Deep-paging ceiling: `offset + window` must fit inside `candidate_limit`, else a 400 tells you the required value. `window` is `max(limit, rerank_top_k)` while reranking, plain `limit` with `rerank=false`. With shipped caps and rerank on that tops out near offset 180; page further with `qdrant_scroll_points` + `order_by`. |
+| `offset` | 0 | Deep-paging ceiling: `offset + window` must fit inside `candidate_limit`, else a 422 tells you the required value. `window` is `max(limit, rerank_top_k)` while reranking, plain `limit` with `rerank=false`. With shipped caps and rerank on that tops out near offset 180; page further with `qdrant_scroll_points` + `order_by`. |
 | `score_threshold` | none | Applies to the **fused** score, before reranking — a dropped candidate never reaches the reranker. The RRF fused scale depends on `rrf_k` and on whether a hit appears in both legs, so calibrate from observed `json` scores rather than guessing a number. |
 | `hnsw_ef` | unset → Qdrant falls back to `ef_construct`, **200 in this stack** (`HNSW_EF_CONSTRUCT`; Qdrant's own default is 100) | Prefetch HNSW graph breadth. Tune from 200, not from 100: 256 is a ~28% widening here, not a doubling. Lowering trades quality for speed. |
 | `exact` | `false` | Bypasses HNSW for an exact scan — slow; a diagnostic, not a production setting. |
@@ -129,8 +132,8 @@ or assuming a contract.
 | `response_format` | `markdown` | — |
 
 Never mutates, never 404s on a missing collection (reports `exists: false`).
-This is the first diagnostic for nonsense search results: an
-embedding-contract mismatch lives in its `errors`.
+This is the first diagnostic when `qdrant_search` refuses with a contract
+409: the embedding-contract mismatch behind it lives in its `errors`.
 
 ### `qdrant_create_collection`
 
@@ -322,12 +325,16 @@ Both tools embed server-side and derive point ids as `UUID5(source_id:id)`:
 re-ingesting a source overwrites rather than duplicates. A partial failure
 returns HTTP 200 with `ok: false` and `failed_at_chunk` — everything before
 that position is already written; resume there, do not restart blindly.
+One call carries at most `INGEST_MAX_CHUNKS` chunks (10000 shipped), file or
+inline: more is refused with 413 before anything is embedded, and this server
+reports it as `Error: request body too large.` — split the source across
+calls sharing one `source_id`.
 
 ### `qdrant_ingest_file`
 
 | Param | Default | Use it well |
 |---|---|---|
-| `file_path` | — (required) | Relative to the middleware's `data/` root **on its host**; absolute paths and `..` are rejected (400). The file must already be staged there — no tool can write it. |
+| `file_path` | — (required) | Relative to the middleware's `data/` root **on its host**; a path resolving outside it (absolute, or `..` climbing out) is rejected (400), as is a file over `INGEST_MAX_FILE_BYTES` (64 MiB shipped, `File too large`). The file must already be staged there — no tool can write it. |
 | `collection_name` | server default | — |
 | `batch_size` | 64 (middleware default) | Chunks per embed/upsert round trip. Lower it (e.g. 8) for long chunks or a slow embedder to stay inside timeouts. |
 | `source_id` | file name w/o extension | Explicit **required** when `replace_source=true`. |
@@ -456,7 +463,8 @@ Two parameters this tool deliberately does **not** have:
 The document produced is `{"chunks": [...], "metadata": {...}}` — the same
 shape `qdrant_ingest_chunks` expects, payload only, never vectors. Each chunk
 is the stored payload verbatim plus a trailing **`point_id`** carrying the
-Qdrant point id as a UUID string; it is a key of its own so it cannot collide
+Qdrant point id as a string — a UUID for ingested points, an unsigned integer
+for a point upserted under one; it is a key of its own so it cannot collide
 with a chunk's `id`. See `playbooks.md` §7 for the re-ingest id trap (strip
 `point_id`, and check `id` is an integer — exports written before this split
 put the UUID under `id` instead).
@@ -549,7 +557,7 @@ The most dangerous tool in the server.
 |---|---|---|
 | `selector` | — (required) | `"ids"` or `"filter"`. |
 | `collection_name` | — (required) | Required always: the confirm target and the dry-run's counting scope. |
-| `ids` | none (≤1000) | Required non-empty with `selector="ids"`. One request per id: over 1000 the tool refuses and points at `selector="filter"`, which does it in one. |
+| `ids` | none (≤10000) | Required non-empty with `selector="ids"`. One id uses the single-point endpoint; more go out as one bulk request. |
 | `filters` | none | Required non-empty with `selector="filter"` — an empty filter would match every point and is refused outright, `confirm` or not. |
 | `confirm` | none | Exact `collection_name`. With `selector="filter"`, **omitting it runs a free dry-run count** — always rehearse, report the number, then confirm. With `selector="ids"` there is no dry run: read/scroll the ids first and show what will go. |
 | `response_format` | `markdown` | — |
@@ -601,8 +609,9 @@ remove them. `qdrant_set_payload` cannot set `text`; use
 | Cap | Value | Where it bites |
 |---|---|---|
 | MCP transport request body | 4 MiB | Inline `qdrant_ingest_chunks` — rejected before any tool runs, bare text, no `is_error`. |
-| Middleware request body | 25 MiB | Rarely reached first from MCP. |
-| `MCP_HTTP_TIMEOUT` | 120 s | Every outbound call, ingest and export included. The server also retries transient failures (3 attempts by default, `MCP_RETRY_ATTEMPTS`) before reporting. |
+| `INGEST_MAX_CHUNKS` | 10000 per ingest call | File or inline. 413 before anything is embedded, reported as `Error: request body too large.` Split across calls sharing one `source_id`. |
+| `INGEST_MAX_FILE_BYTES` | 67108864 (64 MiB) | `qdrant_ingest_file` only: a larger staged file is refused with 400 `File too large`. |
+| `MCP_HTTP_TIMEOUT` | 120 s | Every outbound call, ingest and export included. Only reads are retried before reporting (see `MCP_RETRY_ATTEMPTS`). |
 | `qdrant_read_points` ids | 1000 | |
 | `qdrant_scroll_points` / `qdrant_facet_points` limit | 1000 | |
 | `qdrant_upsert_points` points / `qdrant_delete_points` ids | 10000 | |
@@ -613,23 +622,42 @@ remove them. `qdrant_set_payload` cannot set `text`; use
 | Search `limit` / `candidate_limit` | 50 / 200 (shipped `QUERY_MAX_*`) | Deep paging hits the candidate ceiling — see `qdrant_search.offset`. |
 | `confirm` token length | 255 chars | Over-long tokens refused locally. |
 | Filter depth / conditions | 20 / 100 (configurable) | Rejected before reaching Qdrant. |
-| `MCP_RETRY_ATTEMPTS` | 3 | Transient middleware failures are already retried before you see the error. |
+| `MCP_RETRY_ATTEMPTS` | 3 | Total attempts on transient failures for reads only — GETs and the read-only POSTs (search, scroll, count, facet, retrieve, verify, reindex preflight). Writes are sent once, never retried: after a failed or timed-out write, check with `qdrant_count_points` or `qdrant_read_points` before re-sending (ingest and upsert are idempotent, so re-sending the same chunks is safe). |
 
 ## Resources
 
-Documentation (`docs://`) — read before improvising:
+Documentation (`docs://`, 21 in all) — read before improvising. Nine
+teaching documents written against these tools:
 
 | URI | Read it when |
 |---|---|
 | `docs://concepts/hybrid-search` | Understanding what dense and sparse each contribute, and why ColBERT plays no part here. |
 | `docs://concepts/fusion-and-rerank` | Choosing `fusion`, `rrf_k`, `rrf_weights`, `candidate_limit`, rerank settings — the theory behind every `qdrant_search` knob. |
 | `docs://concepts/qdrant-data-model` | Before creating a collection: the four toggles, HNSW, quantization, on-disk trades. |
-| `docs://concepts/embedding-contract` | Before ingesting, and whenever results look like nonsense. |
+| `docs://concepts/embedding-contract` | Before ingesting, and whenever a search or write is refused with a contract 409. |
 | `docs://reference/filters` | Writing any `filters` object: legacy vs logical syntax, operators, depth/condition limits. |
 | `docs://workflows/ingest` | Before the first ingest: chunk shape, sizing, staging. |
 | `docs://workflows/search-recipes` | Five concrete `qdrant_search` parameterisations + the empty-results checklist. |
 | `docs://workflows/reindex` | Before any reindex. |
-| `docs://troubleshooting` | The full error-text → next-call table (superset of `playbooks.md` §8). |
+| `docs://troubleshooting` | The full error-text → next-call table (`playbooks.md` §8 is its short form). |
+
+Twelve application documents, byte copies of the repository's own guides and
+component READMEs:
+
+| URI | Read it when |
+|---|---|
+| `docs://guide/getting-started` | A user's first run: `.env`, connecting Qdrant, starting the stack, a first search. |
+| `docs://guide/cli` | Telling a user how to start, stop or inspect the stack with the launchers. |
+| `docs://guide/environment` | A user asks what a `.env` setting does or how a change is applied. |
+| `docs://guide/architecture` | Explaining how the local stack fits together. |
+| `docs://guide/hybrid-search-rerank` | Explaining hybrid search and reranking to an end user. |
+| `docs://guide/embedding-models` | Which models the `basic` and `advanced` profiles run, their sources and licenses. |
+| `docs://reference/middleware-api` | The REST behaviour behind a tool's response. |
+| `docs://reference/launcher-scripts` | Exact launcher commands, flags and exit codes. |
+| `docs://reference/smart-embedder` | Embedding and reranking behaviour, profiles, inference limits. |
+| `docs://reference/mcp-server` | This server's contracts, including the one-table view of every confirmation gate. |
+| `docs://reference/agent-skills` | What the client-side skills cover. |
+| `docs://reference/smart-qdrant-skill` | This skill's `SKILL.md` — what the server's instructions point a client without the skill at. |
 
 Live state (`qhm://`) — read for context without spending a tool call:
 `qhm://collections`, `qhm://health`, `qhm://metrics` (Prometheus text).
@@ -642,7 +670,8 @@ Prompts (multi-tool sequences that must run in order):
 
 The server's source of truth is `smart_qdrant_mcp/tools/*.py` (input models
 and gates), `tool_map.TOOL_ROUTES` (tool → endpoint), and
-`resources/docs.py` (`DOC_RESOURCES`). Its own tests (`test_prompts.py`,
+`resources/docs.py` (all 21 documents: the nine teaching docs in
+`DOC_RESOURCES`, the twelve application copies in `APP_RESOURCES`). Its own tests (`test_prompts.py`,
 `test_resources_docs.py`) fail when a prompt or doc points at something that
 no longer exists. When the server adds, renames, or re-params a tool,
 update this file in the same change — and verify the live surface with the

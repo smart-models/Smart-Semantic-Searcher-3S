@@ -61,8 +61,8 @@ Eight facts explain most of the surprising behaviour.
 3. **Bearer auth is not a middleware layer.** `require_bearer_auth` is a
    route-level dependency, so it runs *inside* every middleware layer. A
    request over `REQUEST_BODY_MAX_BYTES` is rejected before its token is ever
-   checked, and the unauthenticated monitoring router still passes through
-   every layer.
+   checked, and a monitoring probe exempt from auth (see
+   [Monitoring](#monitoring)) still passes through every layer.
 4. **`/readyz` reflects a cached probe**, refreshed every
    `HEALTH_PROBE_INTERVAL` seconds. It does not probe on request.
 5. **A collection carries an embedding-contract fingerprint** stamped at
@@ -109,15 +109,15 @@ isolated apps.
 
 | Path | Role | Change it when |
 |---|---|---|
-| `qdrant_middleware/main.py` | App factory, middleware registration, router mounting. | The middleware order or a router's protection changes. |
+| `qdrant_middleware/main.py` | App factory, middleware registration, router mounting, and `configure_package_logging()` (package INFO handler, query-string filter on uvicorn's access line). | The middleware order, a router's protection or log setup changes. |
 | `qdrant_middleware/core/config.py` | `Settings` — the single source of truth for every environment variable, its default, range and cross-field invariant. Also the non-tunable module constants. | Any configuration change. |
 | `qdrant_middleware/api/dependencies.py`, `api/utils.py` | Route dependencies and shared request helpers. | Authentication/readiness dependencies or common route handling change. |
-| `qdrant_middleware/middleware/` | Body limits, shutdown protection, rate limiting and timeout/metrics handling. | Cross-cutting request admission or response handling changes. |
+| `qdrant_middleware/middleware/` | Body limits, shutdown protection, rate limiting and timeout/metrics handling, including the one-line operation log (`metrics.py`). | Cross-cutting request admission or response handling changes. |
 | `qdrant_middleware/schemas/` | Collection, embedding-contract and reindex models. Point/query request models also live beside their routers. | Validation or a public JSON contract changes. |
 | `qdrant_middleware/core/mutation_coordinator.py`, `services/mutation_guard.py` | Coordinate collection mutations with reindex activity. | A new write path or concurrent operation is introduced. |
 | `qdrant_middleware/core/lifespan.py` | Opens and closes the Qdrant client across the app lifespan. | Client lifecycle changes. |
 | `qdrant_middleware/core/runtime.py` | Per-app runtime state: counters, embedder handle and lock. | Shared mutable state changes. |
-| `qdrant_middleware/api/routers/` | `collections`, `points`, `query` (all behind `require_bearer_auth` + `require_operational_readiness`), and `monitoring` (unprotected). | An endpoint is added or its contract changes. |
+| `qdrant_middleware/api/routers/` | `collections`, `points`, `query` (all behind `require_bearer_auth` + `require_operational_readiness`), and `monitoring` (bearer auth with per-path exemptions, no readiness gate — see [Monitoring](#monitoring)). | An endpoint is added or its contract changes. |
 | `qdrant_middleware/clients/embedder.py` | The Smart Embedder client. | The embedder's HTTP contract changes. |
 | `qdrant_middleware/clients/retry.py` | The shared exponential-backoff retry policy for transient 5xx/429/timeout/connection errors, against both Qdrant and Smart Embedder. | Retry semantics change. |
 | `qdrant_middleware/repositories/qdrant_collections.py` | Primary gateway for collection schema, metadata and payload-index I/O, including their caches and retry policy. | Collection/schema Qdrant access. |
@@ -514,6 +514,11 @@ every explicitly named environment setting the middleware accepts. The root
 `.env.example` supplies the common deployment values; Compose replaces
 `SMART_EMBEDDER_URL` with its private service DNS name.
 
+The **Default** column is the code's own (`core/config.py`), used when a
+variable is unset. Two differ from what the template ships: `QDRANT_URL`
+(`http://host.docker.internal:6333`, so the container reaches a Qdrant on the
+host) and `MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL` (`true`).
+
 Numeric settings carry validated ranges and cross-field invariants; the
 authoritative ranges live in `.env.example` and are enforced by
 `core/config.py`.
@@ -824,7 +829,8 @@ python3 -m pytest middleware-qdrant-manager/tests -k test_name -q      # one tes
 ```
 
 Tests run without a live Qdrant or Smart Embedder — they fake the clients.
-`pyproject.toml` sets `pythonpath = ["middleware-qdrant-manager"]` and
+`pyproject.toml` sets
+`pythonpath = ["middleware-qdrant-manager", "smart-qdrant-mcp-server"]` and
 `asyncio_mode = "auto"`, so imports use `qdrant_middleware.*` regardless of
 cwd.
 
@@ -893,7 +899,8 @@ it is destructive against `e2e_`-prefixed collections.
   cache semantics. Decide deliberately whether it belongs behind
   `require_bearer_auth` +
   `require_operational_readiness` (collections/points/query) or in the
-  unprotected monitoring router.
+  monitoring router, whose bearer auth exempts paths per
+  `Settings.public_auth_paths` and which has no readiness gate.
 - **A new setting** — `Settings` in `core/config.py`, with a validated range, a
   row in the matching table above, and an entry in the root `.env.example`.
   Compose only passes what `compose.yml` names.

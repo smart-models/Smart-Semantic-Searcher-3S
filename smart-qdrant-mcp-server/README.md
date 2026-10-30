@@ -152,7 +152,9 @@ The `initialize` handshake returns `instructions` (`_SERVER_INSTRUCTIONS` in
 They summarise the surface, ask the agent to load the client-side
 [`smart-qdrant-mcp` skill](../smart-skill/README.md) before its first tool
 call — or, on a client without it, to read `docs://reference/smart-qdrant-skill`
-— and restate what must hold from that first call: `response_format`, the exact
+for the same rules, with the teaching documents standing in for the skill's
+`references/` files, which this server does not serve — and restate what must
+hold from that first call: `response_format`, the exact
 `confirm` gate, pagination, the documents to read before creating a collection
 or ingesting, the 4 MiB inline-ingest ceiling, and the three workflow prompts.
 `tests/test_prompts.py` fails when they name a tool, prompt or document this
@@ -393,10 +395,12 @@ clients with `destructiveHint=true`, even though this operation deliberately
 has no `confirm` parameter; the middleware still refuses any attempt to remove
 the protected `text` or `source_id` fields.
 
-### The two MCP-side refusals
+### MCP-side refusals
 
-Two failure messages come from this server itself, before any request reaches
-the middleware — not from `describe_error`'s HTTP-status mapping:
+Some failure messages come from this server itself, before any request reaches
+the middleware — not from `describe_error`'s HTTP-status mapping. Blank ids, an
+empty filter, too many ids for one fan-out and an unverifiable dry-run count
+are refused this way; two shape how a tool is used:
 
 1. **A missing or mismatched confirm.** Every row in the table above raises
    `Error: this operation destroys data: set confirm to the exact <noun>
@@ -409,8 +413,8 @@ the middleware — not from `describe_error`'s HTTP-status mapping:
    replace-by-filter endpoint...` with zero HTTP calls; use `mode="merge"`, or
    resolve the filter to explicit ids with `qdrant_scroll_points` first.
 
-Both are documented, with every other error string this server produces, in the
-`docs://troubleshooting` resource.
+All of them are documented, with every other error string this server
+produces, in the `docs://troubleshooting` resource.
 
 ### One log line per tool call
 

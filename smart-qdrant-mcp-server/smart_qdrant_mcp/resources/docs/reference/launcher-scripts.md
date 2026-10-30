@@ -75,7 +75,8 @@ Four facts explain the whole design.
 | `stack_test_support.py` | Shared fake-Docker harness for executing the real Bash/PowerShell launchers without changing Docker state. | Launcher tests need new simulated responses or invocation assertions. |
 | `test_security_constraints.py`, `test_release_evidence.py`, `test_render_dependency_audit_issue.py` | Regression coverage for security override synchronization and release/audit artifacts. | Their matching utility changes. |
 | `test_branding_contract.py` | Public product naming versus stable deployment identifiers. | Branding copy or deployment identifier contracts change. |
-| `test_stack_*.py`, `test_verify_*.py` | The suites that hold all of the above — including `test_stack_readme.py`, which parses **this file's tables** against the launchers' real help output. | Always, alongside the change. |
+| `test_ci_workflow.py`, `test_guide_links.py`, `test_guide_models.py` | Repository contracts beyond the launchers: CI workflow wiring, dependency installs and release evidence; field-guide links and heading anchors; guide model evidence against the pins and shipped Compose defaults. | A workflow, a guide page, a model pin or a Compose default changes. |
+| `test_stack_*.py`, `test_verify_*.py` | The suites that hold the launchers, planner, probe and verifiers above — including `test_stack_readme.py`, which parses **this file's tables** against the launchers' real help output. | Always, alongside the change. |
 
 ### Agent reading path
 

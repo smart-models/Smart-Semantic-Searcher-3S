@@ -48,11 +48,13 @@ While a job is `running`, `finalizing`, or `paused`, the middleware rejects
 collection and point mutations on that collection with HTTP 409. This
 protects the regeneration from racing a mutation that could invalidate it
 mid-flight — a paused job blocks mutations exactly like a running one, since
-its checkpoint is just as vulnerable to being invalidated underneath it. The
-right response to that 409 is to check `qdrant_get_reindex_status` for
-progress and either wait it out or deliberately pause/cancel the job with
-`qdrant_control_reindex`, not to treat it as a transient failure worth
-blindly retrying.
+its checkpoint is just as vulnerable to being invalidated underneath it.
+Pausing therefore keeps the checkpoint but does not lift the lock: only
+completion, or a cancel the user has approved (`qdrant_control_reindex` with
+`action="cancel"`, which abandons the progress), does. The right response to
+that 409 is to check `qdrant_get_reindex_status` for progress and wait for
+the job to finish, not to treat it as a transient failure worth blindly
+retrying, and never to cancel just to get past it.
 
 ## Related tools
 

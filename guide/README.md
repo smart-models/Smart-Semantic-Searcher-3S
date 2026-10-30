@@ -20,9 +20,11 @@ JavaScript and WOFF2 fonts, so presentation and demonstrations work through
 other pages and technical documents assume the repository layout is preserved.
 
 Getting Started is the entry point: create `.env`, connect an existing local or
-cloud Qdrant instance, run `up auto`, then open the console and make a first
-search. Detailed launcher choices and environment settings belong in their
-companion guides. The other pages explain the
+cloud Qdrant instance, run `up auto`, optionally connect an agent to the MCP
+server and install the skill, then open the console, make a first search and
+learn the collection upkeep (updates, exports, deletion). Detailed launcher
+choices and environment settings belong in their companion guides. The other
+pages explain the
 architecture and ranking through selectable scenes, readable explanations and
 illustrative controls. Their examples are teaching material, not measurements
 or evidence that a backend operation ran.
@@ -36,7 +38,7 @@ accepts credentials, starts services or writes an environment file.
 
 | File | Responsibility |
 |---|---|
-| [getting-started.html](getting-started.html) | Documentation entry point: installation with `up auto`, Qdrant connection, console orientation, first search and troubleshooting. |
+| [getting-started.html](getting-started.html) | Documentation entry point: installation with `up auto`, Qdrant connection, agent setup prompt, MCP client connection and skill installation, console orientation, first search, collection upkeep and troubleshooting. |
 | [cli.html](cli.html) | First startup, PowerShell/Bash command builder, daily operations and startup troubleshooting. |
 | [environment.html](environment.html) | Initial configuration, Qdrant, access keys, applying edits and all template parameters in searchable groups. |
 | [architecture.html](architecture.html) | Service boundaries, deployment choices and agent/client request paths. |

@@ -58,9 +58,10 @@ refuses the call before any request reaches the middleware at all.
 ## File sandbox
 
 `qdrant_ingest_file`'s `file_path` resolves relative to the middleware's own
-`data/` directory on its host, not the machine running this tool. Absolute
-paths and `..` segments are rejected with HTTP 400 before the file is
-touched.
+`data/` directory on its host, not the machine running this tool. A path
+that resolves outside it — absolute, or with `..` segments climbing out — is
+rejected with HTTP 400 before the file is touched, and so is a file larger
+than `INGEST_MAX_FILE_BYTES` (64 MiB by default, `File too large`).
 
 ## Staging a file this server cannot write
 
@@ -107,7 +108,11 @@ trip; omit it for the middleware's configured default. A call can partially
 fail and still return HTTP 200 with `ok: false` and `failed_at_chunk` naming
 the position that broke — every chunk before that position was already
 written, so re-running should resume there rather than restart blindly.
-Payload-only edits after ingest (`qdrant_set_payload`,
+One call, file or inline, carries at most `INGEST_MAX_CHUNKS` chunks (10000
+by default): ingest embeds every chunk before its first write, so a larger
+call is refused with 413 before anything is embedded, and this server
+reports it as `Error: request body too large.` Split such a source across
+calls sharing one `source_id`. Payload-only edits after ingest (`qdrant_set_payload`,
 `qdrant_delete_payload_keys`, `qdrant_clear_payload`) addressed by several
 ids fan out one HTTP request per id and are likewise not atomic.
 

@@ -53,9 +53,12 @@ reindex, point CRUD, payload writes, hybrid search, and health monitoring, plus 
 3 workflow prompts and documentation/live-state resources.
 
 Load the smart-qdrant-mcp skill before the first tool call when the client \
-has it, or read docs://reference/smart-qdrant-skill: it holds the operating \
-rules for every tool, a health check or a collection listing as much as a \
-search.
+has it: it holds the operating rules for every tool, a health check or a \
+collection listing as much as a search. Without it, read \
+docs://reference/smart-qdrant-skill for those rules; its reference and \
+playbook files ship only with the installed skill, so use \
+docs://troubleshooting, docs://workflows/ingest, \
+docs://workflows/search-recipes and docs://workflows/reindex for the detail.
 
 Every tool accepts response_format='markdown' (default) or 'json'. Use 'json' \
 when you need to inspect exact field values (scores, IDs, pagination cursors) \

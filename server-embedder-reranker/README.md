@@ -102,9 +102,11 @@ Ten facts explain nearly everything surprising about this service.
 5. **Model repositories are pinned to immutable commit revisions** in
    `model_revisions.py`. Updating a model means bumping a pinned revision and
    rerunning the CPU/GPU smoke tests — not chasing a moving `main`.
-6. **One GPU executor serves both endpoints.** Embedding and rerank inference
-   never run forward passes concurrently, which bounds peak VRAM to the larger
-   resident model rather than the sum.
+6. **Embedding and reranking share the GPU lanes.** BASIC and safe ADVANCED
+   profiles use one lane, so their forward passes never overlap; a measured
+   ADVANCED profile may overlap them, with one reranker instance still
+   serialized. Peak VRAM depends on that measurement — see
+   [Behaviour contracts](#behaviour-contracts).
 7. **Only `/health` is unauthenticated.** Every other endpoint requires a
    bearer token (documentation endpoints exist only when Swagger is explicitly
    exposed).
@@ -578,7 +580,7 @@ Python, while `BGE_*`, `QWEN_*` and `MILCO_*` keep their names end to end.
 | `SMART_EMBEDDER_PROFILE` | `basic` | Startup profile: `basic` or `advanced`; any other value fails startup. `basic` is used only when the variable is absent; the shipped `.env.example` sets `advanced` |
 | `SMART_EMBEDDER_API_TOKENS` | required | Inbound bearer credentials as a `token:label` list (`API_TOKENS` in the container) |
 | `SMART_EMBEDDER_CLIENT_TOKEN` | _(empty)_ | The middleware's credential, auto-accepted under the reserved label `@middleware` (`SERVICE_TOKEN` in the container) |
-| `SMART_EMBEDDER_ALLOW_UNAUTHENTICATED_LOCAL` | `false` | Explicit opt-out for isolated loopback development |
+| `SMART_EMBEDDER_ALLOW_UNAUTHENTICATED_LOCAL` | `false` | Explicit opt-out for isolated loopback development; `false` applies only when the variable is absent, and the shipped `.env.example` sets `true` |
 | `EXPOSE_SMART_EMBEDDER_SWAGGER` | `false` | Expose `/docs`, `/redoc`, and `/openapi.json` |
 | `SMART_EMBEDDER_REQUEST_TIMEOUT` | `90` | Global HTTP timeout in seconds |
 | `SMART_EMBEDDER_EMBED_GPU_TIMEOUT` | `60` | Embedding inference timeout; keep below the global timeout |

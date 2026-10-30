@@ -19,7 +19,8 @@ tuning knob defaults to the middleware's own configured behavior.
 subset before ranking, so hits only ever compete against relevant material.
 Confirm `lang` actually has a payload index (`qdrant_list_payload_indexes`;
 create one with `qdrant_create_payload_index` if not) — an unindexed filter
-key still works, just as a full scan (`docs://reference/filters`).
+key scans the collection, or is refused outright under Qdrant strict mode
+(`docs://reference/filters`).
 
 ## 3. High-recall search for a rare identifier
 
@@ -38,13 +39,24 @@ identical across calls. Search reports no total match count the way
 `qdrant_count_points` does, so treat `has_more` and page length as the only
 signals — keep paging until a page comes back short or empty.
 
+Paging is bounded by `candidate_limit`: `offset` plus the larger of `limit`
+and `rerank_top_k` must fit inside it. With the shipped defaults
+(`candidate_limit=50`, `rerank_top_k=20`) the third page, `offset=40`, needs
+60 and is refused with `Error: invalid request — offset 40 needs
+candidate_limit >= 60 ...`. For a deep walk, set a larger `candidate_limit`
+(at most 200 shipped) on the first call and keep it identical on every page;
+past that ceiling, enumerate with `qdrant_scroll_points` instead.
+
 ## 5. Precision-first search
 
-`qdrant_search` with `rerank=true`, `rerank_top_k=10`, and
-`score_threshold=0.3` — a small `rerank_top_k` means only the very top
-fused hits pay the reranker's per-candidate cost, and a fused
-`score_threshold` prunes weak candidates before they even reach the
-reranker. The result favors a few high-confidence hits over broad recall.
+`qdrant_search` with `rerank=true`, `rerank_top_k=10`, and a
+`score_threshold` read off the fused scores of an earlier
+`response_format="json"` run — never a guessed number, since the fused RRF
+scale depends on `rrf_k` and on whether a hit appears in both retrievers. A
+small `rerank_top_k` means only the very top fused hits pay the reranker's
+per-candidate cost, and a fused `score_threshold` prunes weak candidates
+before they even reach the reranker. The result favors a few
+high-confidence hits over broad recall.
 
 ## "Search found nothing" checklist
 
@@ -53,11 +65,12 @@ reranker. The result favors a few high-confidence hits over broad recall.
   returns confident-looking zero results, not an error.
 - **Filter too narrow**: check the exact same filter's match count with
   `qdrant_count_points` before assuming the content is missing.
-- **Unindexed filter key**: results are still correct, but check
-  `qdrant_list_payload_indexes` if the query feels unexpectedly slow.
-- **Contract mismatch**: a collection served under the wrong embedding
-  profile can misbehave in ways that look like emptiness; check with
-  `qdrant_verify_collection` (`docs://concepts/embedding-contract`).
+- **Unindexed filter key**: it may scan slowly, or be refused under Qdrant
+  strict mode; check `qdrant_list_payload_indexes`.
+- **Contract mismatch is not a silent cause**: a collection served under the
+  wrong embedding profile makes the search fail with `Error: embedding
+  contract mismatch` rather than come back empty; `qdrant_verify_collection`
+  shows what mismatched (`docs://concepts/embedding-contract`).
 
 ## Related tools
 

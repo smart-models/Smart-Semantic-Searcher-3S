@@ -353,6 +353,9 @@ def test_409_real_reindex_messages_land_in_reindex_branch(detail):
     assert message.startswith("Error: blocked by an active reindex job")
     assert "qdrant_get_reindex_status" in message
     assert "qdrant_control_reindex" in message
+    # Pausing keeps the 409: only completion or cancel lifts the block.
+    assert "paused job blocks mutations too" in message
+    assert "pause or cancel" not in message
 
 
 @pytest.mark.parametrize(

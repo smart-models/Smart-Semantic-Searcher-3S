@@ -223,7 +223,8 @@ def describe_error(exc: Exception) -> str:
     if isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
         return (
             "Error: the middleware did not respond (transient network failure). "
-            "Retries were already attempted; try again, then call "
+            "Reads were already retried; a write is sent once and may still "
+            "have landed, so check before re-sending it. Call "
             "qdrant_check_health if it keeps failing."
         )
     if not isinstance(exc, MiddlewareError):
@@ -265,9 +266,10 @@ def describe_error(exc: Exception) -> str:
         if any(marker in lowered for marker in REINDEX_MARKERS):
             return (
                 f"Error: blocked by an active reindex job — {redact(text)}. "
-                "Call qdrant_get_reindex_status for progress, and "
-                "qdrant_control_reindex to pause or cancel it before "
-                "mutating this collection."
+                "A paused job blocks mutations too: wait for it to finish "
+                "(qdrant_get_reindex_status shows progress), or ask the user "
+                "before cancelling it with qdrant_control_reindex, which "
+                "abandons its progress."
             )
         if any(marker in lowered for marker in CONTRACT_MARKERS):
             return (

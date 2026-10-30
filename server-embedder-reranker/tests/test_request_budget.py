@@ -98,17 +98,21 @@ class RequestBudgetTests(unittest.TestCase):
 
         Admission counts conservative UTF-8 bytes, not tokens, so a default
         below 32 pairs at QWEN_RERANK_MAX_LENGTH refuses an ordinary 20-chunk
-        search with 413 request_budget_exceeded.
+        search with 413 request_budget_exceeded. The Compose fallback and the
+        ``.env.example`` template an operator copies must both hold.
         """
-        compose = (SERVER_DIR.parent / "compose.yml").read_text(encoding="utf-8")
-        default = int(
-            re.search(
-                r"MAX_INFLIGHT_TOKENS: \$\{SMART_EMBEDDER_MAX_INFLIGHT_TOKENS:-(\d+)\}",
-                compose,
-            ).group(1)
-        )
+        sources = {
+            "compose.yml": (
+                r"MAX_INFLIGHT_TOKENS: \$\{SMART_EMBEDDER_MAX_INFLIGHT_TOKENS:-(\d+)\}"
+            ),
+            ".env.example": r"(?m)^SMART_EMBEDDER_MAX_INFLIGHT_TOKENS=(\d+)$",
+        }
         worst = estimate_rerank("q", ["x" * 32768] * 32, pair_limit=32768)
-        self.assertGreaterEqual(default, worst.tokens)
+        for name, pattern in sources.items():
+            text = (SERVER_DIR.parent / name).read_text(encoding="utf-8")
+            with self.subTest(source=name):
+                default = int(re.search(pattern, text).group(1))
+                self.assertGreaterEqual(default, worst.tokens)
 
     def test_rerank_repeats_query_budget_and_caps_each_pair(self):
         single = estimate_rerank("query", ["passage"], pair_limit=2048)

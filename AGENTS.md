@@ -175,8 +175,8 @@ Not every browser test needs a stack. Three families live under
 | Family | Needs a stack? | How to run |
 |---|---|---|
 | `*.test.mjs` — pure model, harness, campaign-reporter, coverage-gate and telemetry tests (seven files) | No | `npm run test:unit`, i.e. `node --test tests/*.test.mjs` |
-| Intercepted Playwright specs — `application-state`, `application-reindex`, `application-accessibility`, `harness-browser`, and the UI-mock `tb-ui`, `tb-monitoring`, `tb-filter-validation` | No — a browser, no token, no Qdrant. They intercept the page, local assets and every API request, and abort unknown routes | `npx playwright test tests/application-state.spec.js tests/application-reindex.spec.js tests/application-accessibility.spec.js tests/harness-browser.spec.js --workers=1` |
-| The remaining live specs of the 32 (`a-*`, `b-*`, `c-*`, `d-*`, `e-*`, `tb-*-live`, `tb-payload-ids`, `tb-export-query`, `z*`, `*.e2e.spec.js`) | **Yes** | `npm test` — see below |
+| Intercepted Playwright specs — `application-state`, `application-reindex`, `application-accessibility`, `harness-browser`, and the UI-mock `tb-ui`, `tb-monitoring`, `tb-filter-validation` | No — a browser, no token, no Qdrant. They intercept the page, local assets and every API request, and abort unknown routes | `npx playwright test tests/application-state.spec.js tests/application-reindex.spec.js tests/application-accessibility.spec.js tests/harness-browser.spec.js tests/tb-monitoring.spec.js tests/tb-filter-validation.spec.js tests/tb-ui.spec.js --workers=1` |
+| The remaining live specs of the 32 (`a-*`, `b-*`, `c-*`, `d-*`, `e-*`, `nf-*`, `tb-*-live`, `tb-payload-ids`, `tb-export-query`, `z*`, `*.e2e.spec.js`) | **Yes** | `npm test` — see below |
 
 The first two families are exactly what CI's `frontend-unit` job runs, so they
 are ordinary pre-change checks, not live integration.
@@ -189,7 +189,8 @@ from the default configuration, and destructive series consume their fixtures.
 
 The check to run before opening a change. `.github/workflows/ci.yml` runs this
 on every push to `main` and every pull request, across six jobs — `lint`,
-`unit` (a Python 3.10/3.11 matrix), `frontend-unit`, `guides`, `launchers`, `compose`:
+`unit` (a Python 3.10/3.11 matrix), `frontend-unit`, `guides`, `launchers`, `compose` —
+plus the aggregate `ci` job (`CI`) that requires all six:
 
 ```powershell
 py -m pytest middleware-qdrant-manager/tests -q
@@ -215,8 +216,9 @@ py scripts\verify_compose_security.py --env-file .env.example
 Select-String -Path .env.example -Pattern '^[A-Z][A-Z0-9_]*=' | ForEach-Object { $_.Line } | py scripts\verify_token_config.py
 ```
 
-Two CI-only differences remain, by design: CI runs the Python suites on **both**
-3.10 and 3.11, and adds one `e-monitoring` history slice
+Two CI-only differences remain, by design: CI runs the middleware, MCP and
+embedder suites on **both** 3.10 and 3.11 (`pytest scripts` runs on 3.11
+only, in `launchers`), and adds one `e-monitoring` history slice
 (`--grep 'M-G —'`). Neither changes what a local pass proves.
 
 `workflow_dispatch` also offers `release-check.yml`: a subset of CI's checks on
@@ -265,7 +267,9 @@ an exit code, so read its output rather than `$LASTEXITCODE`.
   (counters, embedder handle and lock).
 - Routers live under `api/routers/`. `collections`, `points` and `query` sit
   behind `require_bearer_auth` + `require_operational_readiness`; `monitoring`
-  does not.
+  has bearer auth only, with the per-path exemptions of
+  `Settings.public_auth_paths` (every probe on a loopback publish, only
+  `/livez` off it) and no readiness gate.
 - `clients/embedder.py` talks to Smart Embedder; `clients/retry.py` implements
   the shared exponential-backoff retry policy for transient
   5xx/429/timeout/connection errors against both Qdrant and Smart Embedder.
@@ -565,7 +569,7 @@ Things that have already cost time here.
 | `scripts/README.md` | The launcher reference. |
 | `requirements/README.md` | The dependency-pin and lock reference. |
 | `.github/AGENTS.md` | CI, the scheduled dependency audit, and the release gate. |
-| `.mcp.json` | Client-side MCP registration for this repo, pointing at `http://127.0.0.1:6337/mcp` with `${MCP_TOKEN}`. Ships **disabled**; it configures a client, not the server. |
+| `.mcp.json` | **Not shipped.** A local, gitignored client-side MCP registration an operator may create, pointing at `http://127.0.0.1:6337/mcp` with their own token. It configures a client, not the server; never commit it. |
 | `.gitattributes` | The line-ending contract. Everything is LF in the index, then forced per type in the working tree — `stack.sh` with CRLF fails at the shebang. Do not weaken it to fix a local diff. |
 | `.dockerignore` | Keeps caches, `.env` and test material out of every build context. |
 | `LICENSE` | GNU Affero General Public License v3.0, verbatim. Never edit it, and never add a per-file licence header without being asked — the repository states its terms in this one file. |

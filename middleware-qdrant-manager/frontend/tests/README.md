@@ -176,12 +176,14 @@ console and may call other live endpoints.
 ## Recipes
 
 The `application-state`, `application-reindex`, and `application-accessibility`
-specs intercept the page, local assets and every API request. They need no live
-stack or token and abort unknown routes. Run these application regressions
-directly to bypass the live `pretest` cooldown:
+specs, `harness-browser`, and the UI-mock `tb-ui`, `tb-monitoring` and
+`tb-filter-validation` specs intercept the page, local assets and every API
+request. They need no live stack or token and abort unknown routes. Run these
+seven directly — exactly the browser set CI's `frontend-unit` job runs — to
+bypass the live `pretest` cooldown:
 
 ```powershell
-npx playwright test tests/application-state.spec.js tests/application-reindex.spec.js tests/application-accessibility.spec.js tests/harness-browser.spec.js --workers=1
+npx playwright test tests/application-state.spec.js tests/application-reindex.spec.js tests/application-accessibility.spec.js tests/harness-browser.spec.js tests/tb-monitoring.spec.js tests/tb-filter-validation.spec.js tests/tb-ui.spec.js --workers=1
 ```
 
 `application-fixtures.js` owns their response families and controlled replies.

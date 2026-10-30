@@ -54,7 +54,8 @@ Shipped defaults (`.env.example`, all reconfigurable): `limit=10` (max 50),
 quantized). Every knob and when to touch it: `reference.md` § Search.
 
 Read the error detail on `413`: inference admission and rerank capacity
-require different reductions; export has separate point/byte caps. Occupied
+require different reductions; export has separate point/byte caps, and ingest
+a per-call chunk cap (`INGEST_MAX_CHUNKS`). Occupied
 inference or export capacity is retryable after active work drains. A `502`
 mentioning `rerank_vram_pressure` is also transient. Detail: `reference.md` §
 Search, `docs://troubleshooting`.
@@ -85,7 +86,9 @@ cross-encoder pass. Most questions do not need it.
    spread); markdown when reading results.
 
 Empty results are a diagnosis, not an answer: wrong collection, over-narrow
-filter, or an embedding-contract mismatch. Run `qdrant_diagnose_search_quality`.
+filter, or a filter whose type disagrees with the stored values. An
+embedding-contract mismatch is not silent — search refuses it with a 409. Run
+`qdrant_diagnose_search_quality`.
 
 ## Destructive tools: the confirm gate
 
@@ -98,7 +101,8 @@ normalised. A mismatch makes **zero HTTP calls**; nothing happened.
   dry-run count. Always run that first, report the count, then confirm.
 - `qdrant_delete_points` with `selector="ids"`, `qdrant_delete_collection`,
   `qdrant_clear_payload`, `qdrant_delete_payload_index` have **no dry run**.
-- Full gate table with every trigger: `reference.md`.
+- Every gate's trigger: the `confirm` rows per tool in `reference.md`, or
+  § Confirmation gates of `docs://reference/mcp-server` as one table.
 
 **Red flags — stop and ask the user instead:**
 
@@ -150,7 +154,9 @@ UUID point ids, the ingest tools want integer chunk ordinals. See `playbooks.md`
 ## References
 
 Detailed documentation lives in `references/`, read on demand — it is not part
-of this file's always-loaded context:
+of this file's always-loaded context. It ships only with the installed skill:
+a client reading this file as `docs://reference/smart-qdrant-skill` has no
+copy, and uses the server's own `docs://` resources above instead.
 
 - `reference.md` — all 28 tools, every parameter, gates, limits, hard caps;
   § Search covers inference admission and rerank capacity failures,
@@ -170,7 +176,8 @@ This skill must describe the server as it is, never as it was. The server's
 source of truth is `smart_qdrant_mcp/tools/*.py` (every tool's input model,
 gate, and limit — the client's tool list is generated from these),
 `tool_map.TOOL_ROUTES` (tool → middleware endpoint), `resources/docs.py`
-(the nine docs), and `prompts.py` (the three prompts); the server's own
+(all 21 `docs://` resources: the nine teaching docs and the twelve application
+copies), and `prompts.py` (the three prompts); the server's own
 tests fail when a prompt or doc references something that no longer exists.
 When the server gains, renames, or re-params a tool, update
 `reference.md` (and any affected playbook) in the same change, and verify
