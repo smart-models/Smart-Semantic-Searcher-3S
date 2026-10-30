@@ -68,6 +68,9 @@ Thumbs.db
 # Local agent state and working documents
 .codex/
 .agents/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
 server-embedder-reranker/docs/
 # Everything under the root docs/ is local working material -- agent scratch and
 # PRDs alike. Nothing in it is tracked, no exceptions.
