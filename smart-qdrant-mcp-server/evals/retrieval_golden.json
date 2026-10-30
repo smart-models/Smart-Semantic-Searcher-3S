@@ -1,0 +1,37 @@
+[
+  {"id": "par-01", "category": "paraphrase", "query": "How do I stop the service from running out of RAM when lots of big index pieces are assembled at the same time?", "relevant": ["rn-0402-02"]},
+  {"id": "par-02", "category": "paraphrase", "query": "New machines added to the cluster sit idle because nobody moves data onto them", "relevant": ["dn-0407-01", "dn-0407-02"]},
+  {"id": "par-03", "category": "paraphrase", "query": "Right after defining a new field index, lookups return outdated answers for a few seconds", "relevant": ["rn-0402-03"]},
+  {"id": "par-04", "category": "paraphrase", "query": "Avoid resending a whole upload when only a few items in it failed", "relevant": ["rn-0400-01"]},
+  {"id": "par-05", "category": "paraphrase", "query": "Decide whether to apply metadata conditions before or after similarity ranking, based on how many items each condition keeps", "relevant": ["dn-0406-01", "dn-0406-02"]},
+  {"id": "par-06", "category": "paraphrase", "query": "See how far along a long backup or recovery job is", "relevant": ["rn-0403-03"]},
+  {"id": "par-07", "category": "paraphrase", "query": "Cap the request volume of one credential so a single team cannot starve the others", "relevant": ["rn-0401-02"]},
+  {"id": "par-08", "category": "paraphrase", "query": "Fill in holes in monitoring charts after the scraper was down", "relevant": ["rb-0701-01", "rb-0701-03"]},
+
+  {"id": "idf-01", "category": "identifier", "query": "indexer.build_buffer_mb", "relevant": ["rn-0402-02"]},
+  {"id": "idf-02", "category": "identifier", "query": "indexer.legacy_flush_mode", "relevant": ["rn-0402-04"]},
+  {"id": "idf-03", "category": "identifier", "query": "indexer.build_threads", "relevant": ["rn-0405-01"]},
+  {"id": "idf-04", "category": "identifier", "query": "indexer_pending_merge_bytes", "relevant": ["rn-0405-03"]},
+  {"id": "idf-05", "category": "identifier", "query": "indexer_wal_buffer_occupancy", "relevant": ["rb-0601-02"]},
+  {"id": "idf-06", "category": "identifier", "query": "query.max_candidates", "relevant": ["rn-0500-03"]},
+  {"id": "idf-07", "category": "identifier", "query": "ingest.backpressure_watermark_kb", "relevant": ["ir-0602-03"]},
+  {"id": "idf-08", "category": "identifier", "query": "known-gaps registry", "relevant": ["rb-0701-04"]},
+
+  {"id": "xvo-01", "category": "cross_vocabulary", "query": "What should responders do when the batch admission gate stops releasing queued batches because embedding worker replicas are missing?", "relevant": ["rb-0602-01", "rb-0602-02", "rb-0602-03"]},
+  {"id": "xvo-02", "category": "cross_vocabulary", "query": "Why were writes refused when loader processes fell short of the manifest and the high-water mark dated from a lower traffic era?", "relevant": ["ir-0602-02", "ir-0602-03"]},
+  {"id": "xvo-03", "category": "cross_vocabulary", "query": "Mutex contention on the write-ahead log queue made every write wait; what is the on-call recovery procedure?", "relevant": ["rb-0601-01", "rb-0601-02", "rb-0601-03", "rb-0601-04"]},
+  {"id": "xvo-04", "category": "cross_vocabulary", "query": "A segment was captured mid-rewrite and the restore failed its checksum; how should restores be verified from now on?", "relevant": ["rb-0401-01", "rb-0401-02", "rb-0401-03"]},
+  {"id": "xvo-05", "category": "cross_vocabulary", "query": "After the September latency spike caused by nested filters, what change to the cost estimation was proposed?", "relevant": ["dn-0406-01", "dn-0406-02"]},
+  {"id": "xvo-06", "category": "cross_vocabulary", "query": "Building on swapping gateway credentials without a restart, how would aged credentials be replaced without an operator remembering to do it?", "relevant": ["dn-0408-01", "dn-0408-02"]},
+  {"id": "xvo-07", "category": "cross_vocabulary", "query": "The retryable response clients get once intake queue depth passes its watermark: which outage happened because that threshold was left too low?", "relevant": ["ir-0602-01", "ir-0602-03"]},
+  {"id": "xvo-08", "category": "cross_vocabulary", "query": "A proposal wants merges triggered by load instead of a fixed timer; what metric now shows how much merge work is waiting?", "relevant": ["rn-0405-03"]},
+
+  {"id": "xli-01", "category": "cross_lingual", "query": "Come limitare la memoria usata dall'indicizzatore quando costruisce molti segmenti insieme?", "relevant": ["rn-0402-02"]},
+  {"id": "xli-02", "category": "cross_lingual", "query": "Perché il ripristino dello snapshot è fallito con un errore di checksum?", "relevant": ["ir-0401-01", "ir-0401-02"]},
+  {"id": "xli-03", "category": "cross_lingual", "query": "Rotazione automatica dei token con un periodo di grazia prima della revoca", "relevant": ["dn-0408-02"]},
+  {"id": "xli-04", "category": "cross_lingual", "query": "Quanti thread usa di default l'indicizzatore durante un caricamento massivo?", "relevant": ["rn-0405-01"]},
+  {"id": "xli-05", "category": "cross_lingual", "query": "Come recuperare i dati mancanti delle metriche dopo un'interruzione del collector", "relevant": ["rb-0701-01", "rb-0701-03"]},
+  {"id": "xli-06", "category": "cross_lingual", "query": "Ridistribuire automaticamente gli shard quando si aggiunge un nuovo nodo", "relevant": ["dn-0407-01", "dn-0407-02"]},
+  {"id": "xli-07", "category": "cross_lingual", "query": "Timeout configurabile per una singola richiesta di ricerca", "relevant": ["rn-0309-01"]},
+  {"id": "xli-08", "category": "cross_lingual", "query": "Dimensione dei batch scelta dinamicamente in base alla latenza dell'embedding", "relevant": ["dn-0405-01", "dn-0405-02"]}
+]

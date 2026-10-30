@@ -786,12 +786,35 @@ python3 smart-qdrant-mcp-server/evals/harness/evaluation.py -t http \
   -o smart-qdrant-mcp-server/evals/report.md smart-qdrant-mcp-server/evals/smart_qdrant_mcp_eval.xml
 ```
 
-**No run has been recorded yet.** Running the harness needs the full stack up
-with models loaded and an `ANTHROPIC_API_KEY`, neither of which was available
-while this evaluation set was authored; the ten questions were instead verified
-by computing every answer directly from the fixture corpus. The first time
+**No harness run has been recorded yet.** Running the harness needs the full
+stack up with models loaded and an `ANTHROPIC_API_KEY`; the ten answers were
+verified by computing each one directly from the fixture corpus. The first time
 someone runs the command above against a seeded stack, record the resulting
-accuracy, the date, and the model used in this section.
+accuracy, the date, and the model used in this section. Two runs that did not
+use the harness are on record: on 2026-10-30 ten Claude Code subagents (Sonnet,
+`advanced` profile), one per question and blind to the answers, scored 10/10.
+Note that the harness answers only the first `tool_use` block of each model
+turn, so a model that issues parallel tool calls fails it with an API 400.
+
+**Retrieval quality** is measured separately on the same seeded collection.
+`evals/retrieval_golden.json` holds 32 queries in four categories of eight —
+`paraphrase`, `identifier` (a literal config key or metric name),
+`cross_vocabulary` (an incident's terms for its runbook, and the reverse) and
+`cross_lingual` (Italian queries over the English corpus) — each labelled with
+its relevant chunk ids. `evals/retrieval_eval.py` searches each query with and
+without the reranker and reports hit@1, recall@5, recall@10, MRR and nDCG@10,
+overall and per category. It exits non-zero when an overall metric falls more
+than 0.05 below `evals/retrieval_baseline.json` for the active embedder
+profile; `--write-baseline` records the current scores for that profile. It
+needs the seeded stack and the MCP token, like the seed:
+
+```bash
+python3 smart-qdrant-mcp-server/evals/retrieval_eval.py --token <MCP token>
+```
+
+`tests/test_retrieval_golden.py` checks the golden set offline: every label
+names a corpus chunk, every identifier query appears verbatim in a relevant
+chunk, and the metric arithmetic matches a hand-computed ranking.
 
 ## Failure modes
 
