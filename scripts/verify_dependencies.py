@@ -18,11 +18,16 @@ safety.
 
 With ``--sbom <dir>`` it also writes a minimal CycloneDX document per lock,
 turning the pinned manifests into machine-readable software bills of materials.
+
+An advisory with no fixed release can be accepted until a review date in
+``requirements/audit-accepted.txt``. It is still reported, but does not fail
+the audit; once the date passes it fails again until a human re-reviews it.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import sys
 import urllib.error
@@ -31,6 +36,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 LOCKS_DIR = REPOSITORY_ROOT / "requirements" / "locks"
+ACCEPTED_FILE = REPOSITORY_ROOT / "requirements" / "audit-accepted.txt"
 OSV_QUERYBATCH_URL = "https://api.osv.dev/v1/querybatch"
 OSV_VULN_URL = "https://api.osv.dev/v1/vulns"
 REQUEST_TIMEOUT_SECONDS = 30
@@ -61,6 +67,33 @@ def parse_lock(path: Path) -> list[tuple[str, str]]:
             raise ValueError(f"{path}:{line_number} is not an exact name==version pin")
         pins.append((name, version))
     return pins
+
+
+def parse_accepted(path: Path) -> dict[str, datetime.date]:
+    """Return accepted advisory ids mapped to their review date.
+
+    Each line is ``<advisory-id> <YYYY-MM-DD>``, optionally followed by a
+    ``#`` rationale. A missing file accepts nothing.
+    """
+    if not path.is_file():
+        return {}
+    accepted: dict[str, datetime.date] = {}
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        line = raw_line.partition("#")[0].strip()
+        if not line:
+            continue
+        fields = line.split()
+        try:
+            if len(fields) != 2:
+                raise ValueError
+            accepted[fields[0]] = datetime.date.fromisoformat(fields[1])
+        except ValueError:
+            raise ValueError(
+                f"{path}:{line_number} is not '<advisory-id> <YYYY-MM-DD>'"
+            ) from None
+    return accepted
 
 
 def _post_json(url: str, payload: dict) -> dict:
@@ -228,6 +261,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="write scan status and deduplicated findings as JSON",
     )
+    parser.add_argument(
+        "--accepted",
+        type=Path,
+        default=ACCEPTED_FILE,
+        help="advisories accepted until a review date (default: %(default)s)",
+    )
     args = parser.parse_args(argv)
 
     locks_dir = args.locks_dir
@@ -242,6 +281,7 @@ def main(argv: list[str] | None = None) -> int:
     # Query every lock's pins in one batch; the (lock, package) grouping is
     # recovered from the response order, which mirrors the query order.
     try:
+        accepted = parse_accepted(args.accepted)
         lock_pins = {lock: parse_lock(lock) for lock in locks}
         if args.sbom is not None:
             args.sbom.mkdir(parents=True, exist_ok=True)
@@ -279,6 +319,27 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[ERROR] Invalid OSV response: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
+    # Set aside advisories accepted until a review date that has not passed.
+    today = datetime.date.today()
+    active = {vuln_id for vuln_id, until in accepted.items() if today <= until}
+    accepted_report: list[dict] = []
+    for (name, version), ids in list(findings.items()):
+        for vuln_id in (i for i in ids if i in active):
+            accepted_report.append(
+                {
+                    "package": name,
+                    "version": version,
+                    "advisory": vuln_id,
+                    "accepted_until": accepted[vuln_id].isoformat(),
+                }
+            )
+            print(f"[ACCEPTED] {name}=={version}: {vuln_id} until {accepted[vuln_id]}")
+        remaining = [i for i in ids if i not in active]
+        if remaining:
+            findings[(name, version)] = remaining
+        else:
+            del findings[(name, version)]
+
     # Reattribute the flat findings back to the locks that carry them.
     per_lock: dict[Path, list[tuple[str, str, list[str]]]] = {}
     for lock in locks:
@@ -299,10 +360,18 @@ def main(argv: list[str] | None = None) -> int:
                 "advisory_occurrences": 0,
                 "affected_locks": 0,
                 "locked_packages": len(all_pins),
+                "accepted": accepted_report,
             },
         )
         if not report_written:
             return EXIT_ERROR
+        if accepted_report:
+            print(
+                f"No unaccepted vulnerabilities in {len(all_pins)} locked packages "
+                f"across {len(locks)} lock file(s); {len(accepted_report)} "
+                "accepted advisory occurrence(s) until their review date."
+            )
+            return 0
         print(
             f"No known vulnerabilities in {len(all_pins)} locked packages "
             f"across {len(locks)} lock file(s)."
@@ -337,7 +406,15 @@ def main(argv: list[str] | None = None) -> int:
                 canonical, summary = identities[vuln_id]
                 identity = f" -- {canonical}" if canonical != vuln_id else ""
                 description = f" - {summary}" if summary else ""
-                print(f"       {vuln_id}{identity}{description}", file=sys.stderr)
+                expired = (
+                    f" (acceptance expired {accepted[vuln_id]})"
+                    if vuln_id in accepted
+                    else ""
+                )
+                print(
+                    f"       {vuln_id}{identity}{description}{expired}",
+                    file=sys.stderr,
+                )
     report = {
         "scan_status": "vulnerable",
         "unique_cves": len(unique_vulnerabilities),
@@ -345,6 +422,7 @@ def main(argv: list[str] | None = None) -> int:
         "affected_locks": len(per_lock),
         "locked_packages": len(all_pins),
         "findings": report_findings,
+        "accepted": accepted_report,
     }
     if not _write_json_report(args.json_output, report):
         return EXIT_ERROR

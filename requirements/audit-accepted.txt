@@ -1,0 +1,32 @@
+# Advisories the dependency audit reports but does not fail on, each until a
+# review date. Read by scripts/verify_dependencies.py; format per line:
+#   <advisory-id> <YYYY-MM-DD>  # rationale
+# Accept only what cannot be fixed by an override in security-constraints.txt.
+# On the review date the finding fails the audit again: re-check upstream,
+# then bump the pin or extend the date with a fresh rationale.
+
+# accelerate 1.14.0, CVE-2026-69112: no released version contains the fix;
+# see the note in security-constraints.txt.
+GHSA-4j2p-28q2-5m79 2027-01-31
+PYSEC-2026-3804 2027-01-31
+
+# filelock 3.32.0: every fix is in 4.2.1, which requires Python >= 3.11, and
+# the GPU embedder image runs Python 3.10. huggingface_hub and datasets use
+# FileLock (UnixFileLock on Linux) and fall back to SoftFileLock; nothing
+# installed uses StrictSoftFileLock or ReadWriteLock, and WindowsFileLock never
+# runs in these Linux images. The advisories on the used classes (69hj, fq56,
+# rfpc) all need a second local user with write access to the lock directory;
+# the images run one non-root user (UID 1000) that owns the model cache, over
+# a read-only root filesystem. Revisit when the GPU image moves to Python 3.11.
+GHSA-567q-5qvw-pf92 2027-01-31
+GHSA-6627-m3xw-93mp 2027-01-31
+GHSA-69hj-f68j-2879 2027-01-31
+GHSA-8mx5-7m5m-r77g 2027-01-31
+GHSA-9c4x-gm8v-wgc4 2027-01-31
+GHSA-9vhv-jxww-xfm5 2027-01-31
+GHSA-cwqr-hh33-gh44 2027-01-31
+GHSA-fq56-3cx3-fjxp 2027-01-31
+GHSA-j8f7-rjxc-mr56 2027-01-31
+GHSA-m462-7rxw-wvpg 2027-01-31
+GHSA-rfpc-qcw5-3pc4 2027-01-31
+GHSA-v4x8-3wr5-3wq8 2027-01-31

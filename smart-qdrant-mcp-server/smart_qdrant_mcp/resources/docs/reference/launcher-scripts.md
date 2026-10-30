@@ -568,6 +568,13 @@ constraint check again, then run the OSV audit. The verifier's exit statuses
 are deliberately distinct: `1` means vulnerabilities, `2` an internal/invalid
 response error, and `3` OSV unavailable. Only `0` is a release pass.
 
+An advisory that no override can fix (no fixed release, or one the target
+Python cannot install) may be listed in `requirements/audit-accepted.txt` as
+`<advisory-id> <YYYY-MM-DD>` with a rationale. Until that date the verifier
+prints it as `[ACCEPTED]`, records it under `accepted` in the JSON report and
+does not fail on it; from the next day it fails again, so the acceptance is
+re-reviewed rather than forgotten.
+
 The suite in `scripts/` is unusually opinionated about **this file**:
 `test_stack_readme.py` parses the flag tables above and compares them against
 the launchers' real `help` output in both directions, checks the *Accepted by*

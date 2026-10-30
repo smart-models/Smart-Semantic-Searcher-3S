@@ -79,7 +79,9 @@ BLOCKED; never substitute a mock or an old run silently.
    `04-security-constraints.log`, `04-dependency-audit.log`,
    `04-dependency-audit.json` and the four SBOM files under `04-sbom/`.
    Verifier exits 1 (vulnerable), 2 (error) and 3 (OSV unavailable) all block
-   acceptance. Record immutable model revisions and relevant runtime/profile
+   acceptance. A passing audit may still list advisories under `accepted`;
+   confirm each rationale in `requirements/audit-accepted.txt` still holds.
+   Record immutable model revisions and relevant runtime/profile
    fingerprints. Resolve dependency drift before freezing a new candidate;
    do not rewrite locks halfway through acceptance and keep the old SHA label.
 

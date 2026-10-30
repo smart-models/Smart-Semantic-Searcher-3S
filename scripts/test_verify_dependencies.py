@@ -193,6 +193,108 @@ def test_main_classifies_an_invalid_lock_as_an_internal_error(
     assert "Could not prepare dependency audit" in capsys.readouterr().err
 
 
+def _osv_finds(monkeypatch, *ids):
+    monkeypatch.setattr(
+        vd,
+        "_post_json",
+        lambda url, payload: {"results": [{"vulns": [{"id": i} for i in ids]}]},
+    )
+    monkeypatch.setattr(vd, "_get_json", lambda url: {"summary": "advisory"})
+
+
+def test_main_passes_when_every_finding_is_accepted_until_a_future_date(
+    tmp_path, monkeypatch, capsys
+):
+    locks = tmp_path / "locks"
+    locks.mkdir()
+    _lock(locks, "svc.txt", ["accelerate==1.14.0"])
+    accepted = _lock(tmp_path, "accepted.txt", ["GHSA-a 2999-12-31  # no fix yet"])
+    _osv_finds(monkeypatch, "GHSA-a")
+    report = tmp_path / "report.json"
+
+    exit_code = vd.main(
+        [
+            "--locks-dir",
+            str(locks),
+            "--accepted",
+            str(accepted),
+            "--json-output",
+            str(report),
+        ]
+    )
+
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert payload["scan_status"] == "clean"
+    assert payload["accepted"] == [
+        {
+            "package": "accelerate",
+            "version": "1.14.0",
+            "advisory": "GHSA-a",
+            "accepted_until": "2999-12-31",
+        }
+    ]
+    out = capsys.readouterr().out
+    assert "[ACCEPTED] accelerate==1.14.0: GHSA-a until 2999-12-31" in out
+    assert "No known vulnerabilities" not in out
+    assert "1 accepted advisory occurrence(s)" in out
+
+
+def test_main_still_fails_on_findings_outside_the_accepted_list(tmp_path, monkeypatch):
+    locks = tmp_path / "locks"
+    locks.mkdir()
+    _lock(locks, "svc.txt", ["accelerate==1.14.0"])
+    accepted = _lock(tmp_path, "accepted.txt", ["GHSA-a 2999-12-31"])
+    _osv_finds(monkeypatch, "GHSA-a", "GHSA-b")
+    report = tmp_path / "report.json"
+
+    exit_code = vd.main(
+        [
+            "--locks-dir",
+            str(locks),
+            "--accepted",
+            str(accepted),
+            "--json-output",
+            str(report),
+        ]
+    )
+
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert exit_code == vd.EXIT_VULNERABLE
+    assert payload["findings"][0]["advisories"] == ["GHSA-b"]
+    assert [entry["advisory"] for entry in payload["accepted"]] == ["GHSA-a"]
+
+
+def test_main_fails_once_an_acceptance_has_expired(tmp_path, monkeypatch, capsys):
+    locks = tmp_path / "locks"
+    locks.mkdir()
+    _lock(locks, "svc.txt", ["accelerate==1.14.0"])
+    accepted = _lock(tmp_path, "accepted.txt", ["GHSA-a 2000-01-31"])
+    _osv_finds(monkeypatch, "GHSA-a")
+
+    exit_code = vd.main(["--locks-dir", str(locks), "--accepted", str(accepted)])
+
+    assert exit_code == vd.EXIT_VULNERABLE
+    assert "acceptance expired 2000-01-31" in capsys.readouterr().err
+
+
+def test_main_rejects_a_malformed_accepted_list(tmp_path, monkeypatch, capsys):
+    locks = tmp_path / "locks"
+    locks.mkdir()
+    _lock(locks, "svc.txt", ["accelerate==1.14.0"])
+    accepted = _lock(tmp_path, "accepted.txt", ["GHSA-a soon"])
+    monkeypatch.setattr(
+        vd,
+        "_post_json",
+        lambda url, payload: pytest.fail("OSV must not be queried"),
+    )
+
+    exit_code = vd.main(["--locks-dir", str(locks), "--accepted", str(accepted)])
+
+    assert exit_code == vd.EXIT_ERROR
+    assert "accepted.txt:1" in capsys.readouterr().err
+
+
 def test_main_writes_sboms_when_requested(tmp_path, monkeypatch):
     _lock(tmp_path, "svc.txt", ["fastapi==0.138.1"])
     monkeypatch.setattr(vd, "_post_json", lambda url, payload: {"results": [{}]})

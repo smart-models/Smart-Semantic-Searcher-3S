@@ -34,6 +34,7 @@ not serving images and do not substitute for rebuilding an affected target.
 | [dev.txt](dev.txt) | Pinned pytest, asyncio test support, Ruff and the YAML parser for the workflow contract tests and the MCP suite's skill-frontmatter test. No serving image consumes these tooling pins. |
 | [ci.txt](ci.txt) | Offline-suite environment: dev, middleware and MCP inputs plus the numeric/runtime imports used by embedder tests. It deliberately does not install the full model stack. |
 | [security-constraints.txt](security-constraints.txt) | Exact transitive security overrides with rationale; input to `scripts/security_constraints.py`. |
+| [audit-accepted.txt](audit-accepted.txt) | Advisories with no installable fix, each accepted until a review date with rationale; input to `scripts/verify_dependencies.py`. |
 | [locks/](locks/) | Four resolved Linux image environments; consumed as Docker build constraints. |
 
 | Lock | Target environment |
