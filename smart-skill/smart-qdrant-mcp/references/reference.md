@@ -499,6 +499,7 @@ transactional snapshot. Retry occupied capacity after the active export ends.
 | `ids` | — (required, 1–1000) | UUIDs or unsigned integers as strings. Always uses the batch endpoint: returns `found`/`not_found` lists, never 404s on one missing id. |
 | `collection_name` | server default | — |
 | `with_vectors` | `false` | `true` adds a **summary** of stored vectors (names and shapes only, never raw numbers) — how you confirm which embedding generation a point carries. |
+| `with_payload` | `true` | `true` = every field (verbose), `false` = none, or a list of keys — same as `qdrant_scroll_points`. |
 | `response_format` | `markdown` | — |
 
 ### `qdrant_scroll_points`

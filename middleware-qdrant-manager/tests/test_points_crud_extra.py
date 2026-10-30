@@ -48,6 +48,7 @@ class FakeQdrant:
         return SimpleNamespace(count=self._count)
 
     async def retrieve(self, **kwargs):
+        self.retrieve_kwargs = kwargs
         self.retrieve_ids = kwargs["ids"]
         wanted = set(kwargs["ids"])
         return [p for p in self._points if p.id in wanted]
@@ -124,6 +125,26 @@ def test_retrieve_points_returns_found_and_omits_missing():
         "results": [{"id": "5", "payload": {"text": "a"}, "vectors": None}],
     }
     assert client.retrieve_ids == [5, 6]
+
+
+@pytest.mark.parametrize(
+    ("selection", "forwarded"),
+    [
+        ({}, True),
+        ({"with_payload": False}, False),
+        ({"with_payload": ["text"]}, ["text"]),
+    ],
+)
+def test_retrieve_points_forwards_the_payload_selection(selection, forwarded):
+    """Like scroll, retrieve returns every payload field unless told otherwise."""
+    client = FakeQdrant(points=[SimpleNamespace(id=5, payload={"text": "a"})])
+
+    response = TestClient(_app(client)).post(
+        "/points/retrieve", json={"ids": ["5"], **selection}
+    )
+
+    assert response.status_code == 200
+    assert client.retrieve_kwargs["with_payload"] == forwarded
 
 
 def test_retrieve_points_rejects_invalid_id():

@@ -818,6 +818,7 @@ class RetrievePointsRequest(BaseModel):
     collection_name: Optional[str] = None
     ids: list[str] = Field(min_length=1, max_length=1000)
     with_vectors: bool = False
+    with_payload: Union[bool, list[str]] = True
 
     @field_validator("ids")
     @classmethod
@@ -1496,6 +1497,11 @@ async def facet_points(
     )
 
 
+def _payload_selection(value: Union[bool, list[str]]) -> Union[bool, list[str]]:
+    """Translate a request's ``with_payload`` into Qdrant's payload selector."""
+    return qdrant_payload_selector(value) if isinstance(value, list) else value
+
+
 @router.post("/scroll", response_model=ScrollPointsResponse)
 async def scroll_points(
     request: ScrollPointsRequest,
@@ -1510,11 +1516,7 @@ async def scroll_points(
         scroll_filter = build_qdrant_filter(request.filters, settings=settings)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-    with_payload = (
-        qdrant_payload_selector(request.with_payload)
-        if isinstance(request.with_payload, list)
-        else request.with_payload
-    )
+    with_payload = _payload_selection(request.with_payload)
     # Qdrant rejects offset+order_by outright; say so here instead of forwarding
     # a request that can only come back as a raw 400.
     if request.order_by is not None and request.offset is not None:
@@ -1984,7 +1986,7 @@ async def retrieve_points(
         lambda: client.retrieve(
             collection_name=collection_name,
             ids=ids,
-            with_payload=True,
+            with_payload=_payload_selection(request.with_payload),
             with_vectors=request.with_vectors,
         ),
         "retrieve points",

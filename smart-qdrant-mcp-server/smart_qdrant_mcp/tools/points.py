@@ -129,6 +129,13 @@ class RetrievePointsInput(BaseModel):
             "and shapes only, never the raw numbers (e.g. true)"
         ),
     )
+    with_payload: Union[bool, list[str]] = Field(
+        default=True,
+        description=(
+            "true for every payload field (verbose), false for none, or a "
+            "list of keys to return only those (e.g. ['text', 'source_id'])"
+        ),
+    )
     response_format: ResponseFormat = Field(
         default=ResponseFormat.MARKDOWN,
         description="Output format: 'markdown' (default) or 'json' (e.g. 'json')",
@@ -639,6 +646,8 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
                   omit for the server default.
                 - with_vectors (bool): include vector name/shape summaries;
                   default false.
+                - with_payload (bool | list[str]): true (default) for every
+                  payload field, false for none, or the keys to return.
                 - response_format (ResponseFormat): 'markdown' or 'json'.
 
         Returns:

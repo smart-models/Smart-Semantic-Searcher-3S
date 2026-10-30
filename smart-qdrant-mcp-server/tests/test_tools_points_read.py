@@ -26,6 +26,7 @@ async def test_read_points_uses_the_batch_endpoint(call, routes):
         "ids": ["p1"],
         "collection_name": "docs",
         "with_vectors": False,
+        "with_payload": True,
     }
 
 
@@ -48,7 +49,19 @@ async def test_read_points_markdown_names_missing_ids(call, routes):
 async def test_read_points_forwards_with_vectors(call, routes):
     routes.add("POST", "/points/retrieve", body=RETRIEVED)
     await call("qdrant_read_points", ids=["p1"], with_vectors=True)
-    assert routes.last_body() == {"ids": ["p1"], "with_vectors": True}
+    assert routes.last_body() == {
+        "ids": ["p1"],
+        "with_vectors": True,
+        "with_payload": True,
+    }
+
+
+async def test_read_points_forwards_a_payload_selection(call, routes):
+    """An agent passed with_payload as it does on search; it was refused."""
+    routes.add("POST", "/points/retrieve", body=RETRIEVED)
+    out = await call("qdrant_read_points", ids=["p1"], with_payload=["chunk_id"])
+    assert out.is_error is False
+    assert routes.last_body()["with_payload"] == ["chunk_id"]
 
 
 async def test_read_points_rejects_more_than_a_thousand_ids(call, routes):
