@@ -2,6 +2,19 @@
 
 Eight sequences plus an error map. Each one names the tool to call, in order.
 
+**Contents**
+
+0. The tools aren't there
+1. Bootstrap a collection
+2. Ingest a corpus that isn't staged yet
+3. Search returns nothing or nonsense
+4. Reindex safely
+5. Delete without regret
+6. Tune hybrid search quality
+7. Export a collection — re-ingesting an export (the id trap); what export
+   is not
+8. Error text → next call
+
 ## 0. The tools aren't there
 
 `qdrant_*` tools missing from the client means the MCP server isn't connected —

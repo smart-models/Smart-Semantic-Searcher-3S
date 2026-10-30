@@ -1,5 +1,26 @@
 # Tool reference — smart-qdrant-mcp (28 tools)
 
+**Contents**
+
+- Monitoring — `qdrant_check_health`
+- Search — `qdrant_search`; inference admission and rerank capacity failures
+- Collections — `list`, `get`, `verify`, `create`, `update_schema_toggles`,
+  `delete`
+- Payload indexes — `list_payload_keys`, `list_payload_indexes`,
+  `create_payload_index`, `delete_payload_index`; choosing `field_schema`
+- Reindex — `reindex_preflight`, `start_reindex`, `get_reindex_status`,
+  `control_reindex`
+- Ingest — `ingest_file` (chunk contract, `metadata`, a template),
+  `ingest_chunks`
+- Export — `export_collection`
+- Point reads — `read_points`, `scroll_points`, `count_points`,
+  `facet_points`
+- Point writes — `upsert_points`, `delete_points`
+- Payload writes — `set_payload`, `delete_payload_keys`, `clear_payload`
+- Hard caps worth memorising
+- Resources
+- Keeping this file aligned with the server
+
 All arguments go under `params`. Every tool accepts `response_format`:
 `"markdown"` (default) or `"json"` — pick `json` whenever you need exact
 values (scores, ids, pagination cursors, `embedder_profile`), markdown when
