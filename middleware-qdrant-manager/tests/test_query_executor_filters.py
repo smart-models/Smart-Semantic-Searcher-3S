@@ -361,6 +361,23 @@ def test_is_null_filter():
     assert flt.must[0].is_null is True
 
 
+@pytest.mark.parametrize("operator", ["is_empty", "is_null"])
+def test_native_qdrant_empty_and_null_shape_matches_the_flat_shape(operator):
+    native = build_qdrant_filter({"must": [{operator: {"key": "severity"}}]})
+    flat = build_qdrant_filter({"must": [{"key": "severity", operator: True}]})
+
+    assert native == flat
+
+
+def test_native_qdrant_is_empty_shape_honours_the_field_allowlist():
+    settings = Settings(QDRANT_COLLECTION="docs", QUERY_FILTER_FIELD_ALLOWLIST="lang")
+
+    with pytest.raises(ValueError, match="not allowed: severity"):
+        build_qdrant_filter(
+            {"must": [{"is_empty": {"key": "severity"}}]}, settings=settings
+        )
+
+
 def test_geo_radius_filter():
     flt = build_qdrant_filter(
         {

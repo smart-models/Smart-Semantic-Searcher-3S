@@ -486,8 +486,10 @@ Filter rules worth knowing before you write one:
   integers and UUID strings.
 - **`has_vector`** targets vector names and is not checked against
   payload-field allowlists.
-- **`is_empty` and `is_null` only accept `true`.** To express the opposite, put
-  the same condition under `must_not`.
+- **`is_empty` and `is_null` only accept `true`** (`{"key": "notes",
+  "is_empty": true}`). Qdrant's native shape, `{"is_empty": {"key": "notes"}}`,
+  is accepted too and parsed into the same condition. To express the opposite,
+  put the same condition under `must_not`.
 - **The max-condition counter counts every parsed condition object**, including
   the `min_should` wrapper and each condition inside it.
 - **`match.text` / `match.text_any` need a Qdrant full-text payload index** on

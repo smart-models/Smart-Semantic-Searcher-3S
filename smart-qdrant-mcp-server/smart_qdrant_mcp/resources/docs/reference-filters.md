@@ -33,7 +33,9 @@ array-of-objects payload fields, or a further logical filter nested inside
 `value`, `any`, `except`, `text`, `text_any`, or `phrase`), `range` (`gt`,
 `gte`, `lt`, `lte` — all numeric or all ISO datetime strings, never mixed),
 `values_count` (bounds on an array payload field's length), `is_empty`,
-`is_null`, `geo_radius`, `geo_bounding_box`, or `geo_polygon`. `min_should`
+`is_null`, `geo_radius`, `geo_bounding_box`, or `geo_polygon`. `is_empty` and
+`is_null` take `true` (`{"key": "notes", "is_empty": true}`); Qdrant's native
+`{"is_empty": {"key": "notes"}}` is accepted as the same condition. `min_should`
 takes `{"conditions": [...], "min_count": N}` — matches when at least `N` of
 the listed conditions match.
 

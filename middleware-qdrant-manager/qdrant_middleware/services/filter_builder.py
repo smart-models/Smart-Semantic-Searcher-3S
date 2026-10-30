@@ -142,6 +142,13 @@ def _parse_condition(
                 "recursive filter condition cannot mix logical and atomic keys"
             )
         return _parse_filter(obj, context, depth=depth + 1, prefix=prefix)
+    if len(obj) == 1 and ("is_empty" in obj or "is_null" in obj):
+        # Qdrant's native {"is_empty": {"key": k}} shape, rewritten to the flat
+        # field condition so it passes the same allowlist and key checks.
+        [(operator, field)] = obj.items()
+        if not isinstance(field, dict) or set(field) != {"key"}:
+            raise ValueError(f"{operator} must be true or an object with only key")
+        obj = {"key": field["key"], operator: True}
     condition_kinds = [
         name for name in ("key", "has_id", "has_vector", "nested") if name in obj
     ]
