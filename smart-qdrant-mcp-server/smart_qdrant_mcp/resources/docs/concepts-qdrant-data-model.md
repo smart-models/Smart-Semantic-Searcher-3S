@@ -28,13 +28,13 @@ same point, not one shared vector config.
 
 ## Payload indexes: the difference between fast and scanning
 
-A payload field with no index can still be filtered on where the
-collection's policy allows it — but Qdrant then has to check every point's
-payload one by one to evaluate the condition, a full collection scan — and
-Qdrant strict mode can refuse such a filter outright
-(`docs://reference/filters`). A **payload index** (`qdrant_create_payload_index`) is a
-Qdrant-side structure built for one field that lets a filter jump straight
-to matching points instead. `qdrant_list_payload_indexes` reports exactly
+Plain Qdrant would answer a filter on an unindexed field by checking every
+point's payload one by one — a full collection scan. This stack never does:
+every collection runs Qdrant strict mode with unindexed filtering refused, so
+such a filter fails with an error instead (`docs://reference/filters`). A
+**payload index** (`qdrant_create_payload_index`) is a Qdrant-side structure
+built for one field that lets a filter jump straight to matching points, and
+here it is what makes the field filterable at all. `qdrant_list_payload_indexes` reports exactly
 what is indexed today; `qdrant_facet_points` refuses outright to facet a
 field that has no index, since faceting an unindexed field would mean
 scanning the whole collection just to list its distinct values.

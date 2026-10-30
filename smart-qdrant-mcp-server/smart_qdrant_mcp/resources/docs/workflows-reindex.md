@@ -33,7 +33,9 @@ call with `action="resume"` continues from there rather than starting over.
 stopped: the job's status becomes `paused` while the in-flight batch runs to
 its boundary, and a `resume` sent during that window is refused with "a
 reindex task is already running". Wait for `task_running` to be false in
-`qdrant_get_reindex_status` before resuming.
+`qdrant_get_reindex_status` before resuming. The end works the same way:
+`status` can read `completed` or `cancelled` one poll before `task_running`
+turns false, and the job is finished only when both hold.
 
 `action="cancel"` **abandons** the checkpoint entirely: the source
 generation is left active and untouched, but a fresh `qdrant_start_reindex`

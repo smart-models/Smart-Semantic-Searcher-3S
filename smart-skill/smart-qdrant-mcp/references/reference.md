@@ -3,7 +3,9 @@
 All arguments go under `params`. Every tool accepts `response_format`:
 `"markdown"` (default) or `"json"` — pick `json` whenever you need exact
 values (scores, ids, pagination cursors, `embedder_profile`), markdown when
-reading results. `collection_name` is optional (falls back to the
+reading results. It selects only the text block; every result also carries
+the full payload as `structuredContent`, which some clients (Claude Code)
+show the model instead, making the two formats identical there. `collection_name` is optional (falls back to the
 server default) on the read/search/ingest/export/upsert tools,
 `qdrant_verify_collection`, `qdrant_create_collection`, `qdrant_set_payload`
 and `qdrant_delete_payload_keys`; it is **required** everywhere else —
@@ -58,7 +60,7 @@ default for this call only.
 | `rerank` | `true` | The cross-encoder reads query + document together in one pass — the single biggest precision lever. Keep on for quality; set `false` for cheap broad sweeps. |
 | `rerank_top_k` | 20 (max 200) | Cost/precision knob: only this many fused hits pay the reranker's per-candidate forward pass. Must be `≤ candidate_limit` (else 422, shown as `Error: invalid request — …`). 10 for precision-first, larger for recall. |
 | `rerank_normalize` | `true` | Keep on: reranker scores come back on a comparable 0–1 scale. |
-| `filters` | none | Pre-filters **both** retrievers before fusion — hits only compete inside the filtered subset. Index every key you filter on (`qdrant_create_payload_index`); unindexed keys may scan or be refused by Qdrant strict mode. Grammar: `docs://reference/filters`. |
+| `filters` | none | Pre-filters **both** retrievers before fusion — hits only compete inside the filtered subset. Every key you filter on must be indexed first (`qdrant_create_payload_index`): every collection runs Qdrant strict mode, which refuses an unindexed key — or a value type the key's index cannot take — with `'<key>' has no payload index that can serve this filter`. The same holds for every other `filters`-taking tool, writes included. Grammar: `docs://reference/filters`. |
 | `with_payload` | all fields | Omitting it dumps every payload field of every hit into context. Pass e.g. `["text", "source_id"]`. |
 | `offset` | 0 | Deep-paging ceiling: `offset + window` must fit inside `candidate_limit`, else a 422 tells you the required value. `window` is `max(limit, rerank_top_k)` while reranking, plain `limit` with `rerank=false`. With shipped caps and rerank on that tops out near offset 180; page further with `qdrant_scroll_points` + `order_by`. |
 | `score_threshold` | none | Applies to the **fused** score, before reranking — a dropped candidate never reaches the reranker. The RRF fused scale depends on `rrf_k` and on whether a hit appears in both legs, so calibrate from observed `json` scores rather than guessing a number. |
@@ -157,7 +159,7 @@ indexes** in place — the idempotent "make it so" call.
 | Param | Default | Use it well |
 |---|---|---|
 | `collection_name` | — (required) | — |
-| `dense_on_disk`, `quantization`, `sparse_idf`, `sparse_on_disk`, `on_disk_payload` | omitted = unchanged | Set at least one (zero toggles is a hard error). In-place and reversible, no gate — the safe way to flip a toggle without recreating. |
+| `dense_on_disk`, `quantization`, `sparse_idf`, `sparse_on_disk`, `on_disk_payload` | omitted = unchanged | Set at least one (zero toggles is a hard error). In-place and reversible, no gate — the safe way to flip a toggle without recreating. Still a mutation: refused with `blocked by an active reindex job` while a reindex is running or paused. |
 | `response_format` | `markdown` | — |
 
 ### `qdrant_delete_collection`
@@ -217,8 +219,8 @@ index. Same schema is genuinely idempotent (`skipped`).
 
 Before changing a live field's schema: `qdrant_list_payload_indexes` first, and
 if the field is already indexed as something else, say so and get a decision
-rather than sending the call. Between the drop and the rebuild, filters on that
-field fall back to a full scan.
+rather than sending the call. Between the drop and the rebuild, strict mode
+refuses every filter on that field.
 
 ### `qdrant_delete_payload_index`
 
@@ -226,7 +228,7 @@ field fall back to a full scan.
 |---|---|---|
 | `collection_name` | — (required) | — |
 | `field_name` | — (required) | — |
-| `confirm` | — (required) | Exact `collection_name`. No dry run. |
+| `confirm` | — (required) | Exact `collection_name`. No dry run. The payload values stay, but strict mode then refuses every filter on that field — searches, counts and filter-addressed writes that rely on it break until it is re-indexed. |
 | `response_format` | `markdown` | — |
 
 ### Choosing `field_schema`
@@ -342,7 +344,7 @@ calls sharing one `source_id`.
 | `source_id_type` | `"keyword"` | Payload type coercion: `keyword`, `text`, `integer`, `float`, `bool`, `datetime`, `uuid`, `geo`, `untyped`. Keep `keyword` unless you filter numerically on it. `replace_source` derives a matching predicate and index from this type. |
 | `chunk_id_key` | `"id"` | Payload field holding each chunk's **ordinal**. Relocated, not copied — set it and no `id` remains in the payload. Rejected: `"text"`, the three chunker keys, and whatever `source_id_key` is. |
 | `metadata` | `{}` | Fields constant across all chunks — cheaper than repeating them per chunk, and what you later filter/facet on. |
-| `replace_source` | `false` | After writing the new points, deletes every existing point with this typed `source_id`, so a mistyped id wipes an unrelated source. It uses match predicates for lexical, integer, bool and UUID types and exact ranges for float and datetime. Verify the id with `qdrant_facet_points` on the chosen source-id field first. |
+| `replace_source` | `false` | After writing the new points, deletes every existing point with this typed `source_id`, so a mistyped id wipes an unrelated source. It uses match predicates for lexical, integer, bool and UUID types and exact ranges for float and datetime; the middleware creates the `source_id` index that delete needs itself, so no prior index is required. Verify the id with `qdrant_facet_points` on the chosen source-id field first. |
 | `confirm` | none | Required with `replace_source=true`: exact `source_id`. |
 | `response_format` | `markdown` | — |
 

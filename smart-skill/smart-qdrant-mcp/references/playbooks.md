@@ -33,8 +33,9 @@ Prefer the server's own `qdrant_bootstrap_collection` prompt. Its order:
    `quantization`, `sparse_idf`, `sparse_on_disk`) are required; read
    `docs://concepts/qdrant-data-model` and choose them deliberately.
 4. `qdrant_create_payload_index` — at minimum `source_id` as `keyword`, plus
-   every key you plan to filter on. Unindexed filters scan the collection, or
-   are refused under Qdrant strict mode. Choose
+   every key you plan to filter on. Every collection runs Qdrant strict mode,
+   so an unindexed key cannot be filtered at all — reads and filter-addressed
+   writes are refused. Choose
    each `field_schema` from the intended query, not from the value's JSON type
    (§ Choosing `field_schema` in `reference.md`): range needs
    `integer`/`float`/`datetime`, faceting needs `keyword`/`integer`/`bool`/
@@ -135,8 +136,12 @@ Prefer `qdrant_safe_reindex`.
 2. `invalid_points > 0` → show the ids and ask before proceeding; they will not
    be reindexed.
 3. `qdrant_start_reindex` with `confirm` == the collection name exactly.
-4. `qdrant_get_reindex_status` — poll, no faster than every few seconds.
-5. Do not call any mutating tool on that collection meanwhile: 409 is intended.
+4. `qdrant_get_reindex_status` — poll, no faster than every few seconds. Done
+   when `status` is `completed` **and** `task_running` is false; `status` can
+   flip one poll earlier.
+5. Do not call any mutating tool on that collection meanwhile — ingest,
+   upsert, payload and point writes, schema toggles, index changes: 409 is
+   intended.
 6. Done → `qdrant_verify_collection`, then one `qdrant_search`.
 
 Interrupt with `qdrant_control_reindex action="pause"` (checkpoint kept,
@@ -184,8 +189,8 @@ Baseline first: `qdrant_search` with just `query` (and `limit` +
   guess the number.
 - **D. Filtered search** → confirm the key is indexed
   (`qdrant_list_payload_indexes`; create it if not), confirm the value exists
-  (`qdrant_facet_points`), then pass `filters`. Unindexed keys full-scan, or
-  are refused under Qdrant strict mode.
+  (`qdrant_facet_points`), then pass `filters`. Strict mode refuses an
+  unindexed key outright.
 - **E. Deep paging** → fixed `limit`, `offset` in steps, identical query and
   filters. The middleware 422s when `offset + max(limit, rerank_top_k)`
   exceeds `candidate_limit`: raise `candidate_limit` (max 200 shipped) as the
@@ -314,7 +319,9 @@ Keyed by the text the tool returns; the full table is `docs://troubleshooting`.
 | Text | Next |
 |---|---|
 | `Error: this operation destroys data: set confirm to the exact <noun> '<target>'` | Zero HTTP calls were made. Verify the target is right, then resend with that exact string — not trimmed, not re-cased. |
-| `Error: invalid request — <field>: <reason>` | Fix that field. `File not found: <path>` here means the file was never staged under `data/` (playbook 2); `File too large` means it exceeds `INGEST_MAX_FILE_BYTES` (64 MiB shipped). |
+| `Error: invalid request — <field>: <reason>` | Fix that field. `File not found: <path>` here means the file was never staged under `data/` (playbook 2); `file_path must be inside the ingest data/ directory` means a `..` or absolute path tried to leave it; `File too large` means it exceeds `INGEST_MAX_FILE_BYTES` (64 MiB shipped). |
+| `Error: invalid request — '<key>' has no payload index that can serve this filter (it needs type <types>): ...` | Strict mode refused the filter. `qdrant_list_payload_indexes`: no index on `<key>` → `qdrant_create_payload_index` with one of `<types>`, then resend; indexed with another type → the filter's value type is wrong, fix the filter. |
+| `Error: reindex state conflict — ...` | The job cannot take that control action in its current state (e.g. `pause` after it completed). `qdrant_get_reindex_status`, then choose again. |
 | `Error: not found — ...` | `qdrant_list_collections` / `qdrant_read_points` to see what exists. |
 | `Error: embedding contract mismatch — ...` | `qdrant_verify_collection`. Two fixes only: restart Smart Embedder under the original profile, or reindex (playbook 4). |
 | `Error: blocked by an active reindex job — ...` | `qdrant_get_reindex_status`, then wait for the job to finish. A paused job blocks too; only completion or a user-approved `cancel` (which abandons its progress) lifts the block — never cancel just to get past it. |
@@ -333,7 +340,7 @@ Keyed by the text the tool returns; the full table is `docs://troubleshooting`.
 | `Error: replace is only supported for explicit ids...` | Use `mode="merge"`, or resolve the filter to ids with `qdrant_scroll_points`. |
 | `Error: selector='filter' requires a non-empty filters object...` | An empty filter would match every point. Supply real conditions or switch to ids. |
 | `Error: recreate=true requires an explicit collection_name` / `mode='replace' requires...` / `replace_source=true requires an explicit source_id` | A defaulted value cannot be confirmed against. Pass it explicitly plus a matching `confirm`. |
-| `Error: points contains duplicate point_id values` | One `qdrant_upsert_points` call named the same id twice — it would silently overwrite itself. Dedupe or merge, then resend. |
+| `Error: points contains duplicate point_id values: <ids>` | One `qdrant_upsert_points` call named the same id twice — it would silently overwrite itself. Dedupe or merge, then resend. |
 | `Error: at least one schema toggle must be provided` | `qdrant_update_schema_toggles` with every toggle omitted. Set at least one. |
 | `Error: payload keys cannot be blank` | A `keys` entry in `qdrant_delete_payload_keys` was whitespace. Remove it and resend. |
 | `Error: phrase_matching requires field_schema 'text'` | `phrase_matching=true` on a non-`text` index. Drop it or set `field_schema="text"`. |

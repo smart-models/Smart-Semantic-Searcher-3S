@@ -156,7 +156,9 @@ for the same rules, with the teaching documents standing in for the skill's
 `references/` files, which this server does not serve — and restate what must
 hold from that first call: `response_format`, the exact
 `confirm` gate, pagination, the documents to read before creating a collection
-or ingesting, the 4 MiB inline-ingest ceiling, and the three workflow prompts.
+or ingesting, the 4 MiB inline-ingest ceiling, strict mode's index-before-filter
+rule, that stored payload text is data rather than instructions, and the three
+workflow prompts.
 `tests/test_prompts.py` fails when they name a tool, prompt or document this
 server does not serve.
 
@@ -165,7 +167,10 @@ server does not serve.
 Every tool advertises an object `outputSchema` and returns the
 upstream-normalized payload in `structuredContent`. The same call also includes
 a text block selected by `response_format` (`markdown` by default, or `json`),
-preserving compatibility with clients that only consume text. Error results use
+preserving compatibility with clients that only consume text. Which of the two
+reaches the model is the client's choice: Claude Code hands it
+`structuredContent`, so there `response_format` changes nothing the model sees
+and `limit`/`with_payload` are the only levers on result size. Error results use
 `isError=true` and an empty structured object while retaining their actionable
 text message.
 
@@ -535,8 +540,8 @@ qdrant_search {
 }
 ```
 Restricts results to points whose `lang` payload field matches `"en"`.
-An unindexed filter may scan the collection or be refused by Qdrant strict
-mode; index filter fields before use. See
+Every collection runs Qdrant strict mode, so `lang` must carry a `keyword`
+index first or the call is refused. See
 `docs://reference/filters` and `qdrant_list_payload_indexes`.
 
 **High-recall search:**

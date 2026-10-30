@@ -59,13 +59,19 @@ Date range plus keyword: `{"must": [{"key": "created_at", "range":
 Exclusion: `{"must_not": [{"key": "status", "match": {"value":
 "draft"}}]}`.
 
-## Unindexed fields depend on collection policy
+## Every filtered key needs an index
 
-Qdrant can scan an unindexed payload field when its collection policy allows
-unindexed filtering. Strict mode can reject these requests; do not promise
-that a missing index always falls back to a scan. The console offers indexed
-fields in its filter selectors. Create the matching index with
-`qdrant_create_payload_index` before filtering regularly. See the upstream
+The middleware creates every collection — and re-aligns older ones at
+startup — in Qdrant strict mode with unindexed filtering refused for reads
+and writes. A filter on a key without a fitting index is never scanned: the
+search, count, scroll, facet, or filter-addressed payload write or delete
+fails with `Error: invalid request — '<key>' has no payload index that can
+serve this filter (it needs type <types>)`. Two causes produce it: the key has no index (create
+one with `qdrant_create_payload_index`), or it has one of another type, so
+the filter's value type is wrong for it — an integer `match` against a
+`keyword` index, or a `range` against one. `qdrant_list_payload_indexes`
+tells the two apart. Only conditions that need no payload index — `has_id`,
+`has_vector` — work on any collection. See the upstream
 [indexing contract](https://qdrant.tech/documentation/manage-data/indexing/#block-queries-that-filter-on-unindexed-fields).
 
 ## Related tools

@@ -18,9 +18,9 @@ tuning knob defaults to the middleware's own configured behavior.
 {"value": "it"}}]}` — restrict the candidate pool to a payload-matched
 subset before ranking, so hits only ever compete against relevant material.
 Confirm `lang` actually has a payload index (`qdrant_list_payload_indexes`;
-create one with `qdrant_create_payload_index` if not) — an unindexed filter
-key scans the collection, or is refused outright under Qdrant strict mode
-(`docs://reference/filters`).
+create one with `qdrant_create_payload_index` if not) — every collection runs
+Qdrant strict mode, so an unindexed filter key is refused outright, never
+scanned (`docs://reference/filters`).
 
 ## 3. High-recall search for a rare identifier
 
@@ -65,8 +65,11 @@ high-confidence hits over broad recall.
   returns confident-looking zero results, not an error.
 - **Filter too narrow**: check the exact same filter's match count with
   `qdrant_count_points` before assuming the content is missing.
-- **Unindexed filter key**: it may scan slowly, or be refused under Qdrant
-  strict mode; check `qdrant_list_payload_indexes`.
+- **Value type the index accepts, stored type it skips**: an `integer` index
+  over values stored as strings `"3"` matches nothing and raises nothing.
+  Read a point and compare its JSON type to `qdrant_list_payload_indexes`.
+  (An unindexed key, or a value type the index cannot take, is not a silent
+  cause: strict mode refuses it with an error.)
 - **Contract mismatch is not a silent cause**: a collection served under the
   wrong embedding profile makes the search fail with `Error: embedding
   contract mismatch` rather than come back empty; `qdrant_verify_collection`
