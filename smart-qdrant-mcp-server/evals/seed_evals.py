@@ -47,6 +47,20 @@ def load_corpus() -> list[dict]:
     return json.loads(CORPUS_PATH.read_text(encoding="utf-8"))
 
 
+async def call(client: Client, tool: str, arguments: dict) -> object:
+    """Call one tool and raise if it reports an error.
+
+    Every tool takes a single Pydantic argument named ``params``, so the wire
+    arguments nest one level under that key. A refused call raises rather than
+    printing, so a failed seed cannot pass for a successful one.
+    """
+    result = await client.call_tool(tool, {"params": arguments})
+    if result.is_error:
+        text = "".join(getattr(block, "text", "") for block in result.content)
+        raise RuntimeError(f"{tool} failed: {text}")
+    return result
+
+
 async def seed(url: str, token: str, *, recreate: bool) -> None:
     """Create the collection, index its payload keys, and ingest the corpus."""
     async with httpx2.AsyncClient(
@@ -54,31 +68,18 @@ async def seed(url: str, token: str, *, recreate: bool) -> None:
     ) as http_client:
         transport = streamable_http_client(url, http_client=http_client)
         async with Client(transport) as client:
+            create = {
+                "collection_name": COLLECTION,
+                "dense_on_disk": False,
+                "quantization": False,
+                "sparse_idf": True,
+                "sparse_on_disk": False,
+            }
             if recreate:
-                await client.call_tool(
-                    "qdrant_create_collection",
-                    {
-                        "collection_name": COLLECTION,
-                        "dense_on_disk": False,
-                        "quantization": False,
-                        "sparse_idf": True,
-                        "sparse_on_disk": False,
-                        "recreate": True,
-                        "confirm": COLLECTION,
-                    },
-                )
-            else:
-                await client.call_tool(
-                    "qdrant_create_collection",
-                    {
-                        "collection_name": COLLECTION,
-                        "dense_on_disk": False,
-                        "quantization": False,
-                        "sparse_idf": True,
-                        "sparse_on_disk": False,
-                    },
-                )
-            await client.call_tool(
+                create |= {"recreate": True, "confirm": COLLECTION}
+            await call(client, "qdrant_create_collection", create)
+            await call(
+                client,
                 "qdrant_create_payload_index",
                 {
                     "collection_name": COLLECTION,
@@ -88,7 +89,8 @@ async def seed(url: str, token: str, *, recreate: bool) -> None:
                     ],
                 },
             )
-            result = await client.call_tool(
+            result = await call(
+                client,
                 "qdrant_ingest_chunks",
                 {
                     "chunks": load_corpus(),
@@ -103,7 +105,8 @@ async def seed(url: str, token: str, *, recreate: bool) -> None:
                 },
             )
             print(result)
-            count = await client.call_tool(
+            count = await call(
+                client,
                 "qdrant_count_points",
                 {"collection_name": COLLECTION, "response_format": "json"},
             )
