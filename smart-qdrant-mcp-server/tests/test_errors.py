@@ -36,6 +36,51 @@ def test_422_names_the_field_and_reason():
     assert "qdrant_check_health" not in message
 
 
+@pytest.mark.parametrize(
+    "detail",
+    [
+        'Qdrant query failed: Bad request: Index required but not found for "lang" '
+        "of one of the following types: [keyword]. Help: Create an index for "
+        "this key or use a different filter.",
+        "Qdrant error: Unexpected Response: 400 (Bad Request) Raw response "
+        'content: b\'{"status":{"error":"Bad request: Index required but not '
+        'found for \\"lang\\" of one of the following types: [keyword]. Help: '
+        "Create an index for this key or use a different filter.\"}}'",
+    ],
+)
+def test_strict_mode_index_refusal_names_both_causes_and_the_next_calls(detail):
+    message = describe_error(err(400, detail))
+    assert message.startswith("Error: invalid request")
+    assert "'lang'" in message
+    assert "keyword" in message
+    assert "strict mode" in message
+    assert "qdrant_list_payload_indexes" in message
+    assert "qdrant_create_payload_index" in message
+    assert "value type" in message
+    assert "Raw response" not in message
+
+
+def test_strict_mode_refusal_does_not_claim_the_key_is_unindexed():
+    detail = (
+        'Index required but not found for "topic" of one of the following '
+        "types: [integer]."
+    )
+    message = describe_error(err(400, detail))
+    assert "'topic' has no payload index that can serve this filter" in message
+
+
+@pytest.mark.parametrize(
+    "status,detail",
+    [
+        (409, "Collection vectors are being regenerated; mutations are blocked."),
+        (409, "Some conflict."),
+        (404, "Collection 'x' not found."),
+    ],
+)
+def test_upstream_sentence_period_is_not_doubled(status, detail):
+    assert ".." not in describe_error(err(status, detail))
+
+
 def test_422_redacts_internal_fragments_but_keeps_the_field():
     detail = [
         {

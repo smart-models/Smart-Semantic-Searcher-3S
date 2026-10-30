@@ -180,6 +180,27 @@ async def test_fan_out_reports_partial_failure_per_id(call, routes):
     assert "not found" in payload["failed"][0]["reason"]
 
 
+async def test_fan_out_names_the_collection_when_every_id_fails(call, routes):
+    routes.add(
+        "POST",
+        "/points/p1/payload/delete-keys",
+        status=400,
+        body={"detail": "Cannot delete protected payload fields: text"},
+    )
+    payload = json.loads(
+        await call(
+            "qdrant_delete_payload_keys",
+            selector="ids",
+            ids=["p1"],
+            keys=["text"],
+            collection_name="docs",
+            response_format="json",
+        )
+    )
+    assert payload["updated"] == []
+    assert payload["collection_name"] == "docs"
+
+
 async def test_fan_out_failure_reason_is_redacted(call, routes):
     # Final review finding 2: _fan_out used to return str(exc.detail)
     # verbatim -- the one place in this service where upstream internals

@@ -41,6 +41,15 @@ CONTRACT_MARKERS = (
     "no sparse vector",
 )
 
+# Qdrant's strict-mode refusal of a filter whose key lacks a fitting index.
+# The middleware creates every collection with unindexed filtering refused on
+# reads and writes alike, so this fires both for a key with no index and for a
+# filter value whose type does not fit the index the key has. The quotes may
+# arrive backslash-escaped when the text is a repr of Qdrant's raw response.
+_INDEX_REQUIRED_RE = re.compile(
+    r'Index required but not found for \\*"([^"\\]+)\\*" '
+    r"of one of the following types: \[([^\]]*)\]"
+)
 _WINDOWS_PATH_RE = re.compile(r"^[A-Za-z]:\\")
 # A bare "host:port" or "ip:port" fragment, e.g. "10.0.4.22:6333" or
 # "internal-qdrant.svc.cluster.local:6333[/path]". The lookahead requires a
@@ -230,13 +239,26 @@ def describe_error(exc: Exception) -> str:
     if not isinstance(exc, MiddlewareError):
         return f"Error: unexpected failure of type {type(exc).__name__}."
 
-    text = _as_text(exc.detail)
-    if exc.status == 400:
-        safe_detail = redact(_flatten_validation_detail(exc.detail))
-        return f"Error: invalid request — {safe_detail}"
-    if exc.status == 422:
-        safe_detail = redact(_flatten_validation_detail(exc.detail))
-        return f"Error: invalid request — {safe_detail}"
+    # Upstream text is embedded mid-sentence below, so its own closing period
+    # would double up against the one that follows it.
+    text = _as_text(exc.detail).strip().rstrip(".")
+    if exc.status in (400, 422):
+        flat = _flatten_validation_detail(exc.detail)
+        missing = _INDEX_REQUIRED_RE.search(flat)
+        if missing:
+            field, types = missing.groups()
+            return (
+                f"Error: invalid request — '{field}' has no payload index that "
+                f"can serve this filter (it needs type {types}): every "
+                "collection here runs Qdrant strict mode, which refuses such "
+                "filters on reads and filter-addressed writes alike. Call "
+                f"qdrant_list_payload_indexes: if '{field}' has no index, "
+                "create one with qdrant_create_payload_index; if it is indexed "
+                "with another type, the filter's value type is wrong for that "
+                "index (e.g. an integer against a keyword index) — fix the "
+                "filter, not the index."
+            )
+        return f"Error: invalid request — {redact(flat)}"
     if exc.status == 401 or exc.status == 403:
         return (
             "Error: the MCP server is not authorized against the middleware. "

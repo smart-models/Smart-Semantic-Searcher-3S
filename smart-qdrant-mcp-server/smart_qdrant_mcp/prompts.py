@@ -55,7 +55,7 @@ def register(mcp: MCPServer) -> None:
             "required toggles deliberately rather than guessing.\n"
             "4. qdrant_create_payload_index — index the payload keys the "
             "corpus will be filtered by, at minimum source_id as a keyword "
-            "index. Filtering an unindexed key causes a full scan.\n"
+            "index. Strict mode refuses any filter on an unindexed key.\n"
             f"5. qdrant_ingest_file — ingest {source_path!r} into "
             f"{collection_name!r}. The path is relative to the middleware's "
             "data directory, and the file must already be there: no tool on "

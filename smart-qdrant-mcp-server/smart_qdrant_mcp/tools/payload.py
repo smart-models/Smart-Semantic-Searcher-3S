@@ -367,7 +367,8 @@ async def _fan_out(
             if collection_name is None and isinstance(raw, dict):
                 collection_name = raw.get("collection_name")
     return {
-        "collection_name": collection_name,
+        # Every id failing leaves no response to read the name from.
+        "collection_name": collection_name or body.get("collection_name"),
         "updated": updated,
         "failed": failed,
         "atomic": False,
@@ -851,8 +852,6 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
                 body={"collection_name": params.collection_name},
                 ids=params.ids or [],
             )
-            if result["collection_name"] is None:
-                result["collection_name"] = params.collection_name
         except Exception as exc:  # -> agent message
             return error_result(exc)
 

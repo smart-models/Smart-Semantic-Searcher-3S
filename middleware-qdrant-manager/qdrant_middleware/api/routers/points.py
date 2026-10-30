@@ -914,7 +914,7 @@ def _validate_ingest_path(file_path: str, settings: Settings) -> Path:
     except Exception as e:
         raise HTTPException(400, f"Invalid file_path: {e}") from e
     if not resolved.is_relative_to(root):
-        raise HTTPException(400, "file_path must be inside qdrant/data/")
+        raise HTTPException(400, "file_path must be inside the ingest data/ directory")
     if not resolved.exists() or not resolved.is_file():
         raise HTTPException(400, f"File not found: {file_path}")
     if resolved.stat().st_size > settings.ingest_max_file_bytes:

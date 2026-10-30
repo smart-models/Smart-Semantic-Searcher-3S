@@ -50,7 +50,7 @@ async def test_duplicate_point_ids_are_rejected_before_http(call, routes):
     assert routes.calls == []
     assert out.is_error is True
     assert out.startswith("Error:")
-    assert "points contains duplicate point_id values" in out
+    assert "points contains duplicate point_id values: p1" in out
     assert "validation error" not in out
     assert "pydantic.dev" not in out
 

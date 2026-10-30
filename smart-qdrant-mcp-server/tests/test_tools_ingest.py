@@ -71,7 +71,7 @@ async def test_ingest_file_sandbox_rejection_is_readable(call, routes):
         "POST",
         "/points/ingest",
         status=400,
-        body={"detail": "file_path must be inside qdrant/data/"},
+        body={"detail": "file_path must be inside the ingest data/ directory"},
     )
     out = await call("qdrant_ingest_file", file_path="../../etc/passwd")
     assert out.is_error is True

@@ -1033,9 +1033,10 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
         """
         try:
             ids = [point.point_id for point in params.points]
+            dupes = sorted({pid for pid in ids if ids.count(pid) > 1})
             refuse_if(
-                len(set(ids)) != len(ids),
-                "points contains duplicate point_id values",
+                bool(dupes),
+                f"points contains duplicate point_id values: {', '.join(dupes)}",
             )
             raw = await _dispatch_upsert(ctx, params)
         except Exception as exc:  # -> agent message
@@ -1110,14 +1111,14 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
                 - confirm (str | None): must equal collection_name exactly;
                   omitting it with selector="filter" triggers the dry run
                   instead of a refusal.
-                - response_format (ResponseFormat): 'markdown' or 'json'
-                  (ignored for the dry-run message, which is always plain
-                  text).
+                - response_format (ResponseFormat): 'markdown' or 'json'.
 
         Returns:
-            str: For a filter dry run, a plain-text sentence naming the
-            match count and the exact confirm value to resend. Otherwise,
-            a markdown fact sheet or JSON with this schema:
+            str: For a filter dry run, a sentence naming the match count and
+            the exact confirm value to resend (markdown), or JSON with
+            ``collection_name``, ``matched``, ``deleted`` (0) and
+            ``dry_run`` (true). Otherwise, a markdown fact sheet or JSON
+            with this schema:
 
             {
                 "collection_name": str,

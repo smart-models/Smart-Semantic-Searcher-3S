@@ -391,10 +391,11 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
     ) -> StructuredToolResult:
         """Create one or more user-managed payload indexes.
 
-        Filtering on a payload key with no index still works, but as a full
-        collection scan — see the resource docs://reference/filters for how
-        filters are evaluated. Indexing the keys you filter on regularly is
-        what makes those filters fast.
+        Every collection runs Qdrant strict mode with unindexed filtering
+        refused, so a key must carry an index of a fitting type before any
+        search, count, scroll, facet or filter-addressed write can filter on
+        it — without one the call fails with "'<key>' has no payload index
+        that can serve this filter". See the resource docs://reference/filters.
 
         Creating an index for a field that is already indexed with the same
         ``field_schema`` is a no-op reported in the ``skipped`` bucket
@@ -521,8 +522,9 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
 
         This does not delete the payload data itself, only the index on it:
         the field remains readable and its values remain in every point, but
-        any query that filters on this key afterwards falls back to a full
-        collection scan instead of the fast indexed path — see the resource
+        every collection runs Qdrant strict mode, so any search, count,
+        scroll, facet or filter-addressed write that filters on this key is
+        refused afterwards until it is indexed again — see the resource
         docs://reference/filters. ``confirm`` must equal ``collection_name``
         exactly; a missing or mismatched ``confirm`` is rejected before any
         request reaches the middleware.

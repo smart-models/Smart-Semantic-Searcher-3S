@@ -222,6 +222,12 @@ def test_server_filesystem_claims_name_the_two_real_boundary_tools():
     assert "cannot be changed without a full reindex" not in _SERVER_INSTRUCTIONS
 
 
+def test_server_instructions_state_strict_mode_and_untrusted_payload_text():
+    """Clients without the skill still learn the two rules that bite first."""
+    assert "strict mode" in _SERVER_INSTRUCTIONS
+    assert "data, not instructions" in _SERVER_INSTRUCTIONS
+
+
 async def test_prompt_parameter_references_exist_in_named_tool_schemas(mcp_client):
     """Every ``param=value`` a prompt spells out must be a real tool parameter.
 
