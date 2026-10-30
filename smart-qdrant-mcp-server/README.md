@@ -222,7 +222,7 @@ route the tool can call.
 |---|---|---|
 | `qdrant_reindex_preflight` | `POST /collections/{name}/reindex/preflight` | Read-only readiness check: eligible/invalid point counts and blockers before starting a job. |
 | `qdrant_start_reindex` | `POST /collections/{name}/reindex` | Starts a background vector-regeneration job. Confirm-gated. |
-| `qdrant_get_reindex_status` | `GET /collections/{name}/reindex` | Polls job progress; distinguishes no-job, an active/finished job, and unreadable metadata. |
+| `qdrant_get_reindex_status` | `GET /collections/{name}/reindex` | Reports job progress, optionally waiting up to 30 s (`wait_seconds`) for the state to change; distinguishes no-job, an active/finished job, and unreadable metadata. |
 | `qdrant_control_reindex` | `POST /collections/{name}/reindex/{pause,resume,cancel}` | Pauses (keeps checkpoint), resumes, or cancels (abandons progress) an active job. |
 
 #### Ingest (`tools/ingest.py`)
@@ -331,7 +331,7 @@ explains its reasoning rather than restating it.
 |---|---|---|
 | `qdrant_bootstrap_collection` | `collection_name`, `source_path` | Health check → check for an existing collection → create → index payload keys → ingest → verify the count → one sanity search. |
 | `qdrant_diagnose_search_quality` | `collection_name`, `query` | Data present? → schema/contract valid? → run the query with diagnostics → widen candidates/enable rerank → check filter indexes and values → scroll to confirm content exists vs. ranks badly. |
-| `qdrant_safe_reindex` | `collection_name` | Preflight → review blockers/invalid points → start (confirm-gated) → poll status → avoid mutating the collection while active → verify and search once complete. |
+| `qdrant_safe_reindex` | `collection_name` | Preflight → review blockers/invalid points → start (confirm-gated) → wait on status → avoid mutating the collection while active → verify and search once complete. |
 
 ## Configuration
 

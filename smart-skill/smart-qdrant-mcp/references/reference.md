@@ -312,7 +312,8 @@ Read-only. Report `can_start`, `blockers`, `total_points`,
 
 | Param | Default | Use it well |
 |---|---|---|
-| `collection_name` | — (required) | Poll no faster than every few seconds. Distinguishes no-job / active / finished / `metadata_invalid` (unreadable state → `cancel` clears it). |
+| `collection_name` | — (required) | Distinguishes no-job / active / finished / `metadata_invalid` (unreadable state → `cancel` clears it). |
+| `wait_seconds` | `0` | 0–30. The call waits until the job's `status` or `task_running` changes (a pause taking effect, the end) or the time is up — pass `30` while waiting instead of calling repeatedly. No task running → answers at once. |
 | `response_format` | `markdown` | — |
 
 ### `qdrant_control_reindex`

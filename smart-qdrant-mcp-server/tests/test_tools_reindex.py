@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from smart_qdrant_mcp.tools import reindex
+
 PREFLIGHT = {
     "collection_name": "docs",
     "can_start": True,
@@ -125,6 +127,76 @@ async def test_status_handles_absent_job(call, routes):
     )
     out = await call("qdrant_get_reindex_status", collection_name="docs")
     assert "no reindex job" in out.lower()
+
+
+@pytest.fixture
+def waits(monkeypatch):
+    """Record each wait between status reads instead of sleeping through it."""
+    recorded: list[float] = []
+
+    async def no_sleep(seconds):
+        recorded.append(seconds)
+
+    monkeypatch.setattr(reindex, "sleep", no_sleep)
+    return recorded
+
+
+def _status(state: str, running: bool, processed: int = 120) -> dict:
+    job = {**STATUS["job"], "status": state, "processed_points": processed}
+    return {**STATUS, "job": job, "task_running": running}
+
+
+async def test_status_wait_returns_once_a_pause_takes_effect(call, routes, waits):
+    """One call does the waiting: no client-side polling loop for a pause."""
+    for body in (
+        _status("paused", True),
+        _status("paused", True, 128),
+        _status("paused", False, 128),
+    ):
+        routes.add("GET", "/collections/docs/reindex", body=body)
+
+    out = await call(
+        "qdrant_get_reindex_status", collection_name="docs", wait_seconds=30
+    )
+
+    assert len(routes.calls) == 3
+    assert waits == [reindex.STATUS_POLL_SECONDS] * 2
+    assert "**Running**: False" in out
+    assert "128 of 500" in out
+
+
+async def test_status_wait_ignores_progress_within_the_same_state(call, routes, waits):
+    """Processed counts move every batch; only a state change ends the wait."""
+    for processed in (120, 184, 248):
+        routes.add(
+            "GET", "/collections/docs/reindex", body=_status("running", True, processed)
+        )
+
+    out = await call(
+        "qdrant_get_reindex_status", collection_name="docs", wait_seconds=4
+    )
+
+    assert len(routes.calls) == 3
+    assert "248 of 500" in out
+
+
+async def test_status_wait_answers_at_once_when_no_task_runs(call, routes, waits):
+    """A job no worker is running cannot change on its own: waiting is wasted."""
+    routes.add("GET", "/collections/docs/reindex", body=_status("paused", False))
+
+    await call("qdrant_get_reindex_status", collection_name="docs", wait_seconds=30)
+
+    assert len(routes.calls) == 1
+    assert waits == []
+
+
+async def test_status_rejects_a_wait_longer_than_thirty_seconds(call, routes):
+    out = await call(
+        "qdrant_get_reindex_status", collection_name="docs", wait_seconds=31
+    )
+
+    assert "Error" in out or "validation" in out.lower()
+    assert routes.calls == []
 
 
 @pytest.mark.parametrize("action", ["pause", "resume", "cancel"])

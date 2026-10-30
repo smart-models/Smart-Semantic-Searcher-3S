@@ -136,9 +136,10 @@ Prefer `qdrant_safe_reindex`.
 2. `invalid_points > 0` → show the ids and ask before proceeding; they will not
    be reindexed.
 3. `qdrant_start_reindex` with `confirm` == the collection name exactly.
-4. `qdrant_get_reindex_status` — poll, no faster than every few seconds. Done
-   when `status` is `completed` **and** `task_running` is false; `status` can
-   flip one poll earlier.
+4. `qdrant_get_reindex_status` with `wait_seconds=30` — each call waits for
+   the job to change, so repeat it with no delay of your own. Done when
+   `status` is `completed` **and** `task_running` is false; `status` can flip
+   one read earlier.
 5. Do not call any mutating tool on that collection meanwhile — ingest,
    upsert, payload and point writes, schema toggles, index changes: 409 is
    intended.

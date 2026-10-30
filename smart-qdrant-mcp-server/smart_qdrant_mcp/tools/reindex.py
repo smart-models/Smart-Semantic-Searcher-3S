@@ -11,6 +11,8 @@ poll it, and pause/resume/cancel it.
 
 from __future__ import annotations
 
+import math
+from asyncio import sleep
 from typing import Any, Literal, Optional
 from urllib.parse import quote
 
@@ -37,6 +39,10 @@ CONTROL_PATHS: dict[str, str] = {
     "resume": "resume",
     "cancel": "cancel",
 }
+
+# How often a waiting status call re-reads the job. The middleware answers
+# from collection metadata, so a read every two seconds costs next to nothing.
+STATUS_POLL_SECONDS = 2
 
 
 class ReindexPreflightInput(BaseModel):
@@ -82,6 +88,17 @@ class ReindexStatusInput(BaseModel):
 
     collection_name: str = Field(
         ..., min_length=1, description="Collection to check (e.g. 'docs')"
+    )
+    wait_seconds: int = Field(
+        default=0,
+        ge=0,
+        le=30,
+        description=(
+            "Seconds to wait for a running job to change state before "
+            "answering: returns as soon as its status or task_running "
+            "changes, else after this long; 0 (default) answers at once "
+            "(e.g. 30)"
+        ),
     )
     response_format: ResponseFormat = Field(
         default=ResponseFormat.MARKDOWN,
@@ -183,6 +200,15 @@ def _job_rows(payload: dict[str, Any]) -> list[str]:
 def _status_rows(payload: dict[str, Any]) -> list[str]:
     """Render reindex status. See _job_rows for the three-state logic."""
     return _job_rows(payload)
+
+
+def _job_phase(payload: dict[str, Any]) -> tuple[object, object]:
+    """Return what a waiting status call watches: state and task_running.
+
+    Processed counts are left out on purpose: they move every batch, and a
+    wait that ended on them would end after one read.
+    """
+    return (payload.get("job") or {}).get("status"), payload.get("task_running")
 
 
 def _action_rows(payload: dict[str, Any]) -> list[str]:
@@ -391,9 +417,16 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
            qdrant_control_reindex(action='cancel'), after which
            qdrant_reindex_preflight can run again.
 
+        With ``wait_seconds`` the call itself does the waiting: it re-reads
+        the job every few seconds and answers as soon as its status or
+        ``task_running`` changes (a pause taking effect, a job finishing or
+        failing), or once the time is up. A job with no task running cannot
+        change on its own, so that answer comes at once.
+
         Args:
             params (ReindexStatusInput): Validated input containing:
                 - collection_name (str): collection to check, required.
+                - wait_seconds (int): 0-30, default 0 (answer at once).
                 - response_format (ResponseFormat): 'markdown' or 'json'.
 
         Returns:
@@ -411,8 +444,9 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
             }
 
         Examples:
-            - Use when: polling an in-progress reindex for completion or
-              failure before relying on the collection's vectors.
+            - Use when: waiting for an in-progress reindex to complete or
+              fail before relying on the collection's vectors — pass
+              wait_seconds=30 rather than calling again at once.
             - Use when: a collection mutation was rejected with a 409
               mentioning reindex, to see whether it is safe to wait it out.
             - Don't use when: you want to check whether a reindex *can*
@@ -427,15 +461,20 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
             metadata_invalid: true in a normal 200 response instead, so
             status-checking always works even when the state is corrupt.
         """
+        path = f"/collections/{quote(params.collection_name, safe='')}/reindex"
         try:
-            raw = await ctx.client.request(
-                "GET",
-                f"/collections/{quote(params.collection_name, safe='')}/reindex",
-            )
+            raw = await ctx.client.request("GET", path)
+            payload = raw if isinstance(raw, dict) else {}
+            phase = _job_phase(payload)
+            polls = math.ceil(params.wait_seconds / STATUS_POLL_SECONDS)
+            while polls and phase[1] and _job_phase(payload) == phase:
+                polls -= 1
+                await sleep(STATUS_POLL_SECONDS)
+                raw = await ctx.client.request("GET", path)
+                payload = raw if isinstance(raw, dict) else {}
         except Exception as exc:  # -> agent message
             return error_result(exc)
 
-        payload = raw if isinstance(raw, dict) else {}
         return render(
             payload,
             params.response_format,
@@ -465,8 +504,8 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
         returns before the work has actually stopped: the status flips to
         ``paused`` while the in-flight batch finishes, and a ``resume`` sent
         in that window is refused with "a reindex task is already running".
-        Poll qdrant_get_reindex_status until ``task_running`` is false before
-        resuming. ``cancel`` abandons the job's
+        Call qdrant_get_reindex_status with ``wait_seconds`` until
+        ``task_running`` is false before resuming. ``cancel`` abandons the job's
         progress entirely — the source generation is left active and
         untouched, but the checkpoint is gone, so a fresh
         qdrant_start_reindex begins from zero. **A paused job still blocks
