@@ -73,7 +73,9 @@ default for this call only.
 Response fields worth reading (`json`): `fusion`, `reranked`, `candidates`
 (fused hits in this window — not the prefetch pool), `skipped_without_text`
 (hits with no usable `text` payload: they skip the reranker and keep fused
-order — a reason to keep `text` on every point), `score` (fused) vs
+order — a reason to keep `text` on every point; leaving `text` out of
+`with_payload` does not cause skips, since the middleware still reads it for the
+reranker and drops it from the response), `score` (fused) vs
 `rerank_score`, `has_more`/`next_offset`. `total` is always null: search
 never counts matches — use `qdrant_count_points` for that.
 

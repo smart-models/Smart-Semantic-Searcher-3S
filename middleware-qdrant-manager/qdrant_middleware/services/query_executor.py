@@ -355,6 +355,11 @@ def _point_to_hit(point: models.ScoredPoint) -> QueryHit:
     )
 
 
+def _without_text(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return ``payload`` minus its ``text`` key."""
+    return {key: value for key, value in payload.items() if key != "text"}
+
+
 def _build_response(
     request: QueryRequest,
     hits: list[QueryHit],
@@ -373,6 +378,12 @@ def _build_response(
     """
     start = request.offset or 0
     final = hits[start : start + request.limit]
+    if request.with_payload is not None and "text" not in request.with_payload:
+        # Fetched for the reranker only (see run_hybrid_query); not selected.
+        final = [
+            hit.model_copy(update={"payload": _without_text(hit.payload)})
+            for hit in final
+        ]
     return QueryResponse(
         query=request.query,
         collection_name=request.collection_name,
@@ -523,11 +534,14 @@ async def run_hybrid_query(
     search_params = _build_search_params(quantization_active, settings, request)
     # No explicit selection means the whole payload: a hardcoded shortlist would
     # silently drop every other field a caller stored.
-    payload_fields = (
-        qdrant_payload_selector(request.with_payload)
-        if request.with_payload is not None
-        else True
-    )
+    payload_fields = True
+    if request.with_payload is not None:
+        fields = request.with_payload
+        # The reranker scores `text`: fetch it even when the caller did not
+        # select it, or every hit is skipped. _build_response strips it again.
+        if request.rerank and "text" not in fields:
+            fields = [*fields, "text"]
+        payload_fields = qdrant_payload_selector(fields)
     # Fixed by candidate_limit alone: apply_defaults has already refused any offset
     # that would reach past it, so the pool stays identical across the pages of one
     # query instead of deepening as the caller advances.

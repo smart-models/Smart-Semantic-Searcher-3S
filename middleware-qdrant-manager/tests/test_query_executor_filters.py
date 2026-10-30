@@ -682,6 +682,62 @@ async def test_run_hybrid_query_stably_sorts_full_pool_and_ignores_offset():
     assert [hit.id for hit in hits] == ["2", "3", "1"]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("rerank", "fetched"),
+    [(True, ["chunk_id", "text"]), (False, ["chunk_id"])],
+)
+async def test_rerank_fetches_text_the_caller_did_not_select(rerank, fetched):
+    """The reranker scores ``text``, so a selection without it must still fetch it.
+
+    Before the fix, ``with_payload=["chunk_id"]`` withheld ``text`` from every
+    hit and the reranker silently skipped them all (``reranked: false``).
+    """
+    settings = Settings(
+        QDRANT_COLLECTION="docs",
+        MIDDLEWARE_API_TOKENS="",
+        MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL=True,
+    )
+    request = QueryRequest(
+        query="q", limit=2, rerank=rerank, with_payload=["chunk_id"]
+    ).apply_defaults(settings)
+    embedding = SimpleNamespace(
+        dense=[0.1], sparse=models.SparseVector(indices=[0], values=[1.0])
+    )
+    client = _FakePagingClient()
+
+    await run_hybrid_query(request, embedding, client, settings)
+
+    assert client.query_kwargs["with_payload"] == fetched
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("selected", "returns_text"),
+    [(["chunk_id"], False), (["chunk_id", "text"], True), (None, True)],
+)
+async def test_text_fetched_only_for_rerank_is_not_returned(selected, returns_text):
+    settings = Settings(
+        QDRANT_COLLECTION="docs",
+        MIDDLEWARE_API_TOKENS="",
+        MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL=True,
+    )
+    request = QueryRequest(
+        query="q", limit=2, rerank=True, with_payload=selected
+    ).apply_defaults(settings)
+    pool = [
+        QueryHit(id=str(i), score=1.0, payload={"chunk_id": i, "text": f"t{i}"})
+        for i in range(2)
+    ]
+    embedder = _FakeRerankEmbedder({"t0": 0.1, "t1": 0.9})
+
+    response = await _rerank_hits(request, pool, embedder, settings)
+
+    assert response.reranked is True
+    assert [hit.id for hit in response.results] == ["1", "0"]
+    assert all(("text" in hit.payload) is returns_text for hit in response.results)
+
+
 class _FakeRerankEmbedder:
     """Stub embedder: reranks passages by a fixed score keyed on their text."""
 

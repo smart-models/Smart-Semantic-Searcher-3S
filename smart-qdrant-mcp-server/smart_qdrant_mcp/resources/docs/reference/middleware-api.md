@@ -418,7 +418,7 @@ POST /query/search
 | `rrf_k` | `null` | Optional RRF rank constant (RRF only) |
 | `rrf_weights` | `null` | Optional `[dense, sparse]` non-negative weights (RRF only) |
 | `filters` | `null` | Legacy flat or advanced Qdrant-like payload filters |
-| `with_payload` | `null` | Optional payload fields to return; `null` returns the full payload |
+| `with_payload` | `null` | Optional payload fields to return; `null` returns the full payload. With rerank on, `text` is still read for the reranker and dropped from the response unless listed |
 | `offset` | `0` | Offset inside the fixed fused candidate pool |
 | `score_threshold` | `null` | Minimum fused score applied before reranking |
 | `hnsw_ef` | env default | Per-request HNSW search breadth |
