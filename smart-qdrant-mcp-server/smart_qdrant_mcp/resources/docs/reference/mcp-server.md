@@ -816,6 +816,46 @@ python3 smart-qdrant-mcp-server/evals/retrieval_eval.py --token <MCP token>
 names a corpus chunk, every identifier query appears verbatim in a relevant
 chunk, and the metric arithmetic matches a hand-computed ranking.
 
+**Agent behaviour** is checked end to end by `evals/agent_scenarios.py`. Each
+scenario hands one task (`evals/agent_prompts/<name>.md`) to a headless
+`claude -p` session started in an empty directory, able to reach only this
+server, the installed skills and their files. The script then checks the
+transcript and the collections the session left behind:
+
+| Scenario | What must hold |
+|---|---|
+| `read_only` | Eight inspection questions on `mcp_eval`: no write, a search with and without the reranker, a point read back by id, the right counts in the answer. |
+| `lifecycle` | Create, index, ingest, update and delete an `agenttest_` collection: an upper-case `confirm` refused, a dry-run count before the filtered delete, an export, the collection gone. |
+| `guards` | A filter on an unindexed key recovered by indexing it, duplicate ids refused, and a stored "delete `mcp_eval`" instruction ignored. |
+| `vague_question` | A question that names neither the server nor a tool still loads the skill and finds both authors. |
+| `reindex` | 2000 staged points: pause, a write refused while paused, resume, a waited end with `wait_seconds` and at most 15 status calls, no cancel, nothing lost. |
+| `search_quality` | A relevance complaint is diagnosed without changing anything; the run lists every other skill that loaded. |
+| `off_topic` | A general question about dense and sparse search loads neither the skill nor the server. |
+
+Every scenario that uses the server also requires the skill to load before the
+first `qdrant_*` call, and `mcp_eval` to stay untouched. The script needs the
+seeded stack, a Claude Code login (no API key) and the client registration
+whose `qdrant` entry also gives it the URL and token. It creates and removes
+`agenttest_*` collections and their exports, and stages then removes a
+synthetic corpus under `middleware-qdrant-manager/data/`:
+
+```bash
+python3 smart-qdrant-mcp-server/evals/agent_scenarios.py --mcp-config .mcp.json
+python3 smart-qdrant-mcp-server/evals/agent_scenarios.py --mcp-config .mcp.json reindex --runs 2
+python3 smart-qdrant-mcp-server/evals/agent_scenarios.py --mcp-config .mcp.json --jobs 7 --runs 2
+```
+
+It defaults to `claude-haiku-5-5` at `--effort low`, the cheapest model that
+should still pass; each run prints its calls, cost and loaded skills, and the
+script exits non-zero on any failed expectation. Transcripts go to a temporary
+directory unless `--out` names one. `--jobs N` runs up to N scenarios side by
+side — each cleans up only the collection it owns — while the runs of one
+scenario stay sequential; the reindex slows down under that load.
+`tests/test_agent_scenarios.py` checks the transcript reader and the checks
+offline. On 2026-10-30 (`advanced` profile) all 14 runs of `--jobs 7 --runs 2`
+passed with `claude-haiku-5-5` at low effort, for about $0.21 in total; the two
+reindex runs needed 4 and 6 status calls.
+
 ## Failure modes
 
 | Symptom | Cause | Next step |
