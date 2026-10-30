@@ -358,7 +358,7 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
         },
     )
     async def qdrant_list_collections(
-        params: ListCollectionsInput,
+        params: ListCollectionsInput = ListCollectionsInput(),
     ) -> StructuredToolResult:
         """List the names of every collection the middleware knows about.
 
@@ -499,7 +499,7 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
         },
     )
     async def qdrant_verify_collection(
-        params: VerifyCollectionInput,
+        params: VerifyCollectionInput = VerifyCollectionInput(),
     ) -> StructuredToolResult:
         """Check a collection against expected schema toggles without changing it.
 

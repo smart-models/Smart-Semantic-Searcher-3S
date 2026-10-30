@@ -176,7 +176,7 @@ text message.
 
 Every tool takes its arguments nested one level under a `params` key on the
 wire (`{"params": {...}}`); the examples below show the fields of that `params`
-object.
+object. A tool with no required field also accepts empty arguments (`{}`).
 
 ### Tools
 

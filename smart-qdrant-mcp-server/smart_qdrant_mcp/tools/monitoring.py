@@ -71,7 +71,9 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
             "openWorldHint": True,
         },
     )
-    async def qdrant_check_health(params: CheckHealthInput) -> StructuredToolResult:
+    async def qdrant_check_health(
+        params: CheckHealthInput = CheckHealthInput(),
+    ) -> StructuredToolResult:
         """Report whether the Qdrant stack can serve requests right now.
 
         Aggregates the middleware's four monitoring endpoints into one verdict:

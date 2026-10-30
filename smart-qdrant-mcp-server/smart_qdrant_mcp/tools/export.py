@@ -74,7 +74,7 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
         },
     )
     async def qdrant_export_collection(
-        params: ExportCollectionInput,
+        params: ExportCollectionInput = ExportCollectionInput(),
     ) -> StructuredToolResult:
         """Export every point's payload of one collection to a JSON file.
 

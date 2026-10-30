@@ -138,6 +138,28 @@ async def test_every_declared_tool_is_registered(mcp_client):
     assert listed == set(TOOL_ROUTES)
 
 
+async def test_params_is_optional_exactly_when_its_model_requires_nothing(
+    mcp_client,
+):
+    """Agents call no-argument tools such as qdrant_list_collections with ``{}``.
+
+    A required ``params`` wrapper turned that call into a bare pydantic
+    "params Field required" error in three of ten live evaluation runs.
+    """
+    for tool in (await mcp_client.list_tools()).tools:
+        model = tool.input_schema["properties"]["params"]["$ref"].rsplit("/", 1)[1]
+        needs_fields = bool(tool.input_schema["$defs"][model].get("required"))
+        top_required = "params" in tool.input_schema.get("required", [])
+        assert top_required is needs_fields, tool.name
+
+
+async def test_a_tool_needing_no_fields_runs_with_empty_arguments(mcp_client, routes):
+    routes.add("GET", "/collections", body={"collections": ["docs"]})
+    result = await mcp_client.call_tool("qdrant_list_collections", {})
+    assert result.is_error is False
+    assert result.structured_content["items"] == ["docs"]
+
+
 async def test_every_tool_has_a_description(mcp_client):
     for tool in (await mcp_client.list_tools()).tools:
         assert tool.description and len(tool.description) > 80, tool.name

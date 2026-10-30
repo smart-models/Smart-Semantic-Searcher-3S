@@ -714,7 +714,9 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
             "openWorldHint": True,
         },
     )
-    async def qdrant_scroll_points(params: ScrollPointsInput) -> StructuredToolResult:
+    async def qdrant_scroll_points(
+        params: ScrollPointsInput = ScrollPointsInput(),
+    ) -> StructuredToolResult:
         """Page through points matching a filter, ordered but never ranked.
 
         This is enumeration, not retrieval by relevance: there is no query
@@ -824,7 +826,9 @@ def register(mcp: MCPServer, ctx: ToolContext) -> None:
             "openWorldHint": True,
         },
     )
-    async def qdrant_count_points(params: CountPointsInput) -> StructuredToolResult:
+    async def qdrant_count_points(
+        params: CountPointsInput = CountPointsInput(),
+    ) -> StructuredToolResult:
         """Count points matching a filter without retrieving any of them.
 
         An absent or empty filter counts the whole collection. With the
