@@ -65,7 +65,7 @@ are in `SUPPORTED_PROTOCOL_VERSIONS`, so a client negotiating either succeeds.
 5. **Two addresses answer two different questions.** `MCP_BIND_HOST` is the
    published/policed address; `MCP_LISTEN_HOST` is the socket bind. Confusing
    them is the most common configuration mistake here.
-6. **Documentation is served, not just written.** Twenty `docs://`
+6. **Documentation is served, not just written.** Twenty-one `docs://`
    documents — nine teaching documents plus the application's own guide and
    component references, copied into the package — and three `qhm://`
    live-state proxies are part of the server's surface; prefer pointing a
@@ -75,7 +75,7 @@ are in `SUPPORTED_PROTOCOL_VERSIONS`, so a client negotiating either succeeds.
 
 | Path | Role | Change it when |
 |---|---|---|
-| `smart_qdrant_mcp/__main__.py`, `server.py` | Process entry point, server/ASGI assembly, tool/resource/prompt registration and lifespan. | Startup, transport or registration changes. |
+| `smart_qdrant_mcp/__main__.py`, `server.py` | Process entry point, server/ASGI assembly, handshake instructions, tool/resource/prompt registration, per-call logging and lifespan. | Startup, transport, registration or instructions change. |
 | `smart_qdrant_mcp/auth.py` | Token verification and static/OAuth authentication assembly. | Inbound authentication changes. |
 | `smart_qdrant_mcp/client.py`, `context.py` | Middleware HTTP gateway and the context tools receive. | HTTP lifecycle, safe-read retries or per-call dependencies change. |
 | `smart_qdrant_mcp/guardrails.py` | Shared validation and exact destructive confirmation gates. | A tool's pre-transport safety contract changes. |
@@ -144,6 +144,19 @@ launcher also stops it if a previous run left it up, and stops requiring
 `MCP_API_TOKENS`), and `EMBEDDER_ONLY=true` removes it along with the
 middleware it depends on. A bare `docker compose up` ignores both and starts
 this server.
+
+### Server instructions
+
+The `initialize` handshake returns `instructions` (`_SERVER_INSTRUCTIONS` in
+`server.py`), which clients typically hand to the agent before its first call.
+They summarise the surface, ask the agent to load the client-side
+[`smart-qdrant-mcp` skill](../smart-skill/README.md) before its first tool
+call — or, on a client without it, to read `docs://reference/smart-qdrant-skill`
+— and restate what must hold from that first call: `response_format`, the exact
+`confirm` gate, pagination, the documents to read before creating a collection
+or ingesting, the 4 MiB inline-ingest ceiling, and the three workflow prompts.
+`tests/test_prompts.py` fails when they name a tool, prompt or document this
+server does not serve.
 
 ### Response shape
 
@@ -415,6 +428,13 @@ decimal. The name is written with `repr`, so a client-chosen name stays on one
 line. **The arguments are never logged:** they carry query text, chunk text,
 payloads, filters and confirm values. Resource reads and prompts are not
 logged.
+
+The line names no caller. Authentication logs its own line for each HTTP
+request — `token verified: <label>` in `static` mode, `OAuth token verified:
+<client_id>` in `oauth` mode, nothing when unauthenticated — and that is the
+only per-person attribution of an MCP call: the middleware's
+[operation line](../middleware-qdrant-manager/README.md#behaviour-contracts)
+shows every call this server makes as `caller=@mcp`.
 
 Uvicorn's access line for every HTTP request stays — client address, method,
 path and status — but never its query string: `configure_package_logging()`

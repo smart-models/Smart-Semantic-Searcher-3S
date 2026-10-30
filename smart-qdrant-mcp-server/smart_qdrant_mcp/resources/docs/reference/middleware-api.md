@@ -59,7 +59,7 @@ Eight facts explain most of the surprising behaviour.
 2. **Embedding finishes before the first write.** A failed embedding call
    leaves stored data untouched — there is no half-ingested state to clean up.
 3. **Bearer auth is not a middleware layer.** `require_bearer_auth` is a
-   route-level dependency, so it runs *inside* all four middleware layers. A
+   route-level dependency, so it runs *inside* every middleware layer. A
    request over `REQUEST_BODY_MAX_BYTES` is rejected before its token is ever
    checked, and the unauthenticated monitoring router still passes through
    every layer.
@@ -84,12 +84,19 @@ Eight facts explain most of the surprising behaviour.
 ### Middleware stack (outermost → innermost)
 
 `timeout+metrics` → `shutdown guard` → `rate limit` → `body-size` →
-[`console headers`] → `route`
+[`hide disabled swagger`] → [`console headers`] → `route`
 
-`FastAPI.add_middleware` inserts at position 0, so the *last* registration in
-`main.py` (`TimeoutMetricsMiddleware`) ends up outermost.
+Registration inserts at position 0, so the *last* registration in `main.py`
+(`TimeoutMetricsMiddleware`) ends up outermost — whether it used
+`add_middleware` or the `app.middleware("http")` decorator form, which
+`main.py` mixes. The outermost layer also writes the one-line operation log
+described under [Behaviour contracts](#behaviour-contracts).
 
-The console-headers layer exists only when `EXPOSE_FRONTEND=true`, and is
+The two bracketed layers are conditional. The swagger layer exists only when
+`EXPOSE_MIDDLEWARE_SWAGGER=false`, and returns 404 for `/docs`, `/redoc`,
+`/openapi.json` and anything under `/docs/` or `/redoc/`: without it the
+console's SPA fallback would answer those disabled paths with the UI. The
+console-headers layer exists only when `EXPOSE_FRONTEND=true`, and is
 innermost because it decorates a response rather than deciding whether to
 produce one: it attaches the CSP and the companion headers to `/` and
 `/assets/*` on the way out, and leaves every JSON API response untouched.
@@ -684,7 +691,10 @@ These hold regardless of configuration.
   ```
 
   `caller` is the matched token label, `-` when auth is disabled or the request
-  was rejected. `collection` is the one the route resolved, or the
+  was rejected. Every call the MCP server makes shows as `caller=@mcp`; the
+  person behind it is named only on the MCP server's own authentication line
+  ([its logging contract](../smart-qdrant-mcp-server/README.md#one-log-line-per-tool-call)).
+  `collection` is the one the route resolved, or the
   `{collection_name}` path parameter; `-` when neither was reached. `points` is
   set only on success: written by ingest and upsert, deleted, matched by a
   filtered delete or payload write, counted by `/points/count`, returned by

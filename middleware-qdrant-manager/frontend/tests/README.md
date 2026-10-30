@@ -221,7 +221,8 @@ On 2026-09-06 after the revision-7 closure, collection discovers the full
 matrix (133), monitoring regressions (25), filter validation, and the
 shared-origin browser check. The `tb-*-live.spec.js` suites are collected in
 the default run but only pass against a seeded `seed:book` campaign; run
-`npm run seed:book` first (see [Seed the sandbox](#seed-the-sandbox)). This
+`npm run seed:book` first (see **Seed the `tb-*` live campaign** under
+[Recipes](#recipes)). This
 is an inventory, not a successful full execution. U6/PL7 assert protected text
 behavior; DL10/DL11 assert idempotent absent deletion and actual deletion
 counts. The book's §16.7 is the execution record.

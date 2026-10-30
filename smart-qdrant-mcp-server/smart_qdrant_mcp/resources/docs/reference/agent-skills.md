@@ -43,8 +43,9 @@ One skill lives here today:
 | [`smart-qdrant-mcp/`](smart-qdrant-mcp/SKILL.md) | Using the 28 `qdrant_*` tools of [`smart-qdrant-mcp-server`](../smart-qdrant-mcp-server/README.md): hybrid-search tuning, ingest discipline, destructive-operation gates, error recovery. |
 
 The skill applies to every `qdrant_*` call, a health check as much as an
-ingest, and the server's own handshake `instructions` ask the agent to load it
-before the first call.
+ingest, and the server's own
+[handshake instructions](../smart-qdrant-mcp-server/README.md#server-instructions)
+ask the agent to load it before the first call.
 
 ## Mental model
 
@@ -65,7 +66,7 @@ Four facts explain every design decision in this directory.
    (`reference.md`, never `references/reference.md`). That bare name is the
    argument `get_skill_reference` expects. The `references/` directory is named
    once, above the list, so path-reading hosts still resolve the files.
-4. **The skill can drift and nothing will catch it.** The server's test suite
+4. **The skill body can drift and nothing will catch it.** The server's test suite
    fails when a *prompt or doc resource* names something that no longer exists,
    and `smart-qdrant-mcp-server/tests/test_resources_docs.py` pins this skill's
    frontmatter (`name` and `description`) and keeps the server's packaged copies
@@ -97,7 +98,7 @@ The "interface" of a skill is what its host reads.
 
 | Surface | Contract |
 |---|---|
-| `SKILL.md` frontmatter | YAML with `name` and `description`. The host matches the *description* against the current task to decide whether to trigger the skill, so it must name the trigger conditions concretely (`qdrant_*` tools, hybrid search, ingest, reindex), not describe the skill abstractly. |
+| `SKILL.md` frontmatter | YAML with `name` and `description`. The host matches the *description* alone against the current task to decide whether to trigger the skill, so it must name the trigger conditions concretely — any `qdrant_*` tool or `qhm://` resource for any purpose, then search, ingest, reindex and error recovery — not describe the skill abstractly. `test_skill_description_triggers_on_every_qdrant_call` in `smart-qdrant-mcp-server/tests/test_resources_docs.py` pins it: `name` is `smart-qdrant-mcp`; the description is at most 1024 characters, opens with what the skill does, follows with a `Use when` clause naming any `qdrant_*` tool, and never says *I*, *you* or *your*. |
 | `SKILL.md` body | Markdown, injected verbatim into context on trigger. Budget it accordingly. |
 | `references/*.md` | Markdown, read on demand by filename. No frontmatter required. |
 
@@ -152,9 +153,13 @@ When the tools are missing from the client entirely, playbook 0 in
 
 ## Verification
 
-There is no dedicated automated suite proving this skill's behaviour. MCP
-contract tests validate the server, not whether an agent loaded or followed
-these files. Verify a change in the intended host:
+No automated suite proves this skill's behaviour. After editing `SKILL.md` or
+this README, re-copy it into the server package (see
+[Copied documents](../AGENTS.md#copied-documents)) and run
+`py -m pytest smart-qdrant-mcp-server/tests/test_resources_docs.py -q`: it
+checks the frontmatter contract above and the byte-identical copies, not
+whether an agent loaded or followed these files. Verify a change in the
+intended host:
 
 1. Load the skill in the target host and confirm it triggers on a `qdrant_*`
    task.
