@@ -366,8 +366,13 @@ services:
   # launchers: add `--profile qdrant` and set QDRANT_URL yourself.
   qdrant-init:
     profiles: [qdrant]
-    image: qdrant/qdrant:v1.20.0
-    container_name: qdrant-init
+    # Pinned to the digest of the v1.20.0 multi-arch index, like every base
+    # image in the Dockerfile. Bump the tag and the digest together, here and
+    # in the serving container below.
+    image: qdrant/qdrant:v1.20.0@sha256:9bfc89f9914fc14876a88c05270685921a55b8877b254a98bcc1cc2f0a424cd2
+    # Container names are daemon-global; "qdrant" is what an operator's own
+    # external instance is most likely called, so the bundled pair avoids it.
+    container_name: qdrant-bundled-init
     init: true
     # The official image ships /qdrant/storage owned by root, so a fresh named
     # volume inherits that and uid 1000 cannot write it. This one-shot hands the
@@ -391,8 +396,8 @@ services:
 
   qdrant:
     profiles: [qdrant]
-    image: qdrant/qdrant:v1.20.0
-    container_name: qdrant
+    image: qdrant/qdrant:v1.20.0@sha256:9bfc89f9914fc14876a88c05270685921a55b8877b254a98bcc1cc2f0a424cd2
+    container_name: qdrant-bundled
     init: true
     user: "1000:1000"
     ports:

@@ -106,9 +106,11 @@ def _qdrant_violations(services: Mapping[str, Any]) -> list[str]:
     """Return the violations of the bundled Qdrant pair (QDRANT_BUNDLED=true).
 
     The serving container gets the same hardening as every other publisher
-    (checked by the caller). Its preparation container exists only to hand the
-    storage volume to uid 1000, so it may hold CHOWN and nothing else, publish
-    nothing, and must have finished before Qdrant starts.
+    (checked by the caller), takes its key from QDRANT_API_KEY, keeps snapshots
+    on the storage volume (the only writable path) and sends no telemetry. Its
+    preparation container exists only to hand the storage volume to uid 1000,
+    so it may hold CHOWN and nothing else, publish nothing, and must have
+    finished before Qdrant starts.
     """
     errors: list[str] = []
     runtime = services.get("qdrant")
@@ -138,6 +140,19 @@ def _qdrant_violations(services: Mapping[str, Any]) -> list[str]:
     dependency = (runtime.get("depends_on") or {}).get("qdrant-init", {})
     if dependency.get("condition") != "service_completed_successfully":
         errors.append("service qdrant must wait for successful preparation")
+    environment = runtime.get("environment")
+    if not isinstance(environment, Mapping):
+        environment = {}
+    if "QDRANT__SERVICE__API_KEY" not in environment:
+        errors.append("service qdrant must set QDRANT__SERVICE__API_KEY")
+    snapshots = str(environment.get("QDRANT__STORAGE__SNAPSHOTS_PATH", ""))
+    if not snapshots.startswith("/qdrant/storage/"):
+        errors.append(
+            "service qdrant must keep QDRANT__STORAGE__SNAPSHOTS_PATH under "
+            "/qdrant/storage"
+        )
+    if str(environment.get("QDRANT__TELEMETRY_DISABLED", "")).lower() != "true":
+        errors.append("service qdrant must set QDRANT__TELEMETRY_DISABLED=true")
     return errors
 
 

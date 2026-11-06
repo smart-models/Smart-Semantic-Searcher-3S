@@ -80,6 +80,11 @@ def resolved_config(
             "read_only": True,
             "cap_drop": ["ALL"],
             "volumes": [{"target": "/qdrant/storage"}],
+            "environment": {
+                "QDRANT__SERVICE__API_KEY": "",
+                "QDRANT__STORAGE__SNAPSHOTS_PATH": "/qdrant/storage/snapshots",
+                "QDRANT__TELEMETRY_DISABLED": "true",
+            },
             "depends_on": {
                 "qdrant-init": {"condition": "service_completed_successfully"}
             },
@@ -283,6 +288,26 @@ class ComposeSecurityValidationTests(unittest.TestCase):
         errors = validate_config(config, "cpu", qdrant_bundled=True)
         assert any("qdrant-init" in error for error in errors)
         assert any("publishing ports" in error for error in errors)
+
+    def test_qdrant_must_wire_the_api_key(self):
+        config = resolved_config("cpu", qdrant=True)
+        del config["services"]["qdrant"]["environment"]["QDRANT__SERVICE__API_KEY"]
+        errors = validate_config(config, "cpu", qdrant_bundled=True)
+        assert any("QDRANT__SERVICE__API_KEY" in error for error in errors)
+
+    def test_qdrant_snapshots_must_stay_on_the_storage_volume(self):
+        config = resolved_config("cpu", qdrant=True)
+        config["services"]["qdrant"]["environment"][
+            "QDRANT__STORAGE__SNAPSHOTS_PATH"
+        ] = "./snapshots"
+        errors = validate_config(config, "cpu", qdrant_bundled=True)
+        assert any("QDRANT__STORAGE__SNAPSHOTS_PATH" in error for error in errors)
+
+    def test_qdrant_telemetry_must_be_disabled(self):
+        config = resolved_config("cpu", qdrant=True)
+        del config["services"]["qdrant"]["environment"]["QDRANT__TELEMETRY_DISABLED"]
+        errors = validate_config(config, "cpu", qdrant_bundled=True)
+        assert any("QDRANT__TELEMETRY_DISABLED" in error for error in errors)
 
     def test_expected_loopback_publishers_are_accepted(self):
         self.assertEqual(validate_config(resolved_config("cpu"), "cpu"), [])

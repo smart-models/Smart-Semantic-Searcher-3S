@@ -87,8 +87,8 @@ make a cloud-hosted agent private.
 
 Three things first: Docker with Compose 2.24.4 or newer and Python 3.10 or
 newer on PATH; a Qdrant the stack can reach — a local container is enough,
-the stack does not start one for you; and an `.env` copied from
-`.env.example` and reviewed. Then one command:
+or set `QDRANT_BUNDLED=true` and the stack starts one for you; and an `.env`
+copied from `.env.example` and reviewed. Then one command:
 
     pwsh stack.ps1 up auto      # Windows (PowerShell)
     bash stack.sh up auto       # Linux / macOS

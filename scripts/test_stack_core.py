@@ -874,6 +874,14 @@ def test_pull_fetches_the_bundled_qdrant_image():
     assert not any("nothing to fetch" in message for message in plan.messages)
 
 
+def test_pull_of_the_bundled_qdrant_image_does_not_ignore_failures():
+    """A failed Qdrant download must fail `pull`, not exit 0 behind the flag."""
+    plan = plan_for("pull", hardware="cpu", environment=QDRANT_ON)
+    argv = argv_of(plan, 0)
+    assert argv[-2:] == ["pull", "qdrant"]
+    assert "--ignore-pull-failures" not in argv
+
+
 def test_restart_names_the_services_the_switches_leave_running():
     """`restart` restarts what this configuration actually starts."""
     plan = plan_for("restart", hardware="cpu")

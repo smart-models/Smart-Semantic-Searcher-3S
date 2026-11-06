@@ -514,7 +514,8 @@ bash stack.sh pull cpu      # fetch what this stack does not build
 `pull` normally reports that it has nothing to do: every service of the
 stack's own declares a locally built `hybrid-manager/...` image. The one
 registry image, the bundled Qdrant's `qdrant/qdrant:v1.20.0`, is fetched only
-under `QDRANT_BUNDLED=true`. `build` is what refreshes the local ones.
+under `QDRANT_BUNDLED=true`, and strictly: a failed download fails the command
+instead of being ignored. `build` is what refreshes the local ones.
 
 **Full reset, model cache included**
 
@@ -522,11 +523,13 @@ under `QDRANT_BUNDLED=true`. `build` is what refreshes the local ones.
 bash stack.sh down --volumes --remove-orphans
 ```
 
-This deletes the Hugging Face model cache and, under `QDRANT_BUNDLED=true`,
-every collection of the bundled Qdrant. Rebuilding the cache means downloading
-every model again and the database is gone for good, which is why it asks for
-confirmation, and why it refuses outright when standard input is not a terminal
-(add `--yes` if you mean it in a script).
+This deletes the Hugging Face model cache and every collection a bundled
+Qdrant ever stored, whatever `QDRANT_BUNDLED` says now: `down` enables the
+`qdrant` profile unconditionally, so the data volume of an earlier bundled run
+goes too. Rebuilding the cache means downloading every model again and the
+database is gone for good, which is why it asks for confirmation, and why it
+refuses outright when standard input is not a terminal (add `--yes` if you
+mean it in a script).
 
 **Two stacks side by side** — not supported. See *Why `--project-name` does not
 give you two stacks*.

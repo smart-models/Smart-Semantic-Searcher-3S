@@ -987,16 +987,17 @@ def build_pull_plan(settings: Settings, plan: Plan) -> None:
     services -- which name a locally built image without a build stanza of
     their own -- from turning "nothing to do" into a failure. The bundled
     Qdrant is the one registry image, so under QDRANT_BUNDLED=true the command
-    does fetch something; use `build` to rebuild what is local.
+    pulls that service by name and strictly: a failed download must fail the
+    command rather than hide behind the flag. Use `build` to rebuild what is
+    local.
     """
-    argv = [
-        *compose_base(settings),
-        *profile_arguments(settings),
-        "pull",
-        "--ignore-buildable",
-        "--ignore-pull-failures",
-    ]
-    plan.steps.append(Step(argv, "pull the images this stack does not build"))
+    argv = [*compose_base(settings), *profile_arguments(settings), "pull"]
+    if settings.qdrant_bundled:
+        argv.append("qdrant")
+        plan.steps.append(Step(argv, "pull the bundled Qdrant image"))
+    else:
+        argv += ["--ignore-buildable", "--ignore-pull-failures"]
+        plan.steps.append(Step(argv, "pull the images this stack does not build"))
     if settings.qdrant_bundled:
         plan.messages.append(
             "`pull` fetches the bundled Qdrant image; every other image is "
