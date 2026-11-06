@@ -53,10 +53,10 @@ Four facts explain the whole design.
    broke. `scripts/test_stack_recovery.py` enforces this; do not weaken it.
 3. **`up` verifies first, and builds before it tears anything down.** A failed
    build leaves the currently running profile untouched.
-4. **Launcher settings shape the stack.** The three boolean switches
-   `EMBEDDER_ONLY`, `MCP_SERVER_ENABLED` and `EXPOSE_SMART_EMBEDDER_PORT`, plus
-   the optional `STACK_GPU_DEVICE` selector, are read by the launchers, never
-   by a service. A bare `docker compose up` ignores them.
+4. **Launcher settings shape the stack.** The four boolean switches
+   `EMBEDDER_ONLY`, `MCP_SERVER_ENABLED`, `EXPOSE_SMART_EMBEDDER_PORT` and
+   `QDRANT_BUNDLED`, plus the optional `STACK_GPU_DEVICE` selector, are read by
+   the launchers, never by a service. A bare `docker compose up` ignores them.
 
 ## Map of the directory
 
@@ -177,24 +177,25 @@ Every Unix flag has a PowerShell parameter with the same name in PascalCase.
 | `--follow` | `-Follow` | `logs` | implicit | Keep streaming. Combinable with `--tail` and `--since`. |
 | `--since <t>` | `-Since <t>` | `logs` | unset | Only entries newer than a timestamp or duration (`10m`, `2026-08-19T10:00:00`). |
 | `--service <name>` | `-Service <name>` | `logs` | all | Restrict to named services. Repeat the flag, or comma-separate the names; PowerShell parameters cannot repeat, so `-Service a,b` is the spelling there and bash accepts both. |
-| `--volumes` | `-Volumes` | `down` | off | **Destroys the named volumes, including the Hugging Face model cache.** Prompts for confirmation on a terminal; refused without `--yes` when there is no terminal to ask. |
+| `--volumes` | `-Volumes` | `down` | off | **Destroys the named volumes, including the Hugging Face model cache and the bundled Qdrant's data.** Prompts for confirmation on a terminal; refused without `--yes` when there is no terminal to ask. |
 | `--remove-orphans` | `-RemoveOrphans` | `down` | off | Remove containers for services no longer in the Compose file. |
 | `--yes` | `-Yes` | `down` | off | Non-interactive confirmation for `--volumes`. |
 | `--dry-run` | `-DryRun` | every command but `help` and `version` | off | Print the steps that would run, one argument per line, and run none of them. |
 | `--env-file <path>` | `-EnvFile <path>` | every command but `help` and `version` | `.env` | Use another environment file. It must exist: there is no fallback to the template. |
 | `--project-name <n>` | `-ProjectName <n>` | every command but `help` and `version` | Compose's default | Isolates volumes, networks and Compose's bookkeeping. **It does not let two stacks run side by side** — see below. |
 
-### The three launcher switches
+### The launcher switches
 
-These boolean settings have a CLI override and an `.env` value. The GPU selector
-below also has both. No service reads them; a bare `docker compose up` ignores
-all three switches.
+Three of these boolean settings have a CLI override and an `.env` value; the
+fourth, `QDRANT_BUNDLED`, is `.env`-only. The GPU selector below has both. No
+service reads them; a bare `docker compose up` ignores all four switches.
 
 | Pair | `.env` variable | Effect when true |
 |---|---|---|
 | `--embedder-only` / `--full`<br>`-EmbedderOnly` / `-Full` | `EMBEDDER_ONLY` | Start only the Smart Embedder; no middleware, no MCP server. |
 | `--no-mcp` / `--mcp`<br>`-NoMcp` / `-Mcp` | `MCP_SERVER_ENABLED` | `--no-mcp` leaves out `smart-qdrant-mcp` (`--scale smart-qdrant-mcp=0`). Absent from `.env` means enabled. |
 | `--private-embedder` / `--public-embedder`<br>`-PrivateEmbedder` / `-PublicEmbedder` | `EXPOSE_SMART_EMBEDDER_PORT` | `--private-embedder` withdraws the Smart Embedder's host port publish by adding `compose.embedder-private.yml`. The middleware still reaches it over the private Compose network. |
+| — (`.env` only) | `QDRANT_BUNDLED` | Start a Qdrant 1.20 container inside the stack (Compose profile `qdrant`: services `qdrant-init` and `qdrant`) and export `QDRANT_URL=http://qdrant:6333` to the middleware over the configured value. Requires `QDRANT_API_KEY`, which becomes that instance's key; published on `127.0.0.1:QDRANT_PORT` only; data in the `QDRANT_STORAGE_VOLUME` volume. `EMBEDDER_ONLY=true` wins over it, and the next `up` with it false removes a bundled container left by an earlier run. No CLI pair: a database is a deployment decision, not a per-run override. |
 
 Passing both halves of a pair is a **usage error**, not last-one-wins: two
 different stacks were asked for and no reading of the command line satisfies
@@ -411,6 +412,8 @@ the variables it consumes — see [Related documents](#related-documents).
   (`--project-name`).
 - Stop a stack whose `.env` is missing or malformed, on a machine with no
   Python.
+- Run Qdrant inside the stack (`QDRANT_BUNDLED=true`), published on loopback
+  only and keyed by `QDRANT_API_KEY`, instead of pointing at an external one.
 
 **You cannot:**
 
@@ -420,6 +423,8 @@ the variables it consumes — see [Related documents](#related-documents).
 - Reach the Smart Embedder's host port under `--private-embedder`; that is the
   point of the switch.
 - Get a token printed by `urls`, with or without `--show-secrets`.
+- Start the bundled Qdrant without `QDRANT_API_KEY`, under `--embedder-only`,
+  or on any address but `127.0.0.1`.
 
 ## Recipes
 
@@ -441,6 +446,24 @@ bash stack.sh up cpu --no-mcp
 bash stack.sh up cpu --private-embedder
 bash stack.sh urls          # the 8010 endpoint is gone from the list
 ```
+
+**Run Qdrant inside the stack**
+
+```ini
+# .env
+QDRANT_BUNDLED=true
+QDRANT_API_KEY=a-key-no-other-service-uses
+```
+
+```bash
+bash stack.sh up cpu
+bash stack.sh urls          # Qdrant: http://127.0.0.1:6333 -- API key required
+```
+
+The middleware is pointed at `http://qdrant:6333` automatically; the `QDRANT_URL`
+in `.env` is kept for the day you switch back to an external instance. The data
+lives in the `QDRANT_STORAGE_VOLUME` volume and survives `down`; only
+`down --volumes` deletes it.
 
 **Switch from CPU to GPU (or back)**
 
@@ -488,9 +511,10 @@ bash stack.sh build cpu     # rebuild from the Dockerfile
 bash stack.sh pull cpu      # fetch what this stack does not build
 ```
 
-`pull` normally reports that it has nothing to do: every service declares a
-locally built `hybrid-manager/...` image. It stays useful the day one of them
-is switched to a registry image. `build` is what refreshes the local ones.
+`pull` normally reports that it has nothing to do: every service of the
+stack's own declares a locally built `hybrid-manager/...` image. The one
+registry image, the bundled Qdrant's `qdrant/qdrant:v1.20.0`, is fetched only
+under `QDRANT_BUNDLED=true`. `build` is what refreshes the local ones.
 
 **Full reset, model cache included**
 
@@ -498,10 +522,11 @@ is switched to a registry image. `build` is what refreshes the local ones.
 bash stack.sh down --volumes --remove-orphans
 ```
 
-This deletes the Hugging Face model cache. Rebuilding it means downloading
-every model again, which is why it asks for confirmation, and why it refuses
-outright when standard input is not a terminal (add `--yes` if you mean it in a
-script).
+This deletes the Hugging Face model cache and, under `QDRANT_BUNDLED=true`,
+every collection of the bundled Qdrant. Rebuilding the cache means downloading
+every model again and the database is gone for good, which is why it asks for
+confirmation, and why it refuses outright when standard input is not a terminal
+(add `--yes` if you mean it in a script).
 
 **Two stacks side by side** — not supported. See *Why `--project-name` does not
 give you two stacks*.
@@ -595,6 +620,11 @@ stopped after this failure, retains all volumes and does not claim a successful
 startup. An autotuner fallback reported in preparation logs is a separate case:
 it may allow startup with safe defaults.
 
+**`QDRANT_BUNDLED=true requires a QDRANT_API_KEY`.** The bundled Qdrant is
+never started unauthenticated. Put a key in `QDRANT_API_KEY` (section 05 of
+`.env`); the same value is what the middleware presents to it. The preflight
+also refuses that key when it equals one of the three services' tokens.
+
 **Frontend flags require the middleware.** Remove the explicit frontend flag for
 an embedder-only stack, or use `--full` / `-Full` to start the middleware.
 
@@ -681,8 +711,8 @@ Or just use `stack.ps1`, which is the supported Windows entry point.
   arguments are world-readable through `ps`.
 - **`urls` never prints a token**, with or without `--show-secrets`. It reports
   only whether one is required.
-- **Publishes are loopback or private, never public.** The Smart Embedder
-  publish is hardcoded to `127.0.0.1` in `compose.yml`. The middleware and MCP
+- **Publishes are loopback or private, never public.** The Smart Embedder and
+  bundled Qdrant publishes are hardcoded to `127.0.0.1` in `compose.yml`. The middleware and MCP
   publishes are the operator-settable addresses (`MIDDLEWARE_BIND_HOST`,
   `MCP_BIND_HOST`): each defaults to loopback, accepts `::1` or a private
   RFC1918 address, and refuses `0.0.0.0`. Off loopback, `verify` and the
@@ -712,7 +742,8 @@ Or just use `stack.ps1`, which is the supported Windows entry point.
   `stack_core.py`, not in a shell script. Keep the recovery commands out of it.
 - **Adding a hardening rule** — `verify_compose_security.py`, and it must keep
   passing for both hardware profiles crossed with both
-  `EXPOSE_SMART_EMBEDDER_PORT` settings, including selected GPUs (six combinations).
+  `EXPOSE_SMART_EMBEDDER_PORT` settings, including selected GPUs and the
+  bundled Qdrant (eight shapes).
 - **Adding a failure message** — add a troubleshooting entry above; the test
   parametrises over the topics it expects to find.
 

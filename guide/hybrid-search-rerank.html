@@ -709,7 +709,7 @@
         <div class="architecture">
           <article class="service" data-reveal><span class="service-number">01 / THE COORDINATOR</span><h3>Middleware</h3><p>Your application’s entry point. Checks the request, calls the models and Qdrant, reorders the results, then returns them.</p><span class="mono">middleware-qdrant-manager</span></article>
           <article class="service" data-reveal><span class="service-number">02 / THE MODELS</span><h3>Smart Embedder</h3><p>Turns text into vectors and scores query–passage pairs. Models run locally on CPU or GPU; this service does not store your collection.</p><span class="mono">server-embedder-reranker</span></article>
-          <article class="service" data-reveal><span class="service-number">03 / THE VECTOR DATABASE</span><h3>Qdrant</h3><p>Stores vectors and passage payloads. Runs the two retrieval branches and fuses their rankings before returning candidates.</p><span class="mono">Your external Qdrant instance</span></article>
+          <article class="service" data-reveal><span class="service-number">03 / THE VECTOR DATABASE</span><h3>Qdrant</h3><p>Stores vectors and passage payloads. Runs the two retrieval branches and fuses their rankings before returning candidates.</p><span class="mono">Your Qdrant instance, external or bundled</span></article>
         </div>
         <p class="architecture-route">Application → Middleware → Smart Embedder (encode) → Middleware → Qdrant (retrieve + fuse) → Middleware → Smart Embedder (rerank) → Middleware → Application</p>
         <div class="implementation-notes">

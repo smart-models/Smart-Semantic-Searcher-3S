@@ -108,8 +108,9 @@ BLOCKED; never substitute a mock or an old run silently.
 7. **Validate deployment shapes.** Verify CPU/GPU Compose resolution, pairwise
    disjoint authentication tokens, loopback publish rules, read-only serving
    filesystems and preparation/serving volume boundaries. Exercise the planner
-   combinations for MCP enabled/disabled, embedder-only, and public/private
-   embedder access. Save sanitized plans and results in `07-compose/`.
+   combinations for MCP enabled/disabled, embedder-only, public/private
+   embedder access, and the bundled Qdrant. Save sanitized plans and results in
+   `07-compose/`.
    Configuration resolution alone does not establish live network reachability;
    the final isolation checks below cover that separately.
 
@@ -166,8 +167,9 @@ BLOCKED; never substitute a mock or an old run silently.
     console fixture. Missing agent tooling remains BLOCKED or NOT RUN.
 
 13. **Verify excluded-service shapes last.** Exercise
-    `MCP_SERVER_ENABLED=false`, `EMBEDDER_ONLY=true`, and
-    `EXPOSE_SMART_EMBEDDER_PORT=false` independently through the launcher.
+    `MCP_SERVER_ENABLED=false`, `EMBEDDER_ONLY=true`,
+    `EXPOSE_SMART_EMBEDDER_PORT=false` and `QDRANT_BUNDLED=true` independently
+    through the launcher.
     Save each scenario under `13-exclusions/`, proving the expected container
     and publish state as well as the health of services that should remain.
     A private embedder still serves the middleware internally; embedder-only

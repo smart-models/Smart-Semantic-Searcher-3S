@@ -28,7 +28,7 @@ MINIMUM_COMPOSE_PATCH=4
 # the same generation", which is the question worth asking when a Windows and a
 # Unix operator disagree about what the stack does; a parity test asserts the
 # two strings match.
-LAUNCHER_VERSION="2026.09.08.1"
+LAUNCHER_VERSION="2026.11.06.1"
 
 usage() {
     cat <<EOF
@@ -71,6 +71,7 @@ Launcher switches, each overriding its configured value for this run:
   --no-mcp / --mcp                          MCP_SERVER_ENABLED
   --private-embedder / --public-embedder    EXPOSE_SMART_EMBEDDER_PORT
   Passing both halves of a pair is a usage error, not last one wins.
+  QDRANT_BUNDLED has no flag pair; set it in the environment file only.
 
 Precedence, highest first: the command line, the shell environment, the
 environment file, the built-in default.
@@ -404,7 +405,10 @@ fi
 
 profile="${positionals[0]:-}"
 embedder_profile="${positionals[1]:-}"
-all_profiles=(--profile cpu --profile gpu)
+# The qdrant profile is always enabled here: the recovery commands cannot
+# read QDRANT_BUNDLED, and an enabled profile with no container is harmless
+# to stop or list, whereas a disabled one would leave a bundled Qdrant up.
+all_profiles=(--profile cpu --profile gpu --profile qdrant)
 profile_provided=false
 embedder_profile_provided=false
 
@@ -614,11 +618,12 @@ case "$command_name" in
             exit 0
         fi
         # --volumes destroys the Hugging Face model cache, which is tens of
-        # gigabytes and takes a long download to rebuild. It is confirmed
+        # gigabytes and takes a long download to rebuild, and the bundled
+        # Qdrant's storage volume, which holds every collection. It is confirmed
         # interactively, and refused outright when there is nobody to ask.
         if [[ "$remove_volumes" == true && "$assume_yes" == false ]]; then
             if [[ -t 0 ]]; then
-                echo "This removes every named volume of the stack, including the Hugging Face model cache." >&2
+                echo "This removes every named volume of the stack, including the Hugging Face model cache and the bundled Qdrant data." >&2
                 echo "Rebuilding it means downloading every model again." >&2
                 printf 'Type yes to continue: ' >&2
                 read -r confirmation || confirmation=""
@@ -627,7 +632,7 @@ case "$command_name" in
                     exit 2
                 fi
             else
-                echo "[ERROR] --volumes destroys every named volume, including the Hugging Face model cache." >&2
+                echo "[ERROR] --volumes destroys every named volume, including the Hugging Face model cache and the bundled Qdrant data." >&2
                 echo "        Standard input is not a terminal, so it cannot be confirmed here; re-run with --yes." >&2
                 exit 2
             fi
@@ -638,7 +643,7 @@ case "$command_name" in
     logs)
         compose_arguments=("${base[@]}")
         if [[ "$profile_provided" == true ]]; then
-            compose_arguments+=(--profile "$profile" logs)
+            compose_arguments+=(--profile "$profile" --profile qdrant logs)
         else
             compose_arguments+=("${all_profiles[@]}" logs)
         fi
@@ -657,7 +662,7 @@ case "$command_name" in
         if ((${#log_services[@]})); then
             compose_arguments+=("${log_services[@]}")
         elif [[ "$profile_provided" == true ]]; then
-            compose_arguments+=(middleware "smart-embedder-$profile" smart-qdrant-mcp)
+            compose_arguments+=(middleware "smart-embedder-$profile" smart-qdrant-mcp qdrant)
         fi
         if [[ "$dry_run" == true ]]; then
             print_dry_run_step "show container logs" "${compose_arguments[@]}"
@@ -670,7 +675,8 @@ case "$command_name" in
         compose_arguments=("${base[@]}")
         if [[ "$profile_provided" == true ]]; then
             compose_arguments+=(
-                --profile "$profile" ps middleware "smart-embedder-$profile" smart-qdrant-mcp
+                --profile "$profile" --profile qdrant ps
+                middleware "smart-embedder-$profile" smart-qdrant-mcp qdrant
             )
         else
             compose_arguments+=("${all_profiles[@]}" ps)
@@ -845,14 +851,15 @@ run_verification() {
     # The last three names were removed by the multi-token change; they are
     # passed on purpose so the preflight can refuse a stale .env.
     # MCP_AUTH_MODE tells the preflight whether the MCP server's own empty-list
-    # boot check applies: under oauth the token list is ignored.
+    # boot check applies: under oauth the token list is ignored. QDRANT_API_KEY
+    # joins the pairwise overlap check as the bundled Qdrant's inbound ACL.
     for name in \
         MIDDLEWARE_API_TOKENS SMART_EMBEDDER_API_TOKENS MCP_API_TOKENS \
         MIDDLEWARE_CLIENT_TOKEN SMART_EMBEDDER_CLIENT_TOKEN \
         MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL MIDDLEWARE_BIND_HOST \
         SMART_EMBEDDER_ALLOW_UNAUTHENTICATED_LOCAL \
         MCP_ALLOW_UNAUTHENTICATED_LOCAL MCP_BIND_HOST \
-        MCP_AUTH_MODE \
+        MCP_AUTH_MODE QDRANT_API_KEY \
         MIDDLEWARE_API_TOKEN SMART_EMBEDDER_API_TOKEN ALLOW_UNAUTHENTICATED_LOCAL
     do
         preflight_input+="${name}=$(resolved_value "$name")"$'\n'

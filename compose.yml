@@ -200,6 +200,8 @@ services:
       MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL: ${MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL:-false}
       EXPOSE_FRONTEND: ${EXPOSE_FRONTEND:-true}
       EXPOSE_MIDDLEWARE_SWAGGER: ${EXPOSE_MIDDLEWARE_SWAGGER:-true}
+      # Under QDRANT_BUNDLED=true scripts/stack.* export http://qdrant:6333
+      # over this value, so the middleware reaches the bundled instance.
       QDRANT_URL: ${QDRANT_URL:-http://host.docker.internal:6333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-}
@@ -357,6 +359,85 @@ services:
       start_period: 15s
     logging: *default-logging
 
+  # The optional bundled Qdrant, behind its own Compose profile so that a bare
+  # `docker compose up` never starts a database by accident. scripts/stack.*
+  # enable the profile for QDRANT_BUNDLED=true and point the middleware at it
+  # by exporting QDRANT_URL=http://qdrant:6333 over the .env value. Without the
+  # launchers: add `--profile qdrant` and set QDRANT_URL yourself.
+  qdrant-init:
+    profiles: [qdrant]
+    image: qdrant/qdrant:v1.20.0
+    container_name: qdrant-init
+    init: true
+    # The official image ships /qdrant/storage owned by root, so a fresh named
+    # volume inherits that and uid 1000 cannot write it. This one-shot hands the
+    # volume over before Qdrant starts; CHOWN is the only capability it keeps.
+    user: "0:0"
+    entrypoint: ["chown", "1000:1000", "/qdrant/storage"]
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    read_only: true
+    mem_limit: 64m
+    pids_limit: 16
+    restart: "no"
+    logging: *default-logging
+
+  qdrant:
+    profiles: [qdrant]
+    image: qdrant/qdrant:v1.20.0
+    container_name: qdrant
+    init: true
+    user: "1000:1000"
+    ports:
+      - "127.0.0.1:${QDRANT_PORT:-6333}:6333"
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    environment:
+      # QDRANT_API_KEY doubles as this instance's key: the middleware presents
+      # the same value. The launchers refuse to start it with an empty key.
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+      # Snapshots stay on the one storage volume: the root filesystem is
+      # read-only, so the image's default ./snapshots would not be writable.
+      QDRANT__STORAGE__SNAPSHOTS_PATH: /qdrant/storage/snapshots
+      QDRANT__TELEMETRY_DISABLED: "true"
+    depends_on:
+      qdrant-init:
+        condition: service_completed_successfully
+    networks:
+      - private
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    mem_limit: ${QDRANT_MEM_LIMIT:-4g}
+    cpus: 2.0
+    pids_limit: 512
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      # The image has no curl; bash's /dev/tcp reaches /healthz, which answers
+      # without the API key.
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/6333 && printf "GET /healthz HTTP/1.0\r\n\r\n" >&3 && grep -q "200 OK" <&3'
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+
   smart-embedder-init-cpu:
     <<: *smart-init
     profiles: [cpu]
@@ -502,6 +583,8 @@ volumes:
     name: ${SMART_EMBEDDER_CPU_STATE_VOLUME:-smart-embedder-state-cpu}
   embedder-state-gpu:
     name: ${SMART_EMBEDDER_GPU_STATE_VOLUME:-smart-embedder-state-gpu}
+  qdrant-storage:
+    name: ${QDRANT_STORAGE_VOLUME:-smart-semantic-searcher-qdrant}
 
 networks:
   private:

@@ -122,7 +122,7 @@ $minimumComposePatch = 4
 # same generation", which is the question worth asking when a Windows and a Unix
 # operator disagree about what the stack does; a parity test asserts the two
 # strings match.
-$launcherVersion = "2026.09.08.1"
+$launcherVersion = "2026.11.06.1"
 
 function Show-Usage {
     <#
@@ -180,6 +180,7 @@ Launcher switches, each overriding its configured value for this run:
   -NoMcp / -Mcp                         MCP_SERVER_ENABLED
   -PrivateEmbedder / -PublicEmbedder    EXPOSE_SMART_EMBEDDER_PORT
   Passing both halves of a pair is a usage error, not last one wins.
+  QDRANT_BUNDLED has no flag pair; set it in the environment file only.
 
 Precedence, highest first: the command line, the shell environment, the
 environment file, the built-in default.
@@ -383,7 +384,12 @@ if ($Extra -and $Extra.Count -gt 0) {
 $Command = $Command.Trim().ToLowerInvariant()
 $hardwareProfiles = @("cpu", "gpu")
 $modelProfiles = @("basic", "advanced")
-$allProfileArguments = @("--profile", "cpu", "--profile", "gpu")
+# The qdrant profile is always enabled here: the recovery commands cannot
+# read QDRANT_BUNDLED, and an enabled profile with no container is harmless
+# to stop or list, whereas a disabled one would leave a bundled Qdrant up.
+$allProfileArguments = @(
+    "--profile", "cpu", "--profile", "gpu", "--profile", "qdrant"
+)
 
 $profileProvided = -not [string]::IsNullOrWhiteSpace($Hardware)
 $embedderProfileProvided = -not [string]::IsNullOrWhiteSpace($EmbedderProfile)
@@ -629,13 +635,14 @@ switch ($Command) {
             exit 0
         }
         # -Volumes destroys the Hugging Face model cache, which is tens of
-        # gigabytes and takes a long download to rebuild. It is confirmed
+        # gigabytes and takes a long download to rebuild, and the bundled
+        # Qdrant's storage volume, which holds every collection. It is confirmed
         # interactively, and refused outright when there is nobody to ask.
         if ($Volumes -and -not $Yes) {
             if ([Console]::IsInputRedirected) {
                 [Console]::Error.WriteLine(
                     "[ERROR] -Volumes destroys every named volume, including the " +
-                    "Hugging Face model cache."
+                    "Hugging Face model cache and the bundled Qdrant data."
                 )
                 [Console]::Error.WriteLine(
                     "        Standard input is not a terminal, so it cannot be " +
@@ -645,7 +652,7 @@ switch ($Command) {
             }
             [Console]::Error.WriteLine(
                 "This removes every named volume of the stack, including the " +
-                "Hugging Face model cache."
+                "Hugging Face model cache and the bundled Qdrant data."
             )
             [Console]::Error.WriteLine(
                 "Rebuilding it means downloading every model again."
@@ -663,7 +670,9 @@ switch ($Command) {
     "logs" {
         $composeArguments = @($base)
         if ($profileProvided) {
-            $composeArguments += @("--profile", $Hardware, "logs")
+            $composeArguments += @(
+                "--profile", $Hardware, "--profile", "qdrant", "logs"
+            )
         } else {
             $composeArguments += $allProfileArguments + "logs"
         }
@@ -683,7 +692,8 @@ switch ($Command) {
             $composeArguments += @($Service)
         } elseif ($profileProvided) {
             $composeArguments += @(
-                "middleware", "smart-embedder-$Hardware", "smart-qdrant-mcp"
+                "middleware", "smart-embedder-$Hardware", "smart-qdrant-mcp",
+                "qdrant"
             )
         }
         if ($DryRun) {
@@ -697,8 +707,9 @@ switch ($Command) {
         $composeArguments = @($base)
         if ($profileProvided) {
             $composeArguments += @(
-                "--profile", $Hardware, "ps",
-                "middleware", "smart-embedder-$Hardware", "smart-qdrant-mcp"
+                "--profile", $Hardware, "--profile", "qdrant", "ps",
+                "middleware", "smart-embedder-$Hardware", "smart-qdrant-mcp",
+                "qdrant"
             )
         } else {
             $composeArguments += $allProfileArguments + "ps"
@@ -839,7 +850,7 @@ try {
             "MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL", "MIDDLEWARE_BIND_HOST",
             "SMART_EMBEDDER_ALLOW_UNAUTHENTICATED_LOCAL",
             "MCP_ALLOW_UNAUTHENTICATED_LOCAL", "MCP_BIND_HOST",
-            "MCP_AUTH_MODE",
+            "MCP_AUTH_MODE", "QDRANT_API_KEY",
             "MIDDLEWARE_API_TOKEN", "SMART_EMBEDDER_API_TOKEN",
             "ALLOW_UNAUTHENTICATED_LOCAL"
         )

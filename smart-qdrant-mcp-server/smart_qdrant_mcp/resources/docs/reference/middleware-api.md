@@ -519,7 +519,9 @@ every explicitly named environment setting the middleware accepts. The root
 The **Default** column is the code's own (`core/config.py`), used when a
 variable is unset. Two differ from what the template ships: `QDRANT_URL`
 (`http://host.docker.internal:6333`, so the container reaches a Qdrant on the
-host) and `MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL` (`true`).
+host; under `QDRANT_BUNDLED=true` the launchers export `http://qdrant:6333`,
+the bundled instance, instead) and `MIDDLEWARE_ALLOW_UNAUTHENTICATED_LOCAL`
+(`true`).
 
 Numeric settings carry validated ranges and cross-field invariants; the
 authoritative ranges live in `.env.example` and are enforced by

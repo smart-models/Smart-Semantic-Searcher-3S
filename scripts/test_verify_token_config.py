@@ -35,6 +35,16 @@ def test_a_client_token_colliding_with_another_services_list_is_an_overlap():
     assert any("overlap" in error for error in errors)
 
 
+def test_a_qdrant_key_shared_with_a_service_token_is_an_overlap():
+    errors = check_token_config(_values(QDRANT_API_KEY="mw-service"))
+    assert any("overlap" in error and "qdrant" in error for error in errors)
+
+
+def test_a_distinct_qdrant_key_is_accepted_and_never_required():
+    assert check_token_config(_values(QDRANT_API_KEY="qdrant-only")) == []
+    assert check_token_config(_values(QDRANT_API_KEY="")) == []
+
+
 def test_missing_middleware_client_token_is_an_error_when_mcp_is_enabled():
     errors = check_token_config(_values(MIDDLEWARE_CLIENT_TOKEN=""))
     assert any("MIDDLEWARE_CLIENT_TOKEN" in error for error in errors)

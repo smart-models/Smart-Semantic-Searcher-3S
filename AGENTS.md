@@ -34,7 +34,7 @@ package.
 ```
 Client / MCP client → smart-qdrant-mcp (MCP, 6337) ┐
 Client ────────────────────────────────────────────┴→ middleware-qdrant-manager (FastAPI, 6336) → server-embedder-reranker (FastAPI, 8010)  [embed/rerank]
-                                                                                                → external Qdrant                            [store/search]
+                                                                                                → Qdrant (external, or bundled: QDRANT_BUNDLED) [store/search]
 ```
 
 | Path | What it is |
@@ -48,7 +48,7 @@ Client ────────────────────────�
 | `stack.ps1` / `stack.sh` | **At the repository root.** The only supported way to build/start/stop the stack. |
 | `requirements/` | Human-maintained direct pins (`middleware.txt`, `embedder-cpu.txt`, `embedder-gpu.txt`, `embedder-base.txt`, `shared.txt`, `mcp.txt`, `dev.txt`, `ci.txt`), the `security-constraints.txt` floor applied over them, and `locks/` transitive constraints applied only inside Docker builds. [`requirements/README.md`](requirements/README.md) is its reference. |
 | `.github/` | Three workflows, `dependabot.yml` and the operator release checklist, documented in [`.github/AGENTS.md`](.github/AGENTS.md): `workflows/ci.yml` (every push to `main` and every PR), `workflows/dependency-audit.yml` (weekly OSV/SBOM cron that opens, updates and closes one deduplicated issue), `workflows/release-check.yml` (manual release checks and evidence), and `RELEASE_CHECKLIST.md`. Add a job to `ci.yml` when you add a suite. |
-| `compose.yml` / `Dockerfile` | Multi-target build (`middleware`, `smart-qdrant-mcp`, `smart-embedder-cpu`, `smart-embedder-gpu`, plus non-network-facing `*-init-*` prep containers per hardware profile). |
+| `compose.yml` / `Dockerfile` | Multi-target build (`middleware`, `smart-qdrant-mcp`, `smart-embedder-cpu`, `smart-embedder-gpu`, plus non-network-facing `*-init-*` prep containers per hardware profile). `compose.yml` also defines the optional `qdrant` profile (`qdrant-init`, `qdrant`, image `qdrant/qdrant:v1.20.0`), started only under `QDRANT_BUNDLED=true`. |
 | `compose.embedder-private.yml` | One-purpose overlay the launchers add when `EXPOSE_SMART_EMBEDDER_PORT=false`; withdraws the host port publish with `ports: !reset []` (a plain `ports: []` would concatenate, not replace). |
 | `compose.gpu-device.yml` | Single physical GPU overlay; both GPU init and serving reservations use the UUID resolved by the launcher planner. |
 | `docs/` | **Gitignored working material** — at the root and under `middleware-qdrant-manager/` and `server-embedder-reranker/`. Untracked specs and agent notes live there; never `git add -f` them, and do not assume the directory exists. `smart-qdrant-mcp-server/docs/` is the one exception: it is **versioned** (`ingest-patterns.md`), as is `smart_qdrant_mcp/resources/docs/`. Both must be maintained when their behaviour changes. |
@@ -380,16 +380,23 @@ an exit code, so read its output rather than `$LASTEXITCODE`.
   `@`-prefixed label. An empty list is a valid unauthenticated configuration
   only with that service's `*_ALLOW_UNAUTHENTICATED_LOCAL=true`.
   `scripts/verify_token_config.py` enforces the cross-service half; each
-  service enforces what it can see.
-- Three launcher-only switches in `.env` shape which containers run; no service
-  reads them, and a bare `docker compose up` ignores all three: `EMBEDDER_ONLY`,
-  `MCP_SERVER_ENABLED` (`--scale smart-qdrant-mcp=0`) and
-  `EXPOSE_SMART_EMBEDDER_PORT` (adds the overlay above).
+  service enforces what it can see. `QDRANT_API_KEY` joins that pairwise check
+  as the bundled Qdrant's ACL.
+- Four launcher-only switches in `.env` shape which containers run; no service
+  reads them, and a bare `docker compose up` ignores all four: `EMBEDDER_ONLY`,
+  `MCP_SERVER_ENABLED` (`--scale smart-qdrant-mcp=0`),
+  `EXPOSE_SMART_EMBEDDER_PORT` (adds the overlay above) and `QDRANT_BUNDLED`
+  (enables the `qdrant` Compose profile and exports
+  `QDRANT_URL=http://qdrant:6333`; refused without `QDRANT_API_KEY`, and
+  `EMBEDDER_ONLY` wins over it). The recovery commands enable the `qdrant`
+  profile unconditionally, so `down` stops a bundled Qdrant without reading
+  `.env`.
   The optional `STACK_GPU_DEVICE` selector is also launcher-owned. Automatic
   startup and selected-GPU paths use a shared host probe; the pure planner
   resolves one UUID and applies `compose.gpu-device.yml` to init and serving.
   `scripts/verify_compose_security.py` validates both published-port shapes
-  for CPU, all-GPU and selected-GPU deployments: all six combinations must pass.
+  for CPU, all-GPU and selected-GPU deployments plus the bundled-Qdrant shape
+  per hardware profile: all eight must pass.
 - Settings that must not be operator-tunable are **module constants** in
   `core/config.py`, never `Settings` fields — pydantic-settings populates any
   field lacking an explicit alias from the environment under its upper-cased
@@ -515,8 +522,8 @@ include console screenshots or API examples when applicable.
 These are invariants, not preferences. Breaking one is a bug even when tests
 pass.
 
-- **Publishes are loopback or private, never public.** The Smart Embedder
-  publish is hardcoded to `127.0.0.1` in `compose.yml`. The middleware and MCP
+- **Publishes are loopback or private, never public.** The Smart Embedder and
+  bundled Qdrant publishes are hardcoded to `127.0.0.1` in `compose.yml`. The middleware and MCP
   publishes are the two operator-settable addresses
   (`${MIDDLEWARE_BIND_HOST:-127.0.0.1}`, `${MCP_BIND_HOST:-127.0.0.1}`): each
   defaults to loopback and accepts only loopback or an IPv4 RFC1918 literal;

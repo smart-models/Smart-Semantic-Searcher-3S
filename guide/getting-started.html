@@ -492,8 +492,10 @@
             </div>
           </li>
           <li id="install-qdrant">
-            <div class="setup-copy"><span class="eyebrow">02 / Your vector database</span><h3>Make sure Qdrant<br>is reachable.</h3><p>Qdrant stores your searchable documents. It must already be running, either locally or in the cloud: this application does not start the database.</p><p>Confirm the instance is available and its network rules let this computer’s Docker containers connect to it.</p></div>
+            <div class="setup-copy"><span class="eyebrow">02 / Your vector database</span><h3>Choose where Qdrant<br>runs.</h3><p>Qdrant stores your searchable documents. Either let this stack start its own instance, or point it at one already running locally or in the cloud.</p><p>For an existing instance, confirm it is available and its network rules let this computer’s Docker containers connect to it.</p></div>
             <div class="setup-database-options">
+              <article class="setup-database"><h4>Let the stack run Qdrant</h4><p>In .env, switch on the bundled database and give it a key:</p><pre><code>QDRANT_BUNDLED=true
+QDRANT_API_KEY=choose-a-private-key</code></pre><p>The launcher starts Qdrant next to the middleware and connects them. Nothing else to install; the data stays in a Docker volume on this computer.</p></article>
               <article class="setup-database"><h4>Qdrant on this computer</h4><p>If it is reachable on the usual port, keep the supplied address:</p><pre><code>QDRANT_URL=http://host.docker.internal:6333</code></pre><p>This address lets the application reach your computer from Docker. If your local instance uses a different address or port, update this value too.</p></article>
               <article class="setup-database"><h4>Qdrant in the cloud or elsewhere</h4><p>In .env, replace <code>QDRANT_URL</code> with the endpoint supplied by your Qdrant provider or administrator.</p><p>If the instance requires a key, put it in <code>QDRANT_API_KEY</code>. Use the database’s key here; keep it private. Save the file.</p><a href="environment.html#connection">Help with the database connection ↗</a></article>
             </div>

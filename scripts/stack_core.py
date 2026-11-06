@@ -70,7 +70,24 @@ COMMANDS_WITHOUT_HARDWARE = frozenset({"verify", "urls"})
 
 #: Compose is asked for both hardware profiles whenever a command has to reach a
 #: service that may belong to either one.
-ALL_PROFILE_ARGUMENTS = ("--profile", "cpu", "--profile", "gpu")
+ALL_PROFILE_ARGUMENTS = (
+    "--profile",
+    "cpu",
+    "--profile",
+    "gpu",
+    "--profile",
+    "qdrant",
+)
+
+#: The optional bundled Qdrant (QDRANT_BUNDLED=true), a Compose profile of its
+#: own so that a bare `docker compose up` never starts a database by accident.
+#: The preparation container only chowns the storage volume for uid 1000.
+QDRANT_SERVICES = ("qdrant-init", "qdrant")
+QDRANT_PROFILE_ARGUMENTS = ("--profile", "qdrant")
+#: Where the middleware reaches the bundled instance over the private network.
+#: Exported over whatever QDRANT_URL says in .env, which only matters when the
+#: operator points the stack at an external Qdrant instead.
+BUNDLED_QDRANT_URL = "http://qdrant:6333"
 
 #: smart-qdrant-mcp only ever talks to middleware, so it comes down with it.
 MIDDLEWARE_SERVICES = ("middleware", "smart-qdrant-mcp")
@@ -95,6 +112,7 @@ ENDPOINTS = {
         "SMART_EMBEDDER_PORT",
         "8010",
     ),
+    "qdrant": ("Qdrant", None, "127.0.0.1", "QDRANT_PORT", "6333"),
 }
 
 
@@ -559,6 +577,7 @@ class Settings:
     embedder_only: bool
     mcp_server_enabled: bool
     expose_embedder_port: bool
+    qdrant_bundled: bool
     no_build: bool
     wait: bool
     wait_timeout: str
@@ -672,6 +691,23 @@ def resolve_settings(
         default=True,
         label="EXPOSE_SMART_EMBEDDER_PORT",
     )
+    # No CLI pair for this one: starting a database is a deployment decision
+    # that belongs in .env, not a per-run override. EMBEDDER_ONLY wins over it
+    # the way it wins over MCP_SERVER_ENABLED -- nothing would consume Qdrant.
+    qdrant_bundled = (
+        resolve_boolean(
+            cli_value=None,
+            environment_value=environment.get("QDRANT_BUNDLED"),
+            default=False,
+            label="QDRANT_BUNDLED",
+        )
+        and not embedder_only
+    )
+    if qdrant_bundled and not environment.get("QDRANT_API_KEY", "").strip():
+        raise ConfigurationError(
+            "QDRANT_BUNDLED=true requires a QDRANT_API_KEY; the bundled Qdrant "
+            "is not started unauthenticated."
+        )
 
     force_autotune = resolve_boolean(
         cli_value=cli.get("force-autotune"),
@@ -730,6 +766,7 @@ def resolve_settings(
         embedder_only=embedder_only,
         mcp_server_enabled=mcp_server_enabled,
         expose_embedder_port=expose_embedder_port,
+        qdrant_bundled=qdrant_bundled,
         no_build=_normalise(cli.get("no-build")) == "true",
         wait=wait,
         wait_timeout=wait_timeout or DEFAULT_WAIT_TIMEOUT,
@@ -787,6 +824,20 @@ def compose_base(settings: Settings) -> list[str]:
     return argv
 
 
+def profile_arguments(settings: Settings) -> list[str]:
+    """Name the Compose profiles a planned command enables.
+
+    Returns:
+        The hardware profile, plus the qdrant profile when the bundled Qdrant
+        is on. Shared by every command so that `config` shows exactly what
+        `up` runs.
+    """
+    argv = ["--profile", settings.hardware]
+    if settings.qdrant_bundled:
+        argv += QDRANT_PROFILE_ARGUMENTS
+    return argv
+
+
 def build_up_plan(
     settings: Settings, plan: Plan, environment: Mapping[str, str]
 ) -> None:
@@ -797,18 +848,16 @@ def build_up_plan(
         build_build_plan(settings, plan)
 
     # Build first, so a failed build leaves the currently active hardware
-    # profile untouched. Only then remove the mutually exclusive service.
+    # profile untouched. Only then remove the mutually exclusive services: the
+    # other hardware profile's, and a bundled Qdrant left by a previous run
+    # when this configuration points at an external one instead.
+    removed = [*settings.opposite_services]
+    if not settings.qdrant_bundled:
+        removed += QDRANT_SERVICES
     plan.steps.append(
         Step(
-            [
-                *base,
-                *ALL_PROFILE_ARGUMENTS,
-                "rm",
-                "--stop",
-                "--force",
-                *settings.opposite_services,
-            ],
-            "remove the opposite hardware profile's services",
+            [*base, *ALL_PROFILE_ARGUMENTS, "rm", "--stop", "--force", *removed],
+            "remove the services this configuration does not run",
         )
     )
 
@@ -859,7 +908,7 @@ def build_up_plan(
             )
         )
 
-    argv = [*base, "--profile", settings.hardware, "up", "--detach", "--no-build"]
+    argv = [*base, *profile_arguments(settings), "up", "--detach", "--no-build"]
     if settings.wait:
         argv += ["--wait", "--wait-timeout", settings.wait_timeout]
     if settings.embedder_only:
@@ -888,7 +937,7 @@ def build_up_plan(
 
 def build_config_plan(settings: Settings, plan: Plan) -> None:
     """Append the single step that `config` runs."""
-    argv = [*compose_base(settings), "--profile", settings.hardware, "config"]
+    argv = [*compose_base(settings), *profile_arguments(settings), "config"]
     if settings.embedder_only:
         argv.append(settings.selected_service)
     plan.steps.append(Step(argv, "render the resolved Compose configuration"))
@@ -903,12 +952,14 @@ def running_services(settings: Settings) -> list[str]:
 
     Returns:
         The service names to act on, in a stable order: the selected embedder
-        alone under EMBEDDER_ONLY, otherwise the middleware and that embedder,
-        plus smart-qdrant-mcp unless MCP_SERVER_ENABLED withdrew it.
+        alone under EMBEDDER_ONLY, otherwise the bundled Qdrant if there is
+        one, the middleware and that embedder, plus smart-qdrant-mcp unless
+        MCP_SERVER_ENABLED withdrew it.
     """
     if settings.embedder_only:
         return [settings.selected_service]
-    services = ["middleware", settings.selected_service]
+    services = ["qdrant"] if settings.qdrant_bundled else []
+    services += ["middleware", settings.selected_service]
     if settings.mcp_server_enabled:
         services.append("smart-qdrant-mcp")
     return services
@@ -921,7 +972,7 @@ def build_build_plan(settings: Settings, plan: Plan) -> None:
     separately and then starting with --no-build cannot drift from what a plain
     `up` would have built.
     """
-    argv = [*compose_base(settings), "--profile", settings.hardware, "build"]
+    argv = [*compose_base(settings), *profile_arguments(settings), "build"]
     if settings.embedder_only:
         argv.append(settings.selected_service)
     plan.steps.append(Step(argv, "build the images for the selected profile"))
@@ -934,23 +985,28 @@ def build_pull_plan(settings: Settings, plan: Plan) -> None:
     image, so there is normally nothing to pull: --ignore-buildable skips the
     four buildable services, and --ignore-pull-failures keeps the two init
     services -- which name a locally built image without a build stanza of
-    their own -- from turning "nothing to do" into a failure. The command earns
-    its place because it is the one that keeps working the day a service is
-    switched to a registry image; use `build` to rebuild what is local.
+    their own -- from turning "nothing to do" into a failure. The bundled
+    Qdrant is the one registry image, so under QDRANT_BUNDLED=true the command
+    does fetch something; use `build` to rebuild what is local.
     """
     argv = [
         *compose_base(settings),
-        "--profile",
-        settings.hardware,
+        *profile_arguments(settings),
         "pull",
         "--ignore-buildable",
         "--ignore-pull-failures",
     ]
     plan.steps.append(Step(argv, "pull the images this stack does not build"))
-    plan.messages.append(
-        "Every image in this stack is built locally, so `pull` normally has "
-        "nothing to fetch; `build` is what refreshes them."
-    )
+    if settings.qdrant_bundled:
+        plan.messages.append(
+            "`pull` fetches the bundled Qdrant image; every other image is "
+            "built locally, so `build` is what refreshes those."
+        )
+    else:
+        plan.messages.append(
+            "Every image in this stack is built locally, so `pull` normally has "
+            "nothing to fetch; `build` is what refreshes them."
+        )
 
 
 def build_restart_plan(settings: Settings, plan: Plan) -> None:
@@ -962,8 +1018,7 @@ def build_restart_plan(settings: Settings, plan: Plan) -> None:
     """
     argv = [
         *compose_base(settings),
-        "--profile",
-        settings.hardware,
+        *profile_arguments(settings),
         "restart",
         *running_services(settings),
     ]
@@ -977,6 +1032,9 @@ def describe_authentication(environment: Mapping[str, str], service: str) -> str
         A phrase describing the service's inbound ACL. Token values never
         appear in it -- only whether one is configured.
     """
+    if service == "qdrant":
+        # The bundled instance is refused without a key at resolution time.
+        return "API key required"
     token_list, client_token, allow_local = AUTH_SOURCES[service]
     configured = bool(environment.get(token_list, "").strip())
     if client_token and environment.get(client_token, "").strip():
@@ -1004,6 +1062,8 @@ def describe_endpoints(
         shown.remove("mcp")
     if not settings.expose_embedder_port:
         shown.remove("smart-embedder")
+    if settings.qdrant_bundled:
+        shown.insert(0, "qdrant")
 
     plan.summary.append("Endpoints published by this configuration:")
     for service in shown:
@@ -1024,6 +1084,11 @@ def describe_endpoints(
             "  Smart Embedder: not published on the host "
             "(EXPOSE_SMART_EMBEDDER_PORT=false); the middleware reaches it "
             "over the private Compose network."
+        )
+    if not settings.embedder_only and not settings.qdrant_bundled:
+        plan.summary.append(
+            "  Qdrant: external instance at QDRANT_URL; not started by this "
+            "stack (QDRANT_BUNDLED=false)."
         )
     if settings.embedder_only:
         plan.summary.append(
@@ -1062,12 +1127,22 @@ def build_plan(
         plan.messages.append(f"Middleware frontend: {frontend}.")
     if settings.force_autotune:
         plan.environment["SMART_EMBEDDER_AUTOTUNE_FORCE"] = "false"
+    if settings.qdrant_bundled:
+        plan.environment["QDRANT_URL"] = BUNDLED_QDRANT_URL
+    elif settings.embedder_only and (
+        _normalise(environment.get("QDRANT_BUNDLED")) == "true"
+    ):
+        plan.messages.append(
+            "EMBEDDER_ONLY=true: the bundled Qdrant is not started "
+            "(QDRANT_BUNDLED is ignored without the middleware)."
+        )
     plan.resolved = {
         "hardware": settings.hardware,
         "embedder_profile": settings.embedder_profile,
         "embedder_only": str(settings.embedder_only).lower(),
         "mcp_server_enabled": str(settings.mcp_server_enabled).lower(),
         "expose_embedder_port": str(settings.expose_embedder_port).lower(),
+        "qdrant_bundled": str(settings.qdrant_bundled).lower(),
     }
     if settings.autotune_mode:
         plan.resolved["autotune_mode"] = settings.autotune_mode

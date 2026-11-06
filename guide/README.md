@@ -135,9 +135,10 @@ attributes synchronized with the visible value and explanation.
 
 The entry page's first-run command is `up auto` in both shells, with no extra
 flags or explicit model/hardware choices. It assumes the supplied template and
-a local Docker engine. Qdrant is external: keep the supplied host address only
-when a local instance is reachable there; otherwise set its actual endpoint and
-any required database key. Explain that startup can return before services are
+a local Docker engine. Qdrant is external unless `QDRANT_BUNDLED=true` starts
+one inside the stack: keep the supplied host address only when a local instance
+is reachable there, otherwise set its actual endpoint and any required database
+key, or set the switch and a key. Explain that startup can return before services are
 healthy, and link detailed choices to the CLI/environment guides.
 
 The entry page's agent card provides a copyable setup prompt for an agent

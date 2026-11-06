@@ -26,6 +26,7 @@ EXPECTED_PUBLISHED_PORTS = {
     "smart-embedder-cpu": 8000,
     "smart-embedder-gpu": 8000,
     "smart-qdrant-mcp": 6337,
+    "qdrant": 6333,
 }
 
 PRIVATE_IPV4_NETWORKS = (
@@ -101,11 +102,51 @@ def _hardening_violations(service_name: str, service: Mapping[str, Any]) -> list
     return violations
 
 
+def _qdrant_violations(services: Mapping[str, Any]) -> list[str]:
+    """Return the violations of the bundled Qdrant pair (QDRANT_BUNDLED=true).
+
+    The serving container gets the same hardening as every other publisher
+    (checked by the caller). Its preparation container exists only to hand the
+    storage volume to uid 1000, so it may hold CHOWN and nothing else, publish
+    nothing, and must have finished before Qdrant starts.
+    """
+    errors: list[str] = []
+    runtime = services.get("qdrant")
+    init_service = services.get("qdrant-init")
+    if not isinstance(runtime, Mapping) or not isinstance(init_service, Mapping):
+        return ["qdrant profile does not resolve both qdrant and qdrant-init"]
+    if init_service.get("ports"):
+        errors.append("service qdrant-init must not publish ports")
+    if init_service.get("user") != "0:0":
+        errors.append("service qdrant-init must start the volume bootstrap as root")
+    if set(init_service.get("cap_drop") or []) != {"ALL"}:
+        errors.append("service qdrant-init must drop all capabilities")
+    if set(init_service.get("cap_add") or []) != {"CHOWN"}:
+        errors.append("service qdrant-init must have only the CHOWN capability")
+    if init_service.get("read_only") is not True:
+        errors.append("service qdrant-init must use a read-only root filesystem")
+    for service_name, service in (("qdrant", runtime), ("qdrant-init", init_service)):
+        mounts = {
+            mount.get("target"): mount
+            for mount in service.get("volumes") or []
+            if isinstance(mount, Mapping)
+        }
+        if mounts.get("/qdrant/storage", {}).get("read_only") is True or (
+            "/qdrant/storage" not in mounts
+        ):
+            errors.append(f"service {service_name} must mount /qdrant/storage writable")
+    dependency = (runtime.get("depends_on") or {}).get("qdrant-init", {})
+    if dependency.get("condition") != "service_completed_successfully":
+        errors.append("service qdrant must wait for successful preparation")
+    return errors
+
+
 def validate_config(
     config: Mapping[str, Any],
     profile: str,
     *,
     embedder_published: bool = True,
+    qdrant_bundled: bool = False,
     gpu_device: str | None = None,
 ) -> list[str]:
     """Return violations found in a resolved Compose configuration.
@@ -114,8 +155,11 @@ def validate_config(
     checked. The default is the plain ``compose.yml``, where the embedder
     publishes a loopback port. ``False`` is the shape produced by overlaying
     ``compose.embedder-private.yml`` (EXPOSE_SMART_EMBEDDER_PORT=false), where
-    it must not. The publisher set is compared for exact equality either way,
-    so both a missing publish and an unexpected extra one are caught.
+    it must not. ``qdrant_bundled`` is the shape with the ``qdrant`` profile
+    enabled (QDRANT_BUNDLED=true), where the bundled Qdrant must publish its
+    loopback port and carry the same hardening. The publisher set is compared
+    for exact equality either way, so both a missing publish and an unexpected
+    extra one are caught -- a Qdrant leaking out of its profile included.
     """
     errors: list[str] = []
     services = config.get("services")
@@ -127,6 +171,11 @@ def validate_config(
     expected_publishers = {"middleware", "smart-qdrant-mcp"}
     if embedder_published:
         expected_publishers.add(expected_embedder)
+    hardened = ["middleware", "smart-qdrant-mcp", expected_embedder]
+    if qdrant_bundled:
+        expected_publishers.add("qdrant")
+        hardened.append("qdrant")
+        errors.extend(_qdrant_violations(services))
     actual_publishers: set[str] = set()
 
     for service_name, service in services.items():
@@ -157,7 +206,7 @@ def validate_config(
     # The same non-root/read-only/cap-dropped hardening applies to every
     # network-facing service, not only the MCP server. The embedder init
     # container is excluded (it runs as root by design and is checked below).
-    for service_name in ("middleware", "smart-qdrant-mcp", expected_embedder):
+    for service_name in hardened:
         service = services.get(service_name)
         if isinstance(service, Mapping):
             errors.extend(_hardening_violations(service_name, service))
@@ -282,23 +331,23 @@ def resolve_config(
     *,
     overlays: Sequence[Path] = (),
     environment: Mapping[str, str] | None = None,
+    qdrant: bool = False,
 ) -> Mapping[str, Any]:
-    """Resolve one Compose profile as JSON, optionally applying overlay files."""
+    """Resolve one Compose profile as JSON, optionally applying overlay files.
+
+    ``qdrant`` also enables the ``qdrant`` profile, the shape the launchers
+    produce for QDRANT_BUNDLED=true.
+    """
     command = ["docker", "compose"]
     if overlays:
         # An explicit base is required as soon as one --file is passed.
         command += ["--file", str(REPOSITORY_ROOT / "compose.yml")]
         for overlay in overlays:
             command += ["--file", str(overlay)]
-    command += [
-        "--env-file",
-        str(env_file),
-        "--profile",
-        profile,
-        "config",
-        "--format",
-        "json",
-    ]
+    command += ["--env-file", str(env_file), "--profile", profile]
+    if qdrant:
+        command += ["--profile", "qdrant"]
+    command += ["config", "--format", "json"]
     completed = subprocess.run(
         command,
         cwd=REPOSITORY_ROOT,
@@ -343,12 +392,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     violations: list[str] = []
     for profile in ("cpu", "gpu"):
-        shapes = [(False, True), (False, False)]
+        # (selected GPU, embedder published, bundled Qdrant). The bundled
+        # Qdrant is orthogonal to the other two switches -- different
+        # services -- so one shape per hardware profile covers it.
+        shapes = [(False, True, False), (False, False, False), (False, True, True)]
         if profile == "gpu":
-            shapes += [(True, True), (True, False)]
-        for selected, published in shapes:
-            label = ("selected-gpu" if selected else "default") + (
-                "/embedder-private" if not published else ""
+            shapes += [(True, True, False), (True, False, False)]
+        for selected, published, bundled in shapes:
+            label = (
+                ("selected-gpu" if selected else "default")
+                + ("/embedder-private" if not published else "")
+                + ("/bundled-qdrant" if bundled else "")
             )
             overlays = [] if published else [EMBEDDER_PRIVATE_COMPOSE]
             if selected:
@@ -359,6 +413,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     profile,
                     overlays=overlays,
                     environment=selected_environment if selected else None,
+                    qdrant=bundled,
                 )
             except RuntimeError as exc:
                 violations.append(f"{label}: {exc}")
@@ -369,6 +424,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     config,
                     profile,
                     embedder_published=published,
+                    qdrant_bundled=bundled,
                     gpu_device=gpu_device if selected else None,
                 )
             )
@@ -380,7 +436,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         "Compose security invariants verified for CPU and GPU profiles, "
         "with and without the published Smart Embedder port, "
-        "including single-GPU reservations (six shapes)."
+        "including single-GPU reservations and the bundled Qdrant (eight shapes)."
     )
     return 0
 

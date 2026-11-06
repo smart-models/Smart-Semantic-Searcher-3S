@@ -150,6 +150,7 @@ def test_the_readme_states_that_two_stacks_are_not_supported():
         "Forced autotune cannot run with mode off",
         "Forced preparation failed after the embedder stopped",
         "Frontend flags require the middleware",
+        "QDRANT_BUNDLED=true requires a QDRANT_API_KEY",
         "bad interpreter",
         "token overlap",
         "never returns",

@@ -386,11 +386,15 @@ def test_up_plan_matrix(hardware, model, embedder_only, mcp, published):
             "cpu",
             "--profile",
             "gpu",
+            "--profile",
+            "qdrant",
             "rm",
             "--stop",
             "--force",
             f"smart-embedder-{opposite}",
             f"smart-embedder-init-{opposite}",
+            "qdrant-init",
+            "qdrant",
         ],
     ]
     if embedder_only:
@@ -468,6 +472,111 @@ def test_verify_plans_no_steps_but_resolves_switches():
     assert plan.steps == []
     assert plan.resolved["embedder_only"] == "true"
     assert plan.resolved["mcp_server_enabled"] == "true"
+    assert plan.resolved["qdrant_bundled"] == "false"
+    bundled = plan_for("verify", environment=QDRANT_ON)
+    assert bundled.resolved["qdrant_bundled"] == "true"
+
+
+# --- the bundled Qdrant switch ---------------------------------------------
+
+QDRANT_ON = {"QDRANT_BUNDLED": "true", "QDRANT_API_KEY": "qdrant-secret"}
+
+
+def test_bundled_qdrant_enables_its_profile_and_points_the_middleware_at_it():
+    """QDRANT_BUNDLED=true adds the qdrant profile and overrides QDRANT_URL."""
+    plan = plan_for("up", hardware="cpu", environment=QDRANT_ON)
+    prefix = len(expected_base())
+    assert argv_of(plan, -1)[prefix : prefix + 4] == [
+        "--profile",
+        "cpu",
+        "--profile",
+        "qdrant",
+    ]
+    assert plan.environment["QDRANT_URL"] == "http://qdrant:6333"
+    assert plan.resolved["qdrant_bundled"] == "true"
+
+
+def test_external_qdrant_is_the_default_and_removes_a_leftover_bundled_one():
+    """Off by default: no profile, no URL override, and a stale container goes."""
+    plan = plan_for("up", hardware="cpu")
+    assert "qdrant" not in argv_of(plan, -1)
+    assert "QDRANT_URL" not in plan.environment
+    assert plan.resolved["qdrant_bundled"] == "false"
+    removal = argv_of(plan, 1)
+    assert removal[-2:] == ["qdrant-init", "qdrant"]
+    assert "qdrant" in removal[: removal.index("rm")]
+
+
+def test_bundled_qdrant_is_kept_out_of_the_removal_step():
+    """The removal step must not stop the Qdrant that `up` is about to start."""
+    plan = plan_for("up", hardware="cpu", environment=QDRANT_ON)
+    removal = argv_of(plan, 1)
+    assert "qdrant" not in removal[removal.index("rm") :]
+
+
+@pytest.mark.parametrize("command", ["config", "build", "pull", "restart"])
+def test_every_planned_command_shares_the_qdrant_profile(command):
+    """`config` must show what `up` runs, so every command enables the profile."""
+    plan = plan_for(command, hardware="gpu", environment=QDRANT_ON)
+    prefix = len(expected_base())
+    assert argv_of(plan, 0)[prefix : prefix + 4] == [
+        "--profile",
+        "gpu",
+        "--profile",
+        "qdrant",
+    ]
+
+
+def test_restart_includes_the_bundled_qdrant():
+    """A bundled Qdrant is one of the services this configuration runs."""
+    plan = plan_for("restart", hardware="cpu", environment=QDRANT_ON)
+    assert argv_of(plan, 0)[-5:] == [
+        "restart",
+        "qdrant",
+        "middleware",
+        "smart-embedder-cpu",
+        "smart-qdrant-mcp",
+    ]
+
+
+@pytest.mark.parametrize("key", ["", "   "])
+def test_bundled_qdrant_requires_an_api_key(key):
+    """An unauthenticated bundled Qdrant is refused, like every other service."""
+    with pytest.raises(ConfigurationError, match="QDRANT_API_KEY"):
+        plan_for(
+            "up",
+            hardware="cpu",
+            environment={"QDRANT_BUNDLED": "true", "QDRANT_API_KEY": key},
+        )
+
+
+def test_embedder_only_wins_over_the_bundled_qdrant():
+    """Nothing consumes Qdrant under EMBEDDER_ONLY, so it is not started."""
+    plan = plan_for(
+        "up", hardware="cpu", environment=QDRANT_ON, **{"embedder-only": "true"}
+    )
+    assert "qdrant" not in argv_of(plan, -1)
+    assert "QDRANT_URL" not in plan.environment
+    assert plan.resolved["qdrant_bundled"] == "false"
+    assert any("QDRANT_BUNDLED" in message for message in plan.messages)
+
+
+def test_bundled_qdrant_value_must_be_boolean():
+    """The switch follows the same true/false rule as the other three."""
+    with pytest.raises(ConfigurationError, match="QDRANT_BUNDLED"):
+        plan_for("up", hardware="cpu", environment={"QDRANT_BUNDLED": "maybe"})
+
+
+def test_urls_reports_the_bundled_qdrant_endpoint_only_when_bundled():
+    """The bundled publish joins the endpoint list; an external one is named."""
+    bundled = plan_for("urls", environment={**QDRANT_ON, "QDRANT_PORT": "7333"})
+    summary = "\n".join(bundled.summary)
+    assert "Qdrant: http://127.0.0.1:7333 -- API key required" in summary
+    assert "qdrant-secret" not in summary
+
+    external = "\n".join(plan_for("urls").summary)
+    assert ":6333" not in external
+    assert "Qdrant: external" in external
 
 
 # --- precedence ------------------------------------------------------------
@@ -756,6 +865,13 @@ def test_pull_skips_what_this_stack_builds():
     argv = argv_of(plan, 0)
     assert argv[-3:] == ["pull", "--ignore-buildable", "--ignore-pull-failures"]
     assert any("built locally" in message for message in plan.messages)
+
+
+def test_pull_fetches_the_bundled_qdrant_image():
+    """The bundled Qdrant is the one registry image, so `pull` has a job then."""
+    plan = plan_for("pull", hardware="cpu", environment=QDRANT_ON)
+    assert any("bundled Qdrant image" in message for message in plan.messages)
+    assert not any("nothing to fetch" in message for message in plan.messages)
 
 
 def test_restart_names_the_services_the_switches_leave_running():

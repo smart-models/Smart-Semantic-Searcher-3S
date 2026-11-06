@@ -116,6 +116,12 @@ def check_token_config(values: Mapping[str, str]) -> list[str]:
         client_token = values.get(variable, "").strip()
         if client_token:
             acls[service].add(client_token)
+    # The bundled Qdrant's inbound ACL is its one API key, which the middleware
+    # presents. It joins the pairwise check only: an external Qdrant may run
+    # without a key, and the launcher refuses a bundled one without it.
+    qdrant_key = values.get("QDRANT_API_KEY", "").strip()
+    if qdrant_key:
+        acls["qdrant"] = {qdrant_key}
 
     services = sorted(acls)
     for index, first in enumerate(services):

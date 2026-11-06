@@ -705,3 +705,75 @@ def test_startup_controls_bash_equals_and_parent_environment(stub):
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "mode=full force=true frontend=true"
+
+
+# --- the bundled Qdrant profile in the recovery commands -------------------
+
+
+def _enables_qdrant_profile(arguments: list[str]) -> bool:
+    """Return whether an argv enables the qdrant Compose profile."""
+    return any(
+        arguments[index : index + 2] == ["--profile", "qdrant"]
+        for index in range(len(arguments))
+    )
+
+
+@pytest.mark.parametrize(
+    "bash_arguments,powershell_arguments",
+    [
+        (["down", "--dry-run"], ["down", "-DryRun"]),
+        (["status", "--dry-run"], ["status", "-DryRun"]),
+        (["logs", "--tail", "1", "--dry-run"], ["logs", "-Tail", "1", "-DryRun"]),
+    ],
+)
+def test_recovery_commands_cover_the_bundled_qdrant_profile(
+    stub, bash_arguments, powershell_arguments
+):
+    """`down` must stop a bundled Qdrant although it never asks the planner.
+
+    The recovery commands cannot read QDRANT_BUNDLED (they work without
+    `.env`), so they enable the qdrant profile unconditionally: a profile that
+    is enabled but has no running container is harmless to stop or list.
+    """
+    results = both_launchers(bash_arguments, powershell_arguments, stub)
+    assert results
+    for result in results:
+        assert result.returncode == 0, result.stderr
+        assert _enables_qdrant_profile(plan_arguments(result.stdout))
+
+
+@pytest.mark.parametrize(
+    "bash_arguments,powershell_arguments",
+    [
+        (["status", "cpu", "--dry-run"], ["status", "cpu", "-DryRun"]),
+        (
+            ["logs", "cpu", "--tail", "1", "--dry-run"],
+            ["logs", "cpu", "-Tail", "1", "-DryRun"],
+        ),
+    ],
+)
+def test_explicit_profile_lists_name_the_bundled_qdrant(
+    stub, bash_arguments, powershell_arguments
+):
+    """With a hardware profile given, the explicit service list includes qdrant."""
+    results = both_launchers(bash_arguments, powershell_arguments, stub)
+    assert results
+    for result in results:
+        assert result.returncode == 0, result.stderr
+        arguments = plan_arguments(result.stdout)
+        assert _enables_qdrant_profile(arguments)
+        assert arguments[-4:] == [
+            "middleware",
+            "smart-embedder-cpu",
+            "smart-qdrant-mcp",
+            "qdrant",
+        ]
+
+
+def test_down_volumes_refusal_names_the_qdrant_data(stub):
+    """`--volumes` also destroys the bundled Qdrant data; the refusal says so."""
+    results = both_launchers(["down", "--volumes"], ["down", "-Volumes"], stub)
+    assert results
+    for result in results:
+        assert result.returncode == 2, result.stdout
+        assert "Qdrant" in result.stderr

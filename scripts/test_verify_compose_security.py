@@ -9,7 +9,9 @@ from scripts import verify_compose_security as verifier
 from scripts.verify_compose_security import validate_config
 
 
-def resolved_config(profile: str, host_ip: str = "127.0.0.1") -> dict:
+def resolved_config(
+    profile: str, host_ip: str = "127.0.0.1", qdrant: bool = False
+) -> dict:
     runtime_name = f"smart-embedder-{profile}"
     init_name = f"smart-embedder-init-{profile}"
     config = {
@@ -63,6 +65,25 @@ def resolved_config(profile: str, host_ip: str = "127.0.0.1") -> dict:
             },
         }
     }
+    if qdrant:
+        config["services"]["qdrant-init"] = {
+            "ports": [],
+            "user": "0:0",
+            "read_only": True,
+            "cap_drop": ["ALL"],
+            "cap_add": ["CHOWN"],
+            "volumes": [{"target": "/qdrant/storage"}],
+        }
+        config["services"]["qdrant"] = {
+            "ports": [{"host_ip": "127.0.0.1", "target": 6333}],
+            "user": "1000:1000",
+            "read_only": True,
+            "cap_drop": ["ALL"],
+            "volumes": [{"target": "/qdrant/storage"}],
+            "depends_on": {
+                "qdrant-init": {"condition": "service_completed_successfully"}
+            },
+        }
     if profile == "gpu":
         for name in (runtime_name, init_name):
             config["services"][name]["deploy"] = {
@@ -173,7 +194,9 @@ def test_selected_gpu_requires_exactly_one_reservation(name, copies):
     assert validate_config(config, "gpu", gpu_device=verifier.GPU_VALIDATION_UUID)
 
 
-def test_verifier_resolves_six_shapes_with_explicit_selected_environment(monkeypatch):
+def test_verifier_resolves_eight_shapes_with_explicit_selected_environment(
+    monkeypatch,
+):
     monkeypatch.setenv("STACK_GPU_DEVICE", "0")
     with (
         patch.object(verifier, "resolve_config") as resolve,
@@ -185,15 +208,27 @@ def test_verifier_resolves_six_shapes_with_explicit_selected_environment(monkeyp
             )
             == 0
         )
-    assert resolve.call_count == 6
+    assert resolve.call_count == 8
     calls = resolve.call_args_list
     assert [call.args[1] for call in calls] == [
         "cpu",
         "cpu",
+        "cpu",
         "gpu",
         "gpu",
         "gpu",
         "gpu",
+        "gpu",
+    ]
+    assert [call.kwargs.get("qdrant", False) for call in calls] == [
+        False,
+        False,
+        True,
+        False,
+        False,
+        True,
+        False,
+        False,
     ]
     for call in calls[-2:]:
         assert call.kwargs["overlays"][-1] == verifier.GPU_DEVICE_COMPOSE
@@ -206,6 +241,48 @@ def test_verifier_resolves_six_shapes_with_explicit_selected_environment(monkeyp
 
 class ComposeSecurityValidationTests(unittest.TestCase):
     """Tests for the compose hardening invariants the verifier enforces."""
+
+    def test_bundled_qdrant_shape_is_accepted(self):
+        config = resolved_config("cpu", qdrant=True)
+        assert validate_config(config, "cpu", qdrant_bundled=True) == []
+
+    def test_bundled_qdrant_shape_requires_both_qdrant_services(self):
+        errors = validate_config(resolved_config("cpu"), "cpu", qdrant_bundled=True)
+        assert any("qdrant" in error for error in errors)
+
+    def test_qdrant_outside_its_profile_is_rejected(self):
+        errors = validate_config(resolved_config("cpu", qdrant=True), "cpu")
+        assert any(
+            "unexpected set of services publishing ports" in error for error in errors
+        )
+
+    def test_qdrant_on_a_private_address_is_rejected(self):
+        config = resolved_config("cpu", qdrant=True)
+        config["services"]["qdrant"]["ports"][0]["host_ip"] = "10.0.0.5"
+        errors = validate_config(config, "cpu", qdrant_bundled=True)
+        assert any("qdrant publishes on 10.0.0.5" in error for error in errors)
+
+    def test_root_qdrant_user_is_rejected(self):
+        config = resolved_config("cpu", qdrant=True)
+        config["services"]["qdrant"]["user"] = "0:0"
+        errors = validate_config(config, "cpu", qdrant_bundled=True)
+        assert any("qdrant must run as uid:gid 1000:1000" in error for error in errors)
+
+    def test_qdrant_init_may_only_chown(self):
+        config = resolved_config("cpu", qdrant=True)
+        config["services"]["qdrant-init"]["cap_add"] = ["CHOWN", "SETUID"]
+        errors = validate_config(config, "cpu", qdrant_bundled=True)
+        assert any("qdrant-init" in error for error in errors)
+
+    def test_qdrant_init_must_not_publish_or_keep_capabilities(self):
+        config = resolved_config("cpu", qdrant=True)
+        config["services"]["qdrant-init"]["cap_drop"] = []
+        config["services"]["qdrant-init"]["ports"] = [
+            {"host_ip": "127.0.0.1", "target": 6333}
+        ]
+        errors = validate_config(config, "cpu", qdrant_bundled=True)
+        assert any("qdrant-init" in error for error in errors)
+        assert any("publishing ports" in error for error in errors)
 
     def test_expected_loopback_publishers_are_accepted(self):
         self.assertEqual(validate_config(resolved_config("cpu"), "cpu"), [])
