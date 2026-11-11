@@ -58,8 +58,16 @@ function badgeValue(page, label) {
   return page.locator("#mon-badges .metric").filter({ has: page.locator(".metric-label", { hasText: new RegExp(`^${label}$`) }) }).locator(".metric-value");
 }
 
+// Every committed tick rewrites #mon-badges. Clearing it first makes the five
+// tiles prove that *this* tick finished: a re-entry otherwise still shows the
+// previous visit's tiles, and the next interval would hit the in-flight guard.
+async function clearBadges(page) {
+  await page.locator("#mon-badges").evaluate((node) => { node.innerHTML = ""; });
+}
+
 async function enterMonitoring(page, mock) {
   const before = mock.statsCalls();
+  await clearBadges(page);
   await page.locator("#tab-monitoring").click();
   await expect(page.locator("#panel-monitoring")).toBeVisible();
   await expect.poll(() => mock.statsCalls()).toBe(before + 1);
@@ -67,13 +75,14 @@ async function enterMonitoring(page, mock) {
 }
 
 // Advance the frozen clock by whole intervals. With `mock`, one /stats request
-// per interval is required and its reply must have rendered before returning.
+// per interval is required and its tick must have rendered before returning.
 async function tick(page, count = 1, mock = null) {
   const before = mock ? mock.statsCalls() : 0;
+  if (mock) await clearBadges(page);
   await page.clock.runFor(TICK * count);
   if (!mock) return;
   await expect.poll(() => mock.statsCalls()).toBe(before + count);
-  await expect(page.locator("#mon-stats .metric")).toHaveCount(3);
+  await expect(page.locator("#mon-badges .metric")).toHaveCount(5);
 }
 
 function seriesPoints(page) {
@@ -316,7 +325,7 @@ test("M18 — a slow tick never queues a parallel tick", {
   const mock = await openMonitoring(page);
   await enterMonitoring(page, mock);
   const held = mock.deferReply("GET", "/stats");
-  await tick(page, 1, mock);
+  await tick(page);
   await held.started;
   const during = mock.statsCalls();
   await tick(page, 2);
@@ -486,7 +495,7 @@ test("TB-MON-006 — a poll held across two intervals never overlaps; away/back 
   const mock = await openMonitoring(page);
   await enterMonitoring(page, mock);
   const held = mock.deferReply("GET", "/stats");
-  await tick(page, 1, mock);
+  await tick(page);
   await held.started;
   const during = mock.statsCalls();
   await tick(page, 2);

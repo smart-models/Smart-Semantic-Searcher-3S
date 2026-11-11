@@ -39,7 +39,9 @@ export async function openConsole(page, { tab = "query", compatibility = compati
       return { started, resolve: (json, status = 200) => release({ json, status }) };
     },
   };
-  await page.clock.install({ time: new Date("2026-09-05T12:00:00Z") });
+  // Install a minute early: the installed clock runs until paused, and under
+  // load pausing at the install instant fails with "fast-forward to the past".
+  await page.clock.install({ time: new Date("2026-09-05T11:59:00Z") });
   await page.clock.pauseAt(new Date("2026-09-05T12:00:00Z"));
   await page.addInitScript((active) => localStorage.setItem("qhm_active_collection", active), A);
   await page.route("**/*", async (route) => {
