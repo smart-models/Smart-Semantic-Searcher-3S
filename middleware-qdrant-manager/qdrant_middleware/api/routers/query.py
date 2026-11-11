@@ -56,7 +56,7 @@ async def search(
     http_request.state.log_collection = request.collection_name
 
     try:
-        embeddings = await embedder.embed([request.query])
+        embeddings = await embedder.embed([request.query], input_type="query")
     except HTTPException:
         raise
     except Exception as e:

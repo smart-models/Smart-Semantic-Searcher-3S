@@ -29,6 +29,13 @@ QUERY_STRING = "?trace=query-string-value"
 DURATION = r"duration=\d+\.\d{3}s"
 
 
+class SearchEmbedder(FakeEmbedder):
+    """The ingest fake, also answering the search route's query request."""
+
+    async def embed(self, texts, input_type="document"):
+        return await super().embed(texts)
+
+
 def _client(fake=None, **overrides) -> TestClient:
     """Build the full app, with every middleware layer, over fake backends."""
     settings = {
@@ -38,7 +45,7 @@ def _client(fake=None, **overrides) -> TestClient:
     }
     app = create_app(Settings(**settings))
     app.dependency_overrides[get_qdrant_client] = lambda: fake or object()
-    app.dependency_overrides[get_embedder_client] = lambda: FakeEmbedder()
+    app.dependency_overrides[get_embedder_client] = lambda: SearchEmbedder()
     return TestClient(app)
 
 

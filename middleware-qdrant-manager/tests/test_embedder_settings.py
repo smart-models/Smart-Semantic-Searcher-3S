@@ -34,7 +34,7 @@ async def test_failed_batch_cancels_and_drains_siblings():
     entered = asyncio.Event()
     finished = asyncio.Event()
 
-    async def batch(texts):
+    async def batch(texts, input_type="document"):
         if texts == ["fail"]:
             await entered.wait()
             raise ValueError("batch failed")
@@ -61,7 +61,7 @@ async def test_caller_cancellation_drains_running_and_queued_batches(cancel_agai
     started = []
     finished = []
 
-    async def batch(texts):
+    async def batch(texts, input_type="document"):
         started.extend(texts)
         if len(started) == 2:
             entered.set()
@@ -99,7 +99,7 @@ async def test_late_cancellation_during_drain_preserves_original_batch_error():
     finished = asyncio.Event()
     original_error = ValueError("batch failed")
 
-    async def batch(texts):
+    async def batch(texts, input_type="document"):
         if texts == ["fail"]:
             await entered.wait()
             raise original_error

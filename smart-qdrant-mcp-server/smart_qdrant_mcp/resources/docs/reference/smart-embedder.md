@@ -213,6 +213,7 @@ In the `basic` profile **only**, BGE-M3 ColBERT vectors can also be requested:
 
 | Field | Default | Meaning |
 |---|---|---|
+| `input_type` | `"document"` | What the texts are: `"document"` (text that is or will be stored) or `"query"` (the text of a search). Under `advanced`, a query's **dense** input is prefixed with the Qwen3 query prompt; MILCO sparse, the `basic` profile and every document receive the text unchanged. Queries and documents are never batched into the same model call. See [Query prompt](#query-prompt). |
 | `sparse_as_indices` | `false` | When `true`, sparse vectors are returned in Qdrant-compatible form (`{"indices": [10, 1389, 2349], "values": [0.277, 0.292, 0.313]}`) instead of the default token-id dict. Use with `SparseVector(indices=..., values=...)` when upserting to Qdrant. |
 | `include_text` | `true` | When `false`, the original text is omitted from each entry in `data`; ids and vectors are still returned. Reduces payload size. |
 | `return_colbert` | `false` | **`basic` profile only.** Not a valid request field under `advanced`. |
@@ -680,10 +681,25 @@ MILCO sparse output is Qdrant-compatible: request `/embeddings/` with
 `sparse_as_indices=true` to get `indices`/`values` you can pass straight into a
 Qdrant `SparseVector`.
 
-The Qwen dense path intentionally does **not** add query/document instruction
-prefixes. This keeps the `/embeddings/` API transparent, but deployments
-optimizing retrieval quality should benchmark task-specific Qwen formatting
-separately before changing request semantics.
+<a id="query-prompt"></a>**Query prompt.** Qwen3-Embedding is trained
+asymmetrically: a query carries a one-sentence instruction, a document carries
+none. A request with `"input_type": "query"` therefore has its dense input
+prefixed with the query prompt the pinned revision ships in its
+`config_sentence_transformers.json`:
+
+```text
+Instruct: Given a web search query, retrieve relevant passages that answer the query
+Query:<the text>
+```
+
+The default `"document"` embeds the text as is, so stored vectors and every
+caller that does not name a type are unaffected, and the embedding-contract
+fingerprint does not change: the prompt shapes the query vector only, never a
+stored one. The prompt is the module constant `QWEN_DENSE_QUERY_PROMPT`, not a
+setting; change it only together with the model revision, and benchmark
+retrieval before and after. `GET /health` reports it as `dense_query_prompt`
+(an empty string under `basic`). MILCO needs no counterpart: its authors encode
+queries and documents through the same call.
 
 Compose supplies profile-specific conservative defaults when the variables are
 not set in `.env`:

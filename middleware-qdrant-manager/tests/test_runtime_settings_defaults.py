@@ -15,7 +15,7 @@ import qdrant_middleware.api.routers.query as query_router
 class FakeEmbedder:
     """Embedder stand-in returning fixed vectors without a model."""
 
-    async def embed(self, texts: list[str]):
+    async def embed(self, texts: list[str], input_type: str = "document"):
         assert texts == ["test"]
         return [
             EmbeddingResult(dense=[0.1], sparse=SparseVector(indices=[0], values=[1.0]))

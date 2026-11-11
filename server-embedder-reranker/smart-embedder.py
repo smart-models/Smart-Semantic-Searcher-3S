@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 from uuid import uuid4
 
 import numpy as np
@@ -80,6 +80,13 @@ QWEN_DENSE_VECTOR_SIZE = 1024
 BGE_DENSE_VECTOR_SIZE = 1024
 BGE_RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
 QWEN_RERANKER_MODEL = "Qwen/Qwen3-Reranker-0.6B"
+# Qwen3-Embedding is trained asymmetrically: a query carries this prompt, a
+# document carries none. It is the query prompt the pinned revision ships in
+# its config_sentence_transformers.json; change it only with the revision.
+QWEN_DENSE_QUERY_PROMPT = (
+    "Instruct: Given a web search query, retrieve relevant passages that answer "
+    "the query\nQuery:"
+)
 QWEN_RERANKER_INSTRUCTION = (
     "Given a web search query, retrieve relevant passages that answer the query"
 )
@@ -2681,6 +2688,7 @@ class EmbeddingService:
         return_colbert: bool = True,
         normalize_dense: bool = False,
         deadline=None,
+        input_type: str = "document",
     ) -> Dict[str, Union[np.ndarray, List]]:
         """Route requested vector types and restore original input order.
 
@@ -2691,6 +2699,8 @@ class EmbeddingService:
             return_colbert: Include ColBERT vectors when supported.
             normalize_dense: L2-normalize dense vectors.
             deadline: Optional cooperative deadline shared by all backends.
+            input_type: ``query`` prefixes the Qwen dense input with its query
+                prompt; every other backend receives the text unchanged.
 
         Returns:
             Requested backend outputs aligned with ``sentences``.
@@ -2705,6 +2715,9 @@ class EmbeddingService:
 
         use_qwen_dense = self.qwen_dense_backend is not None
         use_milco = self.milco_sparse_backend is not None
+        dense_sentences = backend_sentences
+        if input_type == "query" and use_qwen_dense:
+            dense_sentences = [QWEN_DENSE_QUERY_PROMPT + s for s in backend_sentences]
         have_bge = self.bge_backend is not None
         is_advanced_hybrid = (
             return_dense and return_sparse and use_qwen_dense and use_milco
@@ -2736,7 +2749,7 @@ class EmbeddingService:
             dense_future = hybrid_executor.submit(
                 self._run_hybrid_backend,
                 lambda: self.qwen_dense_backend.embed_dense(
-                    backend_sentences,
+                    dense_sentences,
                     normalize_dense=normalize_dense,
                     deadline=deadline,
                 ),
@@ -2761,7 +2774,7 @@ class EmbeddingService:
             if return_dense and use_qwen_dense:
                 result.update(
                     self.qwen_dense_backend.embed_dense(
-                        backend_sentences,
+                        dense_sentences,
                         normalize_dense=normalize_dense,
                         deadline=deadline,
                     )
@@ -3119,6 +3132,9 @@ class EmbedRequestBase(BaseModel):
     model_config = {"extra": "forbid"}
 
     sentences: List[str]
+    # What the texts are. A query gets the dense model's query prompt where
+    # the active profile has one (ADVANCED); a document is embedded as is.
+    input_type: Literal["document", "query"] = "document"
     return_dense: bool = True
     return_sparse: bool = True
     normalize_dense: bool = False
@@ -3335,8 +3351,11 @@ def _embedding_request_cost(request):
     advanced = embedding_service.profile == EMBEDDER_PROFILE_ADVANCED
     milco = embedding_service.milco_sparse_backend
     config = getattr(getattr(milco, "model", None), "config", None)
+    sentences = request.sentences
+    if advanced and request.return_dense and request.input_type == "query":
+        sentences = [QWEN_DENSE_QUERY_PROMPT + s for s in sentences]
     return estimate_embeddings(
-        request.sentences,
+        sentences,
         advanced=advanced,
         dense=request.return_dense,
         sparse=request.return_sparse,
@@ -4273,6 +4292,7 @@ class RequestProcessor:
                         req_data.return_sparse,
                         _request_return_colbert(req_data),
                         req_data.normalize_dense,
+                        req_data.input_type,
                     )
                     if options_key not in option_groups:
                         option_groups[options_key] = []
@@ -4304,6 +4324,7 @@ class RequestProcessor:
         normalize_dense,
         deadline=None,
         requests=None,
+        input_type="document",
     ):
         worker_started_at = time.monotonic()
         warnings = {
@@ -4317,6 +4338,7 @@ class RequestProcessor:
             return_colbert=return_colbert,
             normalize_dense=normalize_dense,
             deadline=deadline,
+            input_type=input_type,
         )
         worker_finished_at = time.monotonic()
         if requests is not None:
@@ -4348,10 +4370,16 @@ class RequestProcessor:
             request_ids: List of request IDs corresponding to the requests
             requests: List of (request_id, request_data) tuples
             options_key: Tuple of return_dense, return_sparse,
-                return_colbert, and normalize_dense.
+                return_colbert, normalize_dense, and input_type.
         """
         try:
-            return_dense, return_sparse, return_colbert, normalize_dense = options_key
+            (
+                return_dense,
+                return_sparse,
+                return_colbert,
+                normalize_dense,
+                input_type,
+            ) = options_key
 
             if self.stats:
                 self.stats.update_batch()
@@ -4381,6 +4409,7 @@ class RequestProcessor:
                 normalize_dense,
                 deadline,
                 requests,
+                input_type,
             )
             for request_id in request_ids:
                 reservation = self._reservations.get(request_id)
@@ -5303,6 +5332,11 @@ async def health_check():
         "reranker_prefix_tokens": ADVANCED_EFFECTIVE_CONFIG["reranker_prefix_tokens"],
         "reranker_suffix_tokens": ADVANCED_EFFECTIVE_CONFIG["reranker_suffix_tokens"],
         "reranker_instruction": ADVANCED_EFFECTIVE_CONFIG["reranker_instruction"],
+        "dense_query_prompt": (
+            QWEN_DENSE_QUERY_PROMPT
+            if embedding_service.profile == EMBEDDER_PROFILE_ADVANCED
+            else ""
+        ),
         "milco_source_view": MILCO_SOURCE_VIEW,
         "milco_top_k": MILCO_TOP_K,
         "milco_max_length": MILCO_MAX_LENGTH,
@@ -5373,6 +5407,9 @@ async def metrics():
         "The active request schema follows the selected profile. With "
         "`advanced`, ColBERT vectors are disabled and `return_colbert` is not "
         "a valid request field.\n\n"
+        "`input_type` says what the texts are: `document` (default) or `query`. "
+        "With `advanced`, a query is embedded with the dense model's query "
+        "prompt; documents and every other backend receive the text as is.\n\n"
         "Request options control which embedding types are computed and "
         "returned. Common options are `return_dense`, `return_sparse`, "
         "`normalize_dense`, and `sparse_as_indices`; `basic` also supports "

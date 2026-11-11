@@ -772,7 +772,7 @@ class TestCooperativeDeadlines(unittest.TestCase):
                     ["alpha"],
                     ["req-1"],
                     [("req-1", request, time.monotonic())],
-                    (True, False, False, False),
+                    (True, False, False, False, "document"),
                 )
 
         loop.run_until_complete(run_batch())

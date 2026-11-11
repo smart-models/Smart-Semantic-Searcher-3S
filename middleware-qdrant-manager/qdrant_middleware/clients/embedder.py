@@ -185,8 +185,14 @@ class EmbedderClient:
                 503, "Smart Embedder returned an invalid embedding contract"
             ) from exc
 
-    async def embed(self, texts: list[str]) -> list[EmbeddingResult]:
+    async def embed(
+        self, texts: list[str], *, input_type: str = "document"
+    ) -> list[EmbeddingResult]:
         """Embed a list of texts, splitting into batches of ``max_batch_size``.
+
+        ``input_type`` is ``document`` for text that is or will be stored and
+        ``query`` for the text of a search: Smart Embedder embeds a query with
+        the dense model's query prompt where the active profile has one.
 
         Sub-batches run concurrently (bounded by ``embed_concurrency``) so the
         Smart Embedder server can coalesce them into fewer GPU inferences via its
@@ -200,12 +206,12 @@ class EmbedderClient:
             for i in range(0, len(texts), self.max_batch_size)
         ]
         if len(batches) == 1:
-            return await self._embed_batch(batches[0])
+            return await self._embed_batch(batches[0], input_type)
         semaphore = asyncio.Semaphore(self.embed_concurrency)
 
         async def _embed_with_sem(batch: list[str]) -> list[EmbeddingResult]:
             async with semaphore:
-                return await self._embed_batch(batch)
+                return await self._embed_batch(batch, input_type)
 
         tasks = [asyncio.create_task(_embed_with_sem(b)) for b in batches]
         batch_group = asyncio.gather(*tasks)
@@ -308,24 +314,27 @@ class EmbedderClient:
 
         return sorted(results, key=lambda item: item.score, reverse=True)
 
-    async def _embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
+    async def _embed_batch(
+        self, texts: list[str], input_type: str = "document"
+    ) -> list[EmbeddingResult]:
         """Embed a single batch via one POST to ``/embeddings/``.
 
         Requests dense + sparse outputs (sparse as indices/values) and raises
-        HTTP 502 on any unrecoverable upstream failure.
+        HTTP 502 on any unrecoverable upstream failure. A document request
+        keeps the body older embedders accept; only a query names its type.
         """
+        body = {
+            "sentences": texts,
+            "return_dense": True,
+            "return_sparse": True,
+            "return_colbert": False,
+            "sparse_as_indices": True,
+        }
+        if input_type == "query":
+            body["input_type"] = "query"
 
         async def _do() -> httpx.Response:
-            response = await self._client.post(
-                "/embeddings/",
-                json={
-                    "sentences": texts,
-                    "return_dense": True,
-                    "return_sparse": True,
-                    "return_colbert": False,
-                    "sparse_as_indices": True,
-                },
-            )
+            response = await self._client.post("/embeddings/", json=body)
             if response.status_code != 200:
                 raise _EmbedderHTTPError(
                     response.status_code,

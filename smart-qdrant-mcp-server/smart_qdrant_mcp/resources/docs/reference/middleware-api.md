@@ -637,6 +637,11 @@ These hold regardless of configuration.
   every ingest safe to retry.
 - **Embed before write** — ingest and upsert paths finish embedding before
   their first write; a failed embedding call leaves stored data untouched.
+- **A search is embedded as a query, stored text as a document** —
+  `/query/search` asks Smart Embedder for `input_type: "query"`, so the
+  `advanced` profile's dense model receives its query prompt; ingest, upsert
+  and reindex send no type and embed the text as is. Only the query vector
+  changes: stored vectors and the embedding-contract fingerprint do not.
 - **Ingest is bounded by chunk count, not by bytes.** Because embedding
   finishes before the first write, one request holds every dense and sparse
   vector at once — roughly 52 KB per point at `DENSE_DIM=1024`, since a Python
@@ -860,6 +865,7 @@ it is destructive against `e2e_`-prefixed collections.
 | `503` from `/points/export` | The configured export concurrency is occupied. | Retry after the active export finishes. |
 | `429` | Per-client rate limit. | Slow down, or raise `MIDDLEWARE_RATE_LIMIT_*`. The console shell, static assets, schema and monitoring probes are exempt; every protected operation is not. |
 | `502` from a search or ingest | An unretryable (or exhausted) Smart Embedder / Qdrant failure. | Check `/health` and the embedder's logs. |
+| `502` from every search while ingest still works | Smart Embedder is older than the middleware and rejects the `input_type` field a search sends (HTTP 422 upstream). | Upgrade Smart Embedder to the same release; its `/health` then reports `dense_query_prompt`. |
 | `503` on every protected route | `/readyz` is false: a dependency is unreachable in the cached probe. | `GET /health` for which one. |
 | `409` "Collection vectors are being regenerated" | A reindex job is pending on the collection. | Poll `GET .../reindex`, or cancel it. |
 | `400` on ingest | The path escaped `data/`, or `chunk_id_key` collided with a reserved key. | See the ingest contract above. |
