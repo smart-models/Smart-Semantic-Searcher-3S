@@ -491,7 +491,7 @@ it queries the OSV database, so it needs network access.
 
 **Check what this clone actually has before relying on either.** `git log` may
 be a squashed initial commit, and `git remote -v` may be empty — the upstream
-project lives at `https://github.com/smart-models/Personal-Smart-Embedder`, but
+project lives at `https://github.com/smart-models/Smart-Semantic-Searcher-3S`, but
 that remote is not necessarily configured here. When history is too short to
 read a convention from, use the examples below rather than inventing one.
 
