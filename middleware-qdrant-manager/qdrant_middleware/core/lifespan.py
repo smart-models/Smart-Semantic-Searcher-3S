@@ -5,6 +5,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
 
+from qdrant_middleware import __version__
 from qdrant_middleware.clients.embedder import EmbedderClient
 from qdrant_middleware.middleware.metrics import server_info
 from qdrant_middleware.repositories.qdrant_collections import (
@@ -65,7 +66,7 @@ async def lifespan(app: FastAPI):
             if manager is not None:
                 cleanup.push_async_callback(manager.stop)
             server_info.info(
-                {"version": "1.0.0", "collection": settings.collection_name}
+                {"version": __version__, "collection": settings.collection_name}
             )
             app.state.health_probe = HealthProbe(
                 app.state.qdrant_client,

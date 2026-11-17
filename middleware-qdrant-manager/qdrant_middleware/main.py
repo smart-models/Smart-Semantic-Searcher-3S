@@ -10,6 +10,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 
+from qdrant_middleware import __version__
 from qdrant_middleware.api.dependencies import (
     require_bearer_auth,
     require_operational_readiness,
@@ -104,7 +105,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     resolved_settings = settings or get_settings()
     app = FastAPI(
         title="Smart Semantic Searcher",
-        version="1.0.0",
+        version=__version__,
         docs_url="/docs" if resolved_settings.expose_middleware_swagger else None,
         redoc_url="/redoc" if resolved_settings.expose_middleware_swagger else None,
         openapi_url=(
