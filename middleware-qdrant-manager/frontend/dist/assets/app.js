@@ -129,13 +129,16 @@ function cloneFilterTree(node) {
   };
 }
 
+// Global regex replaces, not replaceAll with string arguments: CodeQL treats
+// only a global regex replace of an HTML meta-character as an escaper, so the
+// string form leaves every innerHTML sink reported as XSS.
 function esc(value) {
   return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function uppercaseMessage(message) {
