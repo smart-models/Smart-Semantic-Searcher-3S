@@ -134,7 +134,8 @@ function esc(value) {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function uppercaseMessage(message) {
@@ -155,8 +156,8 @@ function jsonBlock(data) {
 function vectorsSummaryHtml(vectors) {
   if (!vectors || typeof vectors !== "object") return "";
   const parts = Object.entries(vectors).map(([name, info]) => {
-    if (info?.type === "dense") return `${esc(name)} (dense, ${info.dimension}-d)`;
-    if (info?.type === "sparse") return `${esc(name)} (sparse, ${info.nonzero} nonzero)`;
+    if (info?.type === "dense") return `${esc(name)} (dense, ${esc(info.dimension)}-d)`;
+    if (info?.type === "sparse") return `${esc(name)} (sparse, ${esc(info.nonzero)} nonzero)`;
     return `${esc(name)} (${esc(info?.type ?? "unknown")})`;
   });
   return `<p class="caption"><strong>vectors:</strong> ${parts.join(" · ") || "none"}</p>`;
@@ -2107,7 +2108,7 @@ function ingestTypeSelect(selected, lockedSchema = null, field = "source_id") {
   const opts = values.map((t) => {
     const label = t === "untyped" ? "— untyped" : t;
     const sel = t === active ? " selected" : "";
-    return `<option value="${t}"${sel}>${label}</option>`;
+    return `<option value="${esc(t)}"${sel}>${esc(label)}</option>`;
   }).join("");
   const attrs = lockedSchema
     ? ` disabled title="${esc(ingestIndexLockTitle(lockedSchema))}"`
@@ -2248,7 +2249,7 @@ function ingestIndexSummaryHtml(summary) {
   ].filter(Boolean).join(", ") || "nothing to do";
   const chips = summary.rows.map((row) =>
     `<span class="${INGEST_INDEX_CHIP_CLASS[row.status]}" data-field="${esc(row.field)}" ` +
-    `data-status="${row.status}">${esc(row.field)} (${esc(row.schema)}) — ` +
+    `data-status="${esc(row.status)}">${esc(row.field)} (${esc(row.schema)}) — ` +
     `${esc(INGEST_INDEX_STATUS_LABEL[row.status])}</span>`).join("");
   const warnings = [];
   if (summary.replaced) {
