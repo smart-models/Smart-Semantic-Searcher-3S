@@ -109,13 +109,36 @@
   <text x="410" y="44" text-anchor="middle" class="eyebrow" style="fill: #8bc5ff">SMART SEMANTIC SEARCHER</text>
   <text x="410" y="96" text-anchor="middle" class="heading" font-size="40" letter-spacing="-.9">One stack. Smarter retrieval.</text>
   <text x="410" y="128" text-anchor="middle" class="body" style="font-size: 17px">Local models, hybrid search, and a direct path for apps and agents.</text>
-  <g transform="translate(1100 36) scale(.46)">
-    <circle cx="64" cy="64" r="64" fill="#050a12" stroke="#29405b" stroke-width="2"/>
-    <g stroke-width="12.73" stroke-linecap="round">
-      <path d="M31.24 38.31A15.0492 15.0492 0 1 1 41.88 64A15.0492 15.0492 0 1 1 31.24 89.69" stroke="#2e6db4"/>
-      <path d="M92.35 38.31A15.0492 15.0492 0 1 0 81.71 64A15.0492 15.0492 0 1 1 71.07 89.69" stroke="#5aa9ff"/>
+  <svg x="1100" y="36" width="58.88" height="58.88" viewBox="0 0 128 128" aria-hidden="true">
+    <defs>
+      <radialGradient id="s3-disc" gradientUnits="userSpaceOnUse" cx="64" cy="141" r="108">
+        <stop offset="0" stop-color="#471636"/>
+        <stop offset=".7" stop-color="#07080d"/>
+      </radialGradient>
+      <linearGradient id="s3-back" gradientUnits="userSpaceOnUse" x1="0" y1="32" x2="0" y2="96">
+        <stop offset="0" stop-color="#a078ff"/>
+        <stop offset="1" stop-color="#7853db"/>
+      </linearGradient>
+      <linearGradient id="s3-front" gradientUnits="userSpaceOnUse" x1="0" y1="32" x2="0" y2="96">
+        <stop offset="0" stop-color="#ff3ec4"/>
+        <stop offset="1" stop-color="#ff1f9e"/>
+      </linearGradient>
+      <clipPath id="s3-clip"><circle cx="64" cy="64" r="64"/></clipPath>
+      <filter id="s3-blur" filterUnits="userSpaceOnUse" x="0" y="0" width="128" height="128">
+        <feGaussianBlur stdDeviation="3.2"/>
+      </filter>
+      <path id="s3-three" d="M31.24 38.31A15.0492 15.0492 0 1 1 41.88 64.00A15.0492 15.0492 0 1 1 31.24 89.69"/>
+      <path id="s3-s" d="M92.35 38.31A15.0492 15.0492 0 1 0 81.71 64.00A15.0492 15.0492 0 1 1 71.07 89.69"/>
+    </defs>
+    <circle cx="64" cy="64" r="64" fill="url(#s3-disc)"/>
+    <circle cx="64" cy="64" r="62" fill="none" stroke="#ff2eb0" stroke-width="4"/>
+    <g clip-path="url(#s3-clip)" fill="none" stroke-width="12.73" stroke-linecap="round">
+      <use href="#s3-three" stroke="url(#s3-back)" filter="url(#s3-blur)" opacity=".5"/>
+      <use href="#s3-three" stroke="url(#s3-back)"/>
+      <use href="#s3-s" stroke="url(#s3-front)" filter="url(#s3-blur)" opacity=".75"/>
+      <use href="#s3-s" stroke="url(#s3-front)"/>
     </g>
-  </g>
+  </svg>
 
   <!-- The boundary contains only services managed by this project. -->
   <rect x="40" y="286" width="740" height="450" rx="20" fill="#101e31" fill-opacity=".62" stroke="#344c69" stroke-dasharray="4 7"/>

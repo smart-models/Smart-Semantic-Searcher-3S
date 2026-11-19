@@ -132,7 +132,6 @@ a:hover, a:focus-visible { text-decoration: underline; }
   height: 1.45em;
   width: auto;
   display: block;
-  filter: drop-shadow(0 0 6px var(--blue-glow));
 }
 
 @keyframes pulse {

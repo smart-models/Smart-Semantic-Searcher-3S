@@ -1,1 +1,52 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Smart Semantic Searcher (3S)"><circle cx="64" cy="64" r="64" fill="#000000"/><g fill="none" stroke-width="12.73" stroke-linecap="round"><path d="M31.24 38.31A15.0492 15.0492 0 1 1 41.88 64.00A15.0492 15.0492 0 1 1 31.24 89.69" stroke="#2e6db4"/><path d="M92.35 38.31A15.0492 15.0492 0 1 0 81.71 64.00A15.0492 15.0492 0 1 1 71.07 89.69" stroke="#5aa9ff"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Smart Semantic Searcher (3S)">
+  <!-- Logo di 3S nei colori del sito: «S» nel magenta della sua card, un po' più acceso del token
+       magenta di styles.css (più saturo, dal fucsia in alto al rosa caldo in basso) e con un alone
+       più forte di quello del «3», perché sia il segno che fa luce. «3» nel viola del sito
+       (token violet di styles.css in alto, più scuro in basso), lo stesso del logo di SDM.
+       Disco nel fondo profondo della pagina (token bg-deep) con un bagliore dal basso nel colore
+       del tool e un bordo pieno nello stesso rosa della «S», senza trasparenza.
+       Ogni segno è disegnato due volte: sotto una copia sfocata che fa l'alone, sopra il tratto
+       nitido, che resta fuori dal filtro e non perde definizione sugli schermi ad alta densità.
+       Gli id hanno il prefisso s3 per poter incollare il file dentro la pagina insieme a logoSDM.
+       Sotto i 48 px (header della console, favicon) l'anello largo 4 scende sotto il pixel e si
+       spezza a scaletta: lì la media query lo sostituisce con uno largo 6, con il bordo esterno
+       sempre a raggio 64 e un alone sfocato che ne ammorbidisce il contorno. Sopra i 48 px il
+       disegno resta quello di sempre.
+       Niente doppio trattino nei commenti: in un SVG non è ammesso. -->
+  <style>.s3-small { display: none; } @media (max-width: 48px) { .s3-large { display: none; } .s3-small { display: inline; } }</style>
+  <defs>
+    <radialGradient id="s3-disc" gradientUnits="userSpaceOnUse" cx="64" cy="141" r="108">
+      <stop offset="0" stop-color="#471636"/>
+      <stop offset=".7" stop-color="#07080d"/>
+    </radialGradient>
+    <linearGradient id="s3-back" gradientUnits="userSpaceOnUse" x1="0" y1="32" x2="0" y2="96">
+      <stop offset="0" stop-color="#a078ff"/>
+      <stop offset="1" stop-color="#7853db"/>
+    </linearGradient>
+    <linearGradient id="s3-front" gradientUnits="userSpaceOnUse" x1="0" y1="32" x2="0" y2="96">
+      <stop offset="0" stop-color="#ff3ec4"/>
+      <stop offset="1" stop-color="#ff1f9e"/>
+    </linearGradient>
+    <clipPath id="s3-clip"><circle cx="64" cy="64" r="64"/></clipPath>
+    <filter id="s3-blur" filterUnits="userSpaceOnUse" x="0" y="0" width="128" height="128">
+      <feGaussianBlur stdDeviation="3.2"/>
+    </filter>
+    <filter id="s3-ring-blur" filterUnits="userSpaceOnUse" x="0" y="0" width="128" height="128">
+      <feGaussianBlur stdDeviation="1.6"/>
+    </filter>
+    <path id="s3-three" d="M31.24 38.31A15.0492 15.0492 0 1 1 41.88 64.00A15.0492 15.0492 0 1 1 31.24 89.69"/>
+    <path id="s3-s" d="M92.35 38.31A15.0492 15.0492 0 1 0 81.71 64.00A15.0492 15.0492 0 1 1 71.07 89.69"/>
+  </defs>
+  <circle cx="64" cy="64" r="64" fill="url(#s3-disc)"/>
+  <circle class="s3-large" cx="64" cy="64" r="62" fill="none" stroke="#ff2eb0" stroke-width="4"/>
+  <g class="s3-small" fill="none" stroke="#ff2eb0" stroke-width="6">
+    <circle cx="64" cy="64" r="61" filter="url(#s3-ring-blur)" opacity=".7"/>
+    <circle cx="64" cy="64" r="61"/>
+  </g>
+  <g clip-path="url(#s3-clip)" fill="none" stroke-width="12.73" stroke-linecap="round">
+    <use href="#s3-three" stroke="url(#s3-back)" filter="url(#s3-blur)" opacity=".5"/>
+    <use href="#s3-three" stroke="url(#s3-back)"/>
+    <use href="#s3-s" stroke="url(#s3-front)" filter="url(#s3-blur)" opacity=".75"/>
+    <use href="#s3-s" stroke="url(#s3-front)"/>
+  </g>
+</svg>
