@@ -83,7 +83,7 @@
     .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; font-weight: 650; font-size: 14px; letter-spacing: -.025em; }
     .brand svg { flex-shrink: 0; width: 30px; height: 30px; }
     .brand span span { font-weight: 400; color: var(--muted); }
-    .primary-nav { display: flex; align-items: center; gap: clamp(14px, 3vw, 35px); font-size: 12px; }
+    .primary-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 0 clamp(14px, 3vw, 35px); font-size: 12px; }
     .primary-nav a { display: flex; align-items: center; min-height: 44px; text-decoration: none; }
     .primary-nav a:hover, .primary-nav a[aria-current] { color: var(--qdrant-ink); }
     .reading-progress { position: absolute; bottom: -1px; left: 0; width: 100%; height: 2px; background: var(--qdrant-ink); transform-origin: left; transform: scaleX(0); }
@@ -350,7 +350,6 @@
     @media (max-width: 649px) {
       .header-inner { min-height: 0; flex-direction: column; align-items: stretch; gap: 0; padding-block: 10px 0; }
       .brand { align-self: flex-start; font-size: 12px; gap: 8px; }
-      .primary-nav .nav-reference { display: none; }
       .brand svg { width: 25px; height: 25px; }
       .primary-nav { justify-content: space-between; flex-wrap: wrap; gap: 0 15px; font-size: 11px; }
       .hero { padding-block: 45px 36px; gap: 35px; }
@@ -462,9 +461,7 @@
         <span>Smart Semantic Searcher (3S) <span>/</span> Hybrid Search</span>
       </a>
       <nav class="primary-nav" aria-label="Primary">
-        <a href="#journey">The Journey</a>
-        <a href="#lab">Try It</a>
-        <a class="nav-reference" href="#reference">Reference</a>
+        <a href="getting-started.html">Getting started</a><a href="cli.html">CLI</a><a href="environment.html">Environment</a><a href="architecture.html">Architecture</a><a href="hybrid-search-rerank.html" aria-current="page">Hybrid search</a><a href="embedding-models.html">Embedding models</a><a href="getting-started.html#faq">Help</a>
       </nav>
     </div>
     <div class="reading-progress" aria-hidden="true"></div>
@@ -1258,14 +1255,6 @@
         const distance = document.documentElement.scrollHeight - innerHeight;
         const progress = distance > 0 ? scrollY / distance : 0;
         $(".reading-progress").style.transform = "scaleX(" + Math.max(0, Math.min(1, progress)) + ")";
-        const sections = ["journey", "lab", "reference"].map((id) =>
-          ({ id, top: $("#" + id).getBoundingClientRect().top }));
-        let active = "";
-        sections.forEach((section) => { if (section.top <= 180) active = section.id; });
-        $$(".primary-nav a").forEach((link) => {
-          if (link.getAttribute("href") === "#" + active) link.setAttribute("aria-current", "location");
-          else link.removeAttribute("aria-current");
-        });
         scrollQueued = false;
       }
       window.addEventListener("scroll", () => {

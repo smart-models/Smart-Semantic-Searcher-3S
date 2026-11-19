@@ -49,7 +49,11 @@ accepts credentials, starts services or writes an environment file.
 ## Interface reference
 
 Open [getting-started.html](getting-started.html) first. Companion header brands
-and footers return to it. The architecture and ranking pages support scene links from `#scene-0`
+and footers return to it. Every header menu links all six guides in the order
+of the [map](#map-of-the-code), marks the open one with `aria-current="page"`
+and ends with Help: the page's own `#help` or `#faq` section, or the entry
+page's `#faq` where a page has none. Scroll tracking may mark only that in-page
+Help link, never a guide link. The architecture and ranking pages support scene links from `#scene-0`
 through `#scene-5`, including headings inside them such as `#scene-title-3`.
 The requested scene opens in a readable, paused state.
 
@@ -116,8 +120,8 @@ and authored content readable without JavaScript. Active scenes must retain
 their takeaways and source/document identifiers on narrow screens. Printing
 opens all native disclosures temporarily, then restores the reader's exact
 open/closed selections.
-On small screens, startup-page headers keep all navigation links in a second
-row. The entry walkthrough sizes only its active panel below 960 pixels;
+When the header is too narrow, the menu wraps onto further rows; on small
+screens it sits below the brand and keeps every link visible. The entry walkthrough sizes only its active panel below 960 pixels;
 desktop retains a common stage height. Printing must reveal all six panels
 at either viewport size, then preserve the selected step. On the entry page,
 copy success feedback names the copied item and clears after six seconds;
@@ -171,9 +175,9 @@ Use a supported Python interpreter with the repository's pytest and Ruff tools
 installed. From the repository root, these Windows examples select Python 3.11:
 
 ```powershell
-py -3.11 -m pytest scripts/test_guide_links.py scripts/test_guide_models.py scripts/test_branding_contract.py -q
-py -3.11 -m ruff check scripts/test_guide_links.py scripts/test_guide_models.py scripts/test_branding_contract.py
-py -3.11 -m ruff format --check scripts/test_guide_links.py scripts/test_guide_models.py scripts/test_branding_contract.py
+py -3.11 -m pytest scripts/test_guide_links.py scripts/test_guide_navigation.py scripts/test_guide_models.py scripts/test_branding_contract.py -q
+py -3.11 -m ruff check scripts/test_guide_links.py scripts/test_guide_navigation.py scripts/test_guide_models.py scripts/test_branding_contract.py
+py -3.11 -m ruff format --check scripts/test_guide_links.py scripts/test_guide_navigation.py scripts/test_guide_models.py scripts/test_branding_contract.py
 ```
 
 In an activated environment, use `python -m` with the same arguments. The link
@@ -181,8 +185,10 @@ tests check local destinations from every HTML page and this README, duplicate
 HTML IDs and the ATX Markdown heading anchors used by the linked references.
 The Markdown scanner supports inline links, including angle-bracket destinations;
 it ignores link examples in fenced, indented and inline code. Synthetic cases
-cover encoded paths, missing files and missing fragments. The branding test checks
-public product names. Both are collected by the existing scripts suite in CI.
+cover encoded paths, missing files and missing fragments. The navigation test
+checks every header menu against the six guides, the current-page mark and the
+Help target, and that scroll tracking selects only in-page menu links. The
+branding test checks public product names. All are collected by the existing scripts suite in CI.
 The model tests compare the rendered revision links and device-specific limits
 against source code without loading a model. These Python checks do not test
 rendering or the availability of external websites.
@@ -210,7 +216,7 @@ For HTML changes, verify the final files through `file://` in a browser:
 
 | Area | Check |
 |---|---|
-| Navigation | Footer/card links, companion header return, initial scene/heading/disclosure links, hash changes and browser back/forward. |
+| Navigation | Header menu on every page, footer/card links, companion header return, initial scene/heading/disclosure links, hash changes and browser back/forward. |
 | Keyboard | Skip link reaches main; links, disclosures and player controls remain usable with keyboard focus. |
 | Responsive | Visit each scene at 390 and 768 pixels; inspect 320-pixel reflow and real browser zoom at 200% for clipping or inaccessible controls. |
 | Printing | Generate PDFs with mixed open/closed disclosures; inspect full glossary and read-story text, and confirm selections are restored after repeated prints. |
