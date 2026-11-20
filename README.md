@@ -144,9 +144,12 @@ needed:
 ## 🤝 How can I contribute?
 
 **The project is open source under [AGPL-3.0](LICENSE) and anyone who wants to
-contribute is welcome.** One thing is worth saying up front, though: it was
-built with very heavy use of AI coding agents, and it expects you to work the
-same way.
+contribute is welcome.** The licence covers the code. The name "Smart Semantic
+Searcher (3S)" and its logo belong to Federico Palma and are not licensed with
+it. Contributions are accepted under the terms in
+[CONTRIBUTING.md](CONTRIBUTING.md). One thing is worth saying up front,
+though: it was built with very heavy use of AI coding agents, and it expects
+you to work the same way.
 
 So if you find a bug or want a feature, point the coding agent you prefer at
 the repository before you write anything. `AGENTS.md`, the `guide/` pages and
@@ -157,7 +160,9 @@ to reproduce it, the trail it followed, what it believes the cause to be.
 
 That is where the conversation starts, not where it ends. How a bug should be
 fixed — or whether a feature belongs in the stack at all — gets decided
-afterwards, in the issue.
+afterwards, in the issue. Send a pull request only once the issue is assigned
+to you: unrequested pull requests may be closed without review, however good
+they are.
 
 On our side the project keeps moving, and two directions are already set. The
 first is **following Qdrant as it grows**, so that what lands upstream becomes

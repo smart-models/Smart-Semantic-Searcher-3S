@@ -26,6 +26,7 @@ hosted workflow cannot establish.
 | [workflows/release-check.yml](workflows/release-check.yml) | Manually dispatched candidate metadata, checks, dependency audit and hashed evidence artifact. | Changing the automated subset of release acceptance. |
 | [dependabot.yml](dependabot.yml) | Monthly update PRs for GitHub Actions pinned to commit SHAs. | Changing how action updates are proposed. |
 | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) | Operator release steps, required artifacts and abort conditions. | Assessing whether a candidate has sufficient evidence to release. |
+| [PULL_REQUEST_TEMPLATE.md](PULL_REQUEST_TEMPLATE.md) | The body every pull request opens with: linked issue, verification, and the assignment, Contributor Agreement and sign-off checklist from [CONTRIBUTING.md](../CONTRIBUTING.md). | Changing what a contributor must confirm when opening a pull request. |
 
 The workflows orchestrate existing owners rather than reimplementing them:
 [scripts](../scripts/README.md) owns launcher/security/audit/evidence logic;
