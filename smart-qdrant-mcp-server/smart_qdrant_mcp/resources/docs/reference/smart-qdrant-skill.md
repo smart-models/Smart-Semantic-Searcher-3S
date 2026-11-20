@@ -1,6 +1,7 @@
 ---
 name: smart-qdrant-mcp
 description: "Drives the smart-qdrant-mcp server's `qdrant_*` MCP tools and carries the operating rules every call relies on: hybrid search tuning, ingest discipline, collection lifecycle, payload and point writes, reindexing, destructive-operation gates and error recovery. Use when calling any `qdrant_*` tool or `qhm://` resource for any purpose, a health check or a collection listing as much as a search or an ingest, and before the first such call of a task; when searching, ingesting, inspecting, reindexing or deleting in a Qdrant collection; or when a qdrant_* call returns an error, refuses a confirm value, returns nothing, or the tools are missing from the client."
+license: MIT. Complete terms in LICENSE.txt
 ---
 
 # Driving the smart-qdrant-mcp server

@@ -1,0 +1,94 @@
+Smart Semantic Searcher (3S)
+Copyright (C) 2026 Federico Palma and the contributors to Smart Semantic
+Searcher (3S).
+
+3S is licensed under the GNU Affero General Public License, version 3 only
+(LICENSE). The parts listed below are under other licences; each entry names
+the file that holds the licence text. LICENSES/ holds the Apache License 2.0
+and MIT texts that several entries refer to.
+
+Parts of this repository under other licences
+---------------------------------------------
+
+smart-skill/, and its copies in
+smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/reference/
+(agent-skills.md, smart-qdrant-skill.md)
+    MIT. Copyright (c) 2026 Federico Palma and the contributors to Smart
+    Semantic Searcher (3S). See smart-skill/smart-qdrant-mcp/LICENSE.txt.
+    The MIT licence also covers these files as published in releases
+    1.0.0, 1.0.1 and 1.0.2.
+
+smart-qdrant-mcp-server/evals/harness/connections.py, evaluation.py and
+requirements.txt
+    Apache License 2.0. Copyright 2026 Anthropic, PBC. Copied from the
+    mcp-builder skill. evaluation.py is unchanged; connections.py and
+    requirements.txt each carry one local change, described in
+    smart-qdrant-mcp-server/evals/harness/README.md.
+    See smart-qdrant-mcp-server/evals/harness/LICENSE.txt.
+
+Barlow Condensed font
+    middleware-qdrant-manager/frontend/dist/assets/fonts/barlow-condensed-*.woff2,
+    and embedded in guide/*.html and their copies under
+    smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/guide/.
+    SIL Open Font License 1.1. Copyright 2017 The Barlow Project Authors
+    (https://github.com/jpt/barlow).
+    See middleware-qdrant-manager/frontend/dist/assets/fonts/FONT-LICENSES.txt
+    and guide/FONT-LICENSES.txt; each guide page also embeds the notice.
+
+JetBrains Mono font
+    middleware-qdrant-manager/frontend/dist/assets/fonts/jetbrains-mono-var.woff2,
+    and embedded in guide/*.html and their copies under
+    smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/guide/.
+    SIL Open Font License 1.1. Copyright 2020 The JetBrains Mono Project
+    Authors (https://github.com/JetBrains/JetBrainsMono).
+    See middleware-qdrant-manager/frontend/dist/assets/fonts/FONT-LICENSES.txt
+    and guide/FONT-LICENSES.txt; each guide page also embeds the notice.
+
+Developer Certificate of Origin 1.1, reproduced in CONTRIBUTING.md
+    Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
+    Everyone is permitted to copy and distribute verbatim copies of that
+    document, but changing it is not allowed.
+
+CONTRIBUTOR-AGREEMENT.md
+    Based on the Harmony Individual Contributor License Agreement 1.0,
+    Creative Commons Attribution 3.0 Unported; its last section lists the
+    changes.
+
+Code adapted from other projects
+--------------------------------
+
+These files are 3S code that adapts code published by others. The adapted
+parts stay under their original licence as well.
+
+server-embedder-reranker/advanced_milco_runtime.py
+    Adapted from milco.py in the omai-research/milco-650m model repository,
+    and modified. Apache License 2.0; see LICENSES/Apache-2.0.txt.
+
+server-embedder-reranker/smart-embedder.py
+    The Qwen3 reranker prompt format and yes/no scoring are adapted from the
+    usage example in the Qwen/Qwen3-Reranker-0.6B model card. Apache License
+    2.0; see LICENSES/Apache-2.0.txt.
+
+server-embedder-reranker/basic_onnx_backend.py
+    The sparse and ColBERT post-processing follows the BGE-M3 implementation
+    in FlagEmbedding (https://github.com/FlagOpen/FlagEmbedding).
+    MIT. Copyright (c) 2022 staoxiao. See LICENSES/MIT.txt.
+
+Components that are not part of this repository
+-----------------------------------------------
+
+The following are downloaded when the stack is built or started, never
+redistributed here, and keep their own licences:
+
+- Embedding and reranking models, at the revisions pinned in
+  server-embedder-reranker/model_revisions.py. BAAI/bge-m3 and
+  BAAI/bge-m3-unsupervised are MIT; BAAI/bge-reranker-v2-m3,
+  Qwen/Qwen3-Embedding-0.6B and Qwen/Qwen3-Reranker-0.6B are Apache License
+  2.0. omai-research/milco-650m declares Apache License 2.0, but its lexical
+  head derives from naver/splade-v3, licensed CC BY-NC-SA 4.0 for
+  non-commercial use: see the License section of
+  server-embedder-reranker/README.md.
+- The Qdrant image (qdrant/qdrant, Apache License 2.0), started only when
+  QDRANT_BUNDLED=true.
+- Python packages listed under requirements/, and the base images named in
+  the Dockerfile, each under its own licence.

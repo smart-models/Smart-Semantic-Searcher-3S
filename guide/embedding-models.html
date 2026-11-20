@@ -550,7 +550,7 @@
   <span class="eyebrow">Sparse / Role 2</span><h3>omai-research/milco-650m</h3><p class="model-title">A shared lexical space across languages.</p>
   <dl class="model-layers"><dt>Model capability</dt><dd>MILCO combines a multilingual encoder, a connector and an English lexical head. Learned expansion can give weight to English terms absent from the original text; LexEcho adds a source-language view.</dd><dt>Used in this stack</dt><dd><code>MILCO_SOURCE_VIEW=true</code> includes source-language evidence; <code>MILCO_TOP_K=0</code> retains all non-zero weights. Its sparse window stays at the shipped limit on both CPU and GPU.</dd><dt>Practical impact</dt><dd>This is worth testing for cross-language questions and rare terms. English pivot terms are retrieval features, not a translation or guaranteed output. Under advanced on CPU, sparse may see text beyond the dense window.</dd></dl>
 
-<details id="spec-milco-650m"><summary>Specifications and pinned source</summary><div class="detail-body"><dl class="spec-list"><dt>Architecture</dt><dd>Multilingual encoder (<code>BAAI/bge-m3-unsupervised</code>) + linear connector + lexical head borrowed from an English SPLADE model</dd><dt>Parameters</dt><dd>About 0.65 billion</dd><dt>Sparse output</dt><dd>Weights over an English pivot vocabulary, plus a source-language view</dd><dt>Context</dt><dd>Stack limit: see <a href="#runtime-limits">runtime table</a></dd><dt>Languages</dt><dd>Cross-language retrieval; evaluate your language pairs on your corpus</dd><dt>License</dt><dd>Apache-2.0</dd><dt>Pinned revision</dt><dd><a data-model-source="omai-research/milco-650m" href="https://huggingface.co/omai-research/milco-650m/blob/567aeb03a5756c1e42793b9113925b4945ed5767/README.md" target="_blank" rel="noopener noreferrer"><code>567aeb03</code> · pinned model card ↗</a></dd></dl><p>Encoder source: <a data-model-source="BAAI/bge-m3-unsupervised" href="https://huggingface.co/BAAI/bge-m3-unsupervised/blob/46f03bc86361cf88102b0b517b36c8259f2946b1/README.md" target="_blank" rel="noopener noreferrer"><code>46f03bc8</code> · BAAI/bge-m3-unsupervised ↗</a>.</p><p><code>trust_remote_code</code> executes custom model-repository Python. The revision is pinned and serving is non-root with a read-only filesystem; those controls do not audit that code. <a href="#help-remote-code">Use basic if custom model code is outside your policy.</a></p></div></details>
+<details id="spec-milco-650m"><summary>Specifications and pinned source</summary><div class="detail-body"><dl class="spec-list"><dt>Architecture</dt><dd>Multilingual encoder (<code>BAAI/bge-m3-unsupervised</code>) + linear connector + lexical head borrowed from an English SPLADE model</dd><dt>Parameters</dt><dd>About 0.65 billion</dd><dt>Sparse output</dt><dd>Weights over an English pivot vocabulary, plus a source-language view</dd><dt>Context</dt><dd>Stack limit: see <a href="#runtime-limits">runtime table</a></dd><dt>Languages</dt><dd>Cross-language retrieval; evaluate your language pairs on your corpus</dd><dt>License</dt><dd>Apache-2.0 on its model card, but its lexical head (about 4% of the weights) derives from <code>naver/splade-v3</code>, licensed CC BY-NC-SA 4.0 for non-commercial use: see the <a href="../server-embedder-reranker/README.md#license">licensing note</a></dd><dt>Pinned revision</dt><dd><a data-model-source="omai-research/milco-650m" href="https://huggingface.co/omai-research/milco-650m/blob/567aeb03a5756c1e42793b9113925b4945ed5767/README.md" target="_blank" rel="noopener noreferrer"><code>567aeb03</code> · pinned model card ↗</a></dd></dl><p>Encoder source: <a data-model-source="BAAI/bge-m3-unsupervised" href="https://huggingface.co/BAAI/bge-m3-unsupervised/blob/46f03bc86361cf88102b0b517b36c8259f2946b1/README.md" target="_blank" rel="noopener noreferrer"><code>46f03bc8</code> · BAAI/bge-m3-unsupervised ↗</a>.</p><p><code>trust_remote_code</code> executes custom model-repository Python. The revision is pinned and serving is non-root with a read-only filesystem; those controls do not audit that code. <a href="#help-remote-code">Use basic if custom model code is outside your policy.</a></p></div></details>
 </article>
 <article class="model-card model-card--red model-card--wide" id="qwen3-reranker-0-6b">
   <span class="eyebrow">Reranker / Role 3</span><h3>Qwen/Qwen3-Reranker-0.6B</h3><p class="model-title">Score a yes/no relevance judgment.</p>
@@ -562,7 +562,7 @@
 <section class="section " id="compare" aria-labelledby="compare-title"><div class="wrap">
 
 <div class="section-heading"><span class="section-index">04 / Side by side</span><h2 id="compare-title">Same roles.<br>Different answers.</h2><p>Use this table to decide, then evaluate on your own documents. Neither profile wins every collection.</p></div>
-    <div class="table-scroll"><table class="compare"><caption>What each profile brings to the three roles, and what it asks of your machine. Defaults are the shipped ones; the CPU values are the Compose safety caps.</caption><thead><tr><th scope="col">Aspect</th><th scope="col">Basic · BGE</th><th scope="col">Advanced · Qwen + MILCO</th></tr></thead><tbody><tr><th scope="row">Dense model</th><td data-label="Basic"><a href="#bge-m3">BAAI/bge-m3</a> · 1024 numbers</td><td data-label="Advanced"><a href="#qwen3-embedding-0-6b">Qwen/Qwen3-Embedding-0.6B</a> · 1024 numbers</td></tr><tr><th scope="row">Dense context</th><td data-label="Basic">8192 tokens on GPU · 2048 on CPU</td><td data-label="Advanced">32768 tokens on GPU · 2048 on CPU</td></tr><tr><th scope="row">Sparse model</th><td data-label="Basic"><a href="#bge-m3">BAAI/bge-m3</a> · weights over its own multilingual vocabulary</td><td data-label="Advanced"><a href="#milco-650m">omai-research/milco-650m</a> · weights over an English pivot vocabulary plus the source language</td></tr><tr><th scope="row">Cross-language matching</th><td data-label="Basic">Through the shared multilingual encoder</td><td data-label="Advanced">English pivot plus source-language sparse view; evaluate language pairs</td></tr><tr><th scope="row">ColBERT</th><td data-label="Basic">Produced by the encoder; <a href="#colbert">available on a direct call, never stored</a></td><td data-label="Advanced">Not produced by any model in the roster</td></tr><tr><th scope="row">Reranker</th><td data-label="Basic"><a href="#bge-reranker-v2-m3">BAAI/bge-reranker-v2-m3</a> · cross-encoder logit</td><td data-label="Advanced"><a href="#qwen3-reranker-0-6b">Qwen/Qwen3-Reranker-0.6B</a> · yes/no judgement by a language model</td></tr><tr><th scope="row">Third-party model code</th><td data-label="Basic">None; every model is natively supported</td><td data-label="Advanced">MILCO loads with <code>trust_remote_code</code>, pinned and contained</td></tr><tr><th scope="row">Memory footprint</th><td data-label="Basic">Recorded BASIC run on an 8 GB GPU; workload-dependent peak</td><td data-label="Advanced">Separate models and workloads need measured headroom</td></tr><tr><th scope="row">CPU</th><td data-label="Basic">Supported; autotuned runtime with ONNX candidates</td><td data-label="Advanced">Supported; conservative defaults, measure latency</td></tr><tr><th scope="row">Licenses</th><td data-label="Basic">MIT (encoder) · Apache-2.0 (reranker)</td><td data-label="Advanced">Apache-2.0 for all three models · MIT (<code>BAAI/bge-m3-unsupervised</code>, fetched for its tokenizer only)</td></tr><tr><th scope="row">Selected by</th><td data-label="Basic"><code>basic</code>, or the fallback when the variable is absent</td><td data-label="Advanced"><code>advanced</code>, the shipped template value; automatic selection follows the GPU rule below</td></tr></tbody></table></div>
+    <div class="table-scroll"><table class="compare"><caption>What each profile brings to the three roles, and what it asks of your machine. Defaults are the shipped ones; the CPU values are the Compose safety caps.</caption><thead><tr><th scope="col">Aspect</th><th scope="col">Basic · BGE</th><th scope="col">Advanced · Qwen + MILCO</th></tr></thead><tbody><tr><th scope="row">Dense model</th><td data-label="Basic"><a href="#bge-m3">BAAI/bge-m3</a> · 1024 numbers</td><td data-label="Advanced"><a href="#qwen3-embedding-0-6b">Qwen/Qwen3-Embedding-0.6B</a> · 1024 numbers</td></tr><tr><th scope="row">Dense context</th><td data-label="Basic">8192 tokens on GPU · 2048 on CPU</td><td data-label="Advanced">32768 tokens on GPU · 2048 on CPU</td></tr><tr><th scope="row">Sparse model</th><td data-label="Basic"><a href="#bge-m3">BAAI/bge-m3</a> · weights over its own multilingual vocabulary</td><td data-label="Advanced"><a href="#milco-650m">omai-research/milco-650m</a> · weights over an English pivot vocabulary plus the source language</td></tr><tr><th scope="row">Cross-language matching</th><td data-label="Basic">Through the shared multilingual encoder</td><td data-label="Advanced">English pivot plus source-language sparse view; evaluate language pairs</td></tr><tr><th scope="row">ColBERT</th><td data-label="Basic">Produced by the encoder; <a href="#colbert">available on a direct call, never stored</a></td><td data-label="Advanced">Not produced by any model in the roster</td></tr><tr><th scope="row">Reranker</th><td data-label="Basic"><a href="#bge-reranker-v2-m3">BAAI/bge-reranker-v2-m3</a> · cross-encoder logit</td><td data-label="Advanced"><a href="#qwen3-reranker-0-6b">Qwen/Qwen3-Reranker-0.6B</a> · yes/no judgement by a language model</td></tr><tr><th scope="row">Third-party model code</th><td data-label="Basic">None; every model is natively supported</td><td data-label="Advanced">MILCO loads with <code>trust_remote_code</code>, pinned and contained</td></tr><tr><th scope="row">Memory footprint</th><td data-label="Basic">Recorded BASIC run on an 8 GB GPU; workload-dependent peak</td><td data-label="Advanced">Separate models and workloads need measured headroom</td></tr><tr><th scope="row">CPU</th><td data-label="Basic">Supported; autotuned runtime with ONNX candidates</td><td data-label="Advanced">Supported; conservative defaults, measure latency</td></tr><tr><th scope="row">Licenses</th><td data-label="Basic">MIT (encoder) · Apache-2.0 (reranker)</td><td data-label="Advanced">Apache-2.0 on all three model cards, but MILCO’s lexical head derives from <code>naver/splade-v3</code> (CC BY-NC-SA 4.0, non-commercial) · MIT (<code>BAAI/bge-m3-unsupervised</code>, fetched for its tokenizer only)</td></tr><tr><th scope="row">Selected by</th><td data-label="Basic"><code>basic</code>, or the fallback when the variable is absent</td><td data-label="Advanced"><code>advanced</code>, the shipped template value; automatic selection follows the GPU rule below</td></tr></tbody></table></div>
     <div class="subsection" id="runtime-limits"><h3>What the shipped runtime actually accepts</h3>
 <p>These are model token windows after request admission, not guarantees that a request will be admitted. CPU values include Compose overrides. Your environment or runtime may differ; inspect <a href="../server-embedder-reranker/README.md#get-models"><code>GET /models</code></a> for the running configuration.</p>
 <table class="compare limits-table"><caption>Tokens per model input. Reranker windows include the query and formatted pair. Each model uses its own tokenizer.</caption><thead><tr><th scope="col">Setup</th><th scope="col">Dense tokens</th><th scope="col">Sparse tokens</th><th scope="col">Reranker tokens</th></tr></thead><tbody>
@@ -588,7 +588,7 @@
 <li><strong>Choose from the tradeoff.</strong> Inspect failures per language and query type, not only an overall mean. Tune on the development questions, freeze settings, then evaluate once on the held-out set. A small pilot is a starting point, not statistical proof of a winner.</li></ol>
 <p>The <a href="../server-embedder-reranker/README.md#benchmark">embedder benchmark</a> measures service performance; it does not supply corpus relevance judgments or this end-to-end retrieval evaluation. Keep the questions, judgments, configuration and results together so someone else can repeat your comparison.</p>
 </div></details>
-<p class="section-note">Model licenses are separate from the application’s AGPL-3.0 license; consult the terms for each model you deploy. <a href="../server-embedder-reranker/README.md#license">Read the licensing note ↗</a>.</p></div></section>
+<p class="section-note">Model licenses are separate from the application’s AGPL-3.0 license; consult the terms for each model you deploy. MILCO, in the advanced profile, contains weights derived from a non-commercial model, so check those terms before any commercial use. <a href="../server-embedder-reranker/README.md#license">Read the licensing note ↗</a>.</p></div></section>
 <section class="section " id="contract" aria-labelledby="contract-title"><div class="wrap">
 
 <div class="section-heading"><span class="section-index">05 / One contract per collection</span><h2 id="contract-title">The vectors remember<br>who made them.</h2><p>Switching profiles is a restart away. Making an existing collection follow is not, and the app refuses to pretend otherwise.</p></div>
@@ -731,4 +731,196 @@
       document.addEventListener('toggle', updateProgress, true);
       updateProgress();
     })();
+</script><script type="text/plain" id="font-licenses">Embedded font notices
+
+Barlow Condensed
+Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded, 
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
+
+
+JetBrains Mono
+Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+This license is copied below, and is also available with a FAQ at: https://scripts.sil.org/OFL
+
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
 </script></body></html>

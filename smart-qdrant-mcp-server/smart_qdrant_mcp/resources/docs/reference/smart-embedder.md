@@ -1632,17 +1632,24 @@ defaults therefore use power-of-two VRAM tiers (8 at ~8 GB, 16 at 16 GB, 32 at
 ## License
 
 This service's code is covered by the repository's GNU Affero General Public
-License v3.0 — see [`../LICENSE`](../LICENSE). Section 13 matters here in
+License v3.0 only — see [`../LICENSE`](../LICENSE). Section 13 matters here in
 particular: this service is reached over HTTP, so exposing a modified
 version to other people over a network obliges you to offer them its source.
+Three modules adapt code published with the models or their libraries; the
+repository's `NOTICE` lists them.
 
 The models are separate and keep their own licenses: `BAAI/bge-m3` and
 `BAAI/bge-m3-unsupervised` are MIT; `BAAI/bge-reranker-v2-m3`,
-`Qwen/Qwen3-Embedding-0.6B`, `Qwen/Qwen3-Reranker-0.6B` and
-`omai-research/milco-650m` are Apache-2.0. They are downloaded at the pinned
-revisions in `model_revisions.py` and never redistributed here, so using the
-selected profile means accepting that profile's model licenses in addition to
-this repository's.
+`Qwen/Qwen3-Embedding-0.6B` and `Qwen/Qwen3-Reranker-0.6B` are Apache-2.0.
+`omai-research/milco-650m` declares Apache-2.0 on its model card, but its
+lexical head — the projection onto the English vocabulary, about 4% of its
+weights — derives from `naver/splade-v3`, which is licensed CC BY-NC-SA 4.0
+for non-commercial use only. Commercial use of the `advanced` profile is
+therefore uncertain until MILCO's authors clarify it; the `basic` profile's
+models are not affected. The models are downloaded at the pinned revisions in
+`model_revisions.py` and never redistributed here, so using the selected
+profile means accepting that profile's model licenses in addition to this
+repository's.
 
 ## Related documents
 

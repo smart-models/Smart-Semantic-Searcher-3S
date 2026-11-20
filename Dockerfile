@@ -23,7 +23,8 @@ RUN pip install --upgrade \
 FROM python:3.11-slim-bookworm@sha256:b18992999dbe963a45a8a4da40ac2b1975be1a776d939d098c647482bcad5cba AS middleware
 
 LABEL org.opencontainers.image.title="hybrid-manager-middleware" \
-      org.opencontainers.image.description="Smart Semantic Searcher FastAPI middleware"
+      org.opencontainers.image.description="Smart Semantic Searcher FastAPI middleware" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -39,6 +40,9 @@ WORKDIR /app/middleware-qdrant-manager
 COPY --from=middleware-builder --chown=appuser:appuser /opt/venv /opt/venv
 COPY --chown=appuser:appuser middleware-qdrant-manager/qdrant_middleware/ qdrant_middleware/
 COPY --chown=appuser:appuser middleware-qdrant-manager/frontend/ frontend/
+# LICENSE, NOTICE and the licence texts NOTICE refers to travel with the code.
+COPY --chown=appuser:appuser LICENSE NOTICE /app/
+COPY --chown=appuser:appuser LICENSES/ /app/LICENSES/
 RUN mkdir -p data && chown -R appuser:appuser /app/middleware-qdrant-manager
 
 USER appuser
@@ -70,7 +74,8 @@ FROM python:3.11-slim-bookworm@sha256:b18992999dbe963a45a8a4da40ac2b1975be1a776d
 ARG SMART_QDRANT_MCP_VERSION=1.0.1
 LABEL org.opencontainers.image.title="hybrid-manager-smart-qdrant-mcp" \
       org.opencontainers.image.description="MCP server exposing the Qdrant middleware" \
-      org.opencontainers.image.version="${SMART_QDRANT_MCP_VERSION}"
+      org.opencontainers.image.version="${SMART_QDRANT_MCP_VERSION}" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -85,6 +90,9 @@ RUN groupadd --gid 1000 appuser \
 WORKDIR /app/smart-qdrant-mcp-server
 COPY --from=smart-qdrant-mcp-builder --chown=appuser:appuser /opt/venv /opt/venv
 COPY --chown=appuser:appuser smart-qdrant-mcp-server/smart_qdrant_mcp/ smart_qdrant_mcp/
+# LICENSE, NOTICE and the licence texts NOTICE refers to travel with the code.
+COPY --chown=appuser:appuser LICENSE NOTICE /app/
+COPY --chown=appuser:appuser LICENSES/ /app/LICENSES/
 
 USER appuser
 EXPOSE 6337
@@ -114,7 +122,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 FROM python:3.11-slim-bookworm@sha256:b18992999dbe963a45a8a4da40ac2b1975be1a776d939d098c647482bcad5cba AS smart-embedder-cpu
 
 LABEL org.opencontainers.image.title="smart-embedder-cpu" \
-      org.opencontainers.image.description="Smart Embedder FastAPI server (CPU)"
+      org.opencontainers.image.description="Smart Embedder FastAPI server (CPU)" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -149,6 +158,9 @@ COPY --chown=appuser:appuser \
     server-embedder-reranker/model_prepare.py \
     server-embedder-reranker/autotune_entrypoint.py \
     ./
+# LICENSE, NOTICE and the licence texts NOTICE refers to travel with the code.
+COPY --chown=appuser:appuser LICENSE NOTICE /app/
+COPY --chown=appuser:appuser LICENSES/ /app/LICENSES/
 RUN mkdir -p /app/model_cache && chown -R appuser:appuser /app/model_cache
 
 USER appuser
@@ -190,7 +202,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 FROM nvidia/cuda:12.6.3-runtime-ubuntu22.04@sha256:63a18dd805367dacfb077aeced8384ab2fb569598ec5f5f5220c3f90a5c23650 AS smart-embedder-gpu
 
 LABEL org.opencontainers.image.title="smart-embedder-gpu" \
-      org.opencontainers.image.description="Smart Embedder FastAPI server (GPU/CUDA)"
+      org.opencontainers.image.description="Smart Embedder FastAPI server (GPU/CUDA)" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -237,6 +250,9 @@ COPY --chown=appuser:appuser \
     server-embedder-reranker/model_prepare.py \
     server-embedder-reranker/autotune_entrypoint.py \
     ./
+# LICENSE, NOTICE and the licence texts NOTICE refers to travel with the code.
+COPY --chown=appuser:appuser LICENSE NOTICE /app/
+COPY --chown=appuser:appuser LICENSES/ /app/LICENSES/
 RUN mkdir -p /app/model_cache && chown -R appuser:appuser /app/model_cache
 
 USER appuser

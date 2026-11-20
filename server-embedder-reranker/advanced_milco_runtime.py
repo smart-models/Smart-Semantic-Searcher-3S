@@ -2,6 +2,10 @@
 
 ``build_dual_view_sparse()`` preserves pivot and LexEcho indices, while
 ``memory_bounded_milco_forward()`` chunks exact vocabulary projection.
+
+Both are adapted from ``milco.py`` in the ``omai-research/milco-650m`` model
+repository (Apache-2.0), at the revision pinned in ``model_revisions.py``, and
+modified here: the forward pass projects the vocabulary in chunks.
 """
 
 from __future__ import annotations

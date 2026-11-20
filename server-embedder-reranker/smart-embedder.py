@@ -87,6 +87,8 @@ QWEN_DENSE_QUERY_PROMPT = (
     "Instruct: Given a web search query, retrieve relevant passages that answer "
     "the query\nQuery:"
 )
+# The reranker prompt format below, and the yes/no scoring that reads it, are
+# adapted from the usage example in the Qwen3-Reranker model card (Apache-2.0).
 QWEN_RERANKER_INSTRUCTION = (
     "Given a web search query, retrieve relevant passages that answer the query"
 )

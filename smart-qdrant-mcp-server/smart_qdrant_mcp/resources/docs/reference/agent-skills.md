@@ -81,6 +81,7 @@ smart-skill/
 ├── README.md                    ← this file
 └── smart-qdrant-mcp/
     ├── SKILL.md
+    ├── LICENSE.txt
     └── references/
         ├── reference.md
         └── playbooks.md
@@ -88,7 +89,8 @@ smart-skill/
 
 | File | Role | Change it when |
 |---|---|---|
-| `smart-qdrant-mcp/SKILL.md` | Frontmatter (`name`, `description`) for host discovery, then the always-loaded core: how hybrid search works in this stack, the shipped defaults, cheapest-tool selection, the confirm gates, ingest routing, and the alignment rule. | The mental model changes, a default changes, or a gate is added/removed. |
+| `smart-qdrant-mcp/SKILL.md` | Frontmatter (`name`, `description`, `license`) for host discovery, then the always-loaded core: how hybrid search works in this stack, the shipped defaults, cheapest-tool selection, the confirm gates, ingest routing, and the alignment rule. | The mental model changes, a default changes, or a gate is added/removed. |
+| `smart-qdrant-mcp/LICENSE.txt` | The MIT licence text, inside the skill directory so it travels with every installed copy. Its scope is stated under [License](#license). | Never, except to update the copyright line. |
 | `smart-qdrant-mcp/references/reference.md` | Every parameter of all 28 tools with defaults, constraints and usage guidance; the hard caps; the full resource and prompt inventory; the list of Qdrant features this stack deliberately does not expose. | Any tool is added, renamed, or re-parametered. |
 | `smart-qdrant-mcp/references/playbooks.md` | Eight ordered sequences — missing tools, bootstrap, corpus staging, search diagnosis, safe reindex, safe deletion, hybrid-search tuning, collection export — plus the error-text → next-call map. | A workflow's correct order changes, or a new error string appears. |
 
@@ -216,6 +218,16 @@ intended host:
 - **Skill for a different service** — the middleware's REST API and the Smart
   Embedder's HTTP API have no skill today. A new sibling directory is the place
   for one.
+
+## License
+
+Everything under `smart-skill/` is MIT-licensed — see
+[`smart-qdrant-mcp/LICENSE.txt`](smart-qdrant-mcp/LICENSE.txt) — so a skill can
+be copied into any agent host or product. That covers the copies of this file
+and of `SKILL.md` that the MCP server ships under
+`smart_qdrant_mcp/resources/docs/reference/`, and these files as published in
+releases 1.0.0, 1.0.1 and 1.0.2. The rest of the repository is AGPL-3.0-only:
+see [`../LICENSE`](../LICENSE) and [`../NOTICE`](../NOTICE).
 
 ## Related documents
 

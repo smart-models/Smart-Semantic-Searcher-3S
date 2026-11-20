@@ -168,6 +168,11 @@ Maintain embedded fonts by removing or replacing complete verified `@font-face`
 blocks. Do not hand-edit base64 payloads. Preserve retained blocks byte for byte
 and preserve existing line endings outside the edited spans, including files
 with mixed LF and CRLF. Verify rendered fonts after changing a face or weight.
+A font added to a page also needs its notice in `FONT-LICENSES.txt`, which
+every page embeds verbatim as inert text (`<script type="text/plain"
+id="font-licenses">`) and the console ships as
+`middleware-qdrant-manager/frontend/dist/assets/fonts/FONT-LICENSES.txt`;
+`scripts/test_third_party_notices.py` keeps the three in step.
 
 ## Verification
 

@@ -189,6 +189,8 @@ class BgeM3OnnxBackend:
         return True
 
     def _process_sparse(self, weights: np.ndarray, input_ids: np.ndarray) -> dict:
+        # Sparse and ColBERT post-processing in this class follows the BGE-M3
+        # implementation in FlagEmbedding (MIT); the repository NOTICE credits it.
         result = defaultdict(float)
         unused = {
             self.tokenizer.cls_token_id,
