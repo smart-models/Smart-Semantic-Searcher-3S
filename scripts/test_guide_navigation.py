@@ -64,6 +64,39 @@ class PrimaryNav(HTMLParser):
             self.links[-1]["label"] += data
 
 
+class InlineScripts(HTMLParser):
+    """Collect the source of every inline script element."""
+
+    def __init__(self, text: str) -> None:
+        """Parse one page and keep the text of each script element."""
+        super().__init__(convert_charrefs=False)
+        self.inside = False
+        self.scripts: list[str] = []
+        self.feed(text)
+        self.close()
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        """Open a record for each script element, whatever its case."""
+        if tag == "script":
+            self.inside = True
+            self.scripts.append("")
+
+    def handle_endtag(self, tag: str) -> None:
+        """Close the current script record."""
+        if tag == "script":
+            self.inside = False
+
+    def handle_data(self, data: str) -> None:
+        """Append script source, which the parser may deliver in pieces."""
+        if self.inside:
+            self.scripts[-1] += data
+
+
+def test_inline_scripts_are_found_whatever_the_tag_spelling():
+    page = '<SCRIPT type="module">a()</SCRIPT ><script>b()</script>'
+    assert InlineScripts(page).scripts == ["a()", "b()"]
+
+
 @pytest.mark.parametrize("page", [name for name, _ in GUIDE_MENU])
 def test_header_menu_links_every_guide_and_marks_the_current_one(page):
     links = PrimaryNav((GUIDE_ROOT / page).read_text(encoding="utf-8")).links
@@ -83,8 +116,8 @@ def test_every_guide_is_in_the_menu():
 
 @pytest.mark.parametrize("page", [name for name, _ in GUIDE_MENU])
 def test_scroll_tracking_touches_only_in_page_menu_links(page):
-    text = (GUIDE_ROOT / page).read_text(encoding="utf-8")
-    scripts = re.findall(r"<script\b[^>]*>(.*?)</script>", text, flags=re.S)
+    scripts = InlineScripts((GUIDE_ROOT / page).read_text(encoding="utf-8")).scripts
+    assert scripts, "the guide is expected to carry its scroll-tracking script"
     for script in scripts:
         for match in re.finditer(r"\.primary-nav a(.{0,12})", script):
             assert re.match(r"""\[href\^=(["'])#\1\]""", match[1]), match[0]
