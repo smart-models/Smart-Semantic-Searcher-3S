@@ -67,7 +67,7 @@ RUN pip install --upgrade \
 # MCP server runtime.
 FROM python:3.11-slim-bookworm@sha256:b18992999dbe963a45a8a4da40ac2b1975be1a776d939d098c647482bcad5cba AS smart-qdrant-mcp
 
-ARG SMART_QDRANT_MCP_VERSION=1.0.0
+ARG SMART_QDRANT_MCP_VERSION=1.0.1
 LABEL org.opencontainers.image.title="hybrid-manager-smart-qdrant-mcp" \
       org.opencontainers.image.description="MCP server exposing the Qdrant middleware" \
       org.opencontainers.image.version="${SMART_QDRANT_MCP_VERSION}"

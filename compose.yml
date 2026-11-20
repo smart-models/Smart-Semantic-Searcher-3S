@@ -285,7 +285,7 @@ services:
       dockerfile: Dockerfile
       target: smart-qdrant-mcp
       args:
-        SMART_QDRANT_MCP_VERSION: ${SMART_QDRANT_MCP_VERSION:-1.0.0}
+        SMART_QDRANT_MCP_VERSION: ${SMART_QDRANT_MCP_VERSION:-1.0.1}
     image: hybrid-manager/smart-qdrant-mcp:local
     pull_policy: never
     container_name: smart-qdrant-mcp
