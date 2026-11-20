@@ -27,8 +27,8 @@ under the AGPL like the rest of 3S. You also let the maintainer add extra
 permissions, such as letting applications that only call 3S's APIs use any
 licence, or move to a later version of the AGPL. Your code is never licensed
 under proprietary terms, nor under permissive terms except the MIT License
-for files under `smart-skill/`, and every new permission is announced in a
-public issue 30 days before it ships.
+for files under `smart-skill/` and their verbatim copies, and every new
+permission is announced in a public issue 30 days before it ships.
 
 The binding text is the
 [Smart Semantic Searcher (3S) Contributor Agreement](CONTRIBUTOR-AGREEMENT.md),

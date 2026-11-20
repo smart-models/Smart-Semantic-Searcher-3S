@@ -13,7 +13,8 @@ read it carefully before agreeing to it. In short: You keep the copyright in
 Your Contribution, it is licensed under the AGPL like the rest of 3S, and We
 may also add certain extra permissions or move to a later version of the
 AGPL, but never license it under proprietary terms, nor under permissive
-terms except the MIT License for files under `smart-skill/`.
+terms except the MIT License for files under `smart-skill/` and their
+verbatim copies.
 
 ## 1. Definitions
 
@@ -123,7 +124,9 @@ license the Contribution only under the following licenses (including any
 right to adopt any future version of a license if permitted):
 
 - the AGPL, with or without Permitted Additional Permissions; and
-- for Contributions to files under the `smart-skill/` directory only, the
+- for Contributions to files under the `smart-skill/` directory, and to their
+  verbatim copies, under any file name, in
+  `smart-qdrant-mcp-server/smart_qdrant_mcp/resources/docs/reference/`, the
   MIT License.
 
 For this purpose You designate Us as the proxy described in section 14 of the
